@@ -5,15 +5,17 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Date;
+
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class User {
-    private String userid;
-    private String username;
-    private String nickname;
-    private String password;
-    private String avatarurl;
-    private String createat;
-}
+public class Group {
+    private String gid;
+    private String gname;
+    private String gavatar;
+    private String ownerid;
+    private Date createat;
+    private Date updateat;
+} 

@@ -1,4 +1,4 @@
-package icu.tianqingyuluo.onlineim.pojo.entity;
+package icu.tianqingyuluo.onlineim.pojo.dto.response;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -9,11 +9,10 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class User {
+public class UserLoginResponse {
+    private String token;
     private String userid;
     private String username;
     private String nickname;
-    private String password;
     private String avatarurl;
-    private String createat;
 }

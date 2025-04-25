@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="icu.tianqingyuluo.onlineim.mapper.GroupMapper">
+    <!-- 结果映射 -->
+    <resultMap id="BaseResultMap" type="icu.tianqingyuluo.onlineim.pojo.entity.Group">
+        <id property="gid" column="gid" />
+        <result property="gname" column="gname" />
+        <result property="gavatar" column="gavatar" />
+        <result property="ownerid" column="ownerid" />
+        <result property="createat" column="createat" />
+        <result property="updateat" column="updateat" />
+    </resultMap>
+    
+    <!-- 查询用户的群组，联合查询 -->
+    <select id="getGroupsWithMemberCount" resultType="java.util.Map">
+        SELECT g.*, COUNT(gm.userid) as memberCount
+        FROM `group` g
+        LEFT JOIN group_member gm ON g.gid = gm.gid
+        WHERE g.gid IN 
+        <foreach collection="groupIds" item="gid" open="(" separator="," close=")">
+            #{gid}
+        </foreach>
+        GROUP BY g.gid
+    </select>
+</mapper>
