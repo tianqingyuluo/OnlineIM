@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="icu.tianqingyuluo.onlineim.mapper.GroupMemberMapper">
+    <!-- 结果映射 -->
+    <resultMap id="BaseResultMap" type="icu.tianqingyuluo.onlineim.pojo.entity.GroupMember">
+        <id property="groupMemberId" column="group_member_id" />
+        <result property="gid" column="gid" />
+        <result property="userid" column="userid" />
+        <result property="role" column="role" />
+        <result property="groupNickname" column="group_nickname" />
+        <result property="silenceUntil" column="silence_until" />
+        <result property="joinTime" column="join_time" />
+        <result property="lastActiveTime" column="last_active_time" />
+    </resultMap>
+    
+    <!-- 批量查询群成员 -->
+    <select id="batchGetMembersByUserIds" resultMap="BaseResultMap">
+        SELECT * FROM group_member 
+        WHERE gid = #{gid} AND userid IN
+        <foreach collection="userIds" item="userId" open="(" separator="," close=")">
+            #{userId}
+        </foreach>
+    </select>
+    
+    <!-- 联合查询群成员和用户信息 -->
+    <select id="getGroupMembersWithUserInfo" resultType="java.util.Map">
+        SELECT gm.*, u.username, u.nickname, u.avatarurl
+        FROM group_member gm 
+        JOIN user u ON gm.userid = u.userid
+        WHERE gm.gid = #{gid}
+        ORDER BY gm.role DESC, gm.join_time ASC
+    </select>
+</mapper>
