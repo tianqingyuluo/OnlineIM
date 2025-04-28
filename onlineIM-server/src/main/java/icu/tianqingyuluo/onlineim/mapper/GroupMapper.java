@@ -6,8 +6,13 @@ import org.apache.ibatis.annotations.*;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 群组数据访问接口
+ * 提供群组相关的数据库操作
+ */
 @Mapper
 public interface GroupMapper {
+
     @Select("SELECT * FROM `group` WHERE gid = #{gid}")
     Group getGroupById(String gid);
     

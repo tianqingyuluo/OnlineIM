@@ -5,8 +5,13 @@ import org.apache.ibatis.annotations.*;
 
 import java.util.List;
 
+/**
+ * 用户数据访问接口
+ * 提供用户相关的数据库操作
+ */
 @Mapper
 public interface UserMapper {
+
     @Select("SELECT * FROM user WHERE userid = #{userid}")
     User getUserByUserid(String userid);
     
