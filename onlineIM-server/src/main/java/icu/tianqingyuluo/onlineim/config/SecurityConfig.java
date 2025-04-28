@@ -1,6 +1,7 @@
 package icu.tianqingyuluo.onlineim.config;
 
 import icu.tianqingyuluo.onlineim.filter.JwtAuthenticationFilter;
+import icu.tianqingyuluo.onlineim.filter.RequestLoggingFilter;
 import icu.tianqingyuluo.onlineim.service.impl.UserDetailsServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,11 +34,11 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
+    @Autowired
+    private RequestLoggingFilter  requestLoggingFilter;
+
     @Value("${frontend.url}")
     private String frontendUrl;
-
-    @Value("${frontend.port}")
-    private int frontendPort;
 
     public SecurityConfig(UserDetailsServiceImpl userDetailsService, JwtAuthenticationFilter jwtAuthenticationFilter) {
         this.userDetailsService = userDetailsService;
@@ -77,7 +78,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList(String.join(frontendUrl, String.valueOf(frontendPort)),
+        configuration.setAllowedOriginPatterns(Arrays.asList(frontendUrl,
                 "http://localhost:8080"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Requested-With"));
