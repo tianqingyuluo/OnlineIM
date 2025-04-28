@@ -4,6 +4,7 @@ import icu.tianqingyuluo.onlineim.pojo.dto.request.AuthRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.AuthResponse;
 import icu.tianqingyuluo.onlineim.service.impl.UserDetailsServiceImpl;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 认证控制器
  * 处理用户登录和令牌生成
  */
+@Slf4j
 @RestController
 @RequestMapping("/api/v1/auth")
 public class AuthController {
@@ -60,4 +62,7 @@ public class AuthController {
         // 返回JWT令牌
         return ResponseEntity.ok(new AuthResponse(jwt));
     }
+
+//    @PostMapping("/register")
+//    public
 }
