@@ -7,8 +7,13 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 群组成员数据访问接口
+ * 提供群组成员相关的数据库操作
+ */
 @Mapper
 public interface GroupMemberMapper {
+
     @Select("SELECT * FROM group_member WHERE gid = #{gid} AND userid = #{userid}")
     GroupMember getGroupMember(@Param("gid") String gid, @Param("userid") String userid);
     

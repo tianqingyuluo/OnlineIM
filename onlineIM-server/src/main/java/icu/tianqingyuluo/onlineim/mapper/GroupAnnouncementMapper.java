@@ -7,8 +7,13 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 群组公告数据访问接口
+ * 提供群组公告相关的数据库操作
+ */
 @Mapper
 public interface GroupAnnouncementMapper {
+        
     @Select("SELECT * FROM group_announcement WHERE group_announcement_id = #{announcementId}")
     GroupAnnouncement getAnnouncementById(String announcementId);
     
