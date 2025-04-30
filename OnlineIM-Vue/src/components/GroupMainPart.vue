@@ -3,47 +3,16 @@ import { Ellipsis } from "lucide-vue-next"
 import { ref, computed } from "vue"
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-
-const props = defineProps<{
-  selectedGroup?: {
-    groupName: string
-    groupAvatar: string
-    lastMessage: string
-    MessageList?: Array<{
-      messageId: number
-      message: string
-      sender: string
-      sendTime: string
-    }>
-  }
-}>()
+import { useUserStore } from '@/stores/user'
+import Tools from "@/components/tools.vue";
 
 const theUser = ref({
   userName: "我",
-  avatar: "/image/help.png"
+  avatar: "/images/help.png"
 })
 
-const defaultGroup = ref({
-  groupName: "默认群聊",
-  groupAvatar: "/image/group.png",
-  lastMessage: "这是默认群聊的最后一条消息",
-  MessageList: [
-    {
-      messageId: 1,
-      message: "大家好，这是一条群消息",
-      sender: "用户A",
-      sendTime: "2023-01-01 12:00"
-    },
-    {
-      messageId: 2,
-      message: "你好，这是我的回复",
-      sender: "我",
-      sendTime: "2023-01-02 12:05"
-    }
-  ]
-})
-
-const currentGroup = computed(() => props.selectedGroup || defaultGroup.value)
+const userStore = useUserStore()
+const currentGroup = computed(() => userStore.selectedUser)
 
 const items = [
   {
@@ -52,7 +21,6 @@ const items = [
     icon: Ellipsis,
   }
 ]
-
 
 // 解析中文日期格式
 function parseChineseDate(dateStr: string) {
@@ -76,8 +44,6 @@ function parseChineseDate(dateStr: string) {
   return isNaN(date.getTime()) ? new Date() : date;
 }
 
-
-
 // 判断是否需要显示时间（5分钟间隔）
 function shouldShowTime(index: number, list: any[]) {
   if (index === 0) return true;
@@ -85,7 +51,6 @@ function shouldShowTime(index: number, list: any[]) {
   const currentTime = parseChineseDate(list[index].sendTime).getTime();
   return currentTime - prevTime > 5 * 60 * 1000;
 }
-
 </script>
 
 <template>
@@ -135,12 +100,7 @@ function shouldShowTime(index: number, list: any[]) {
         </template>
       </div>
     </div>
-    <!-- 新增工具栏 -->
-    <div class="flex items-center justify-between px-4 py-3.5 border-t border-b bg-gray-50">
-      <div class="flex space-x-2">
-        <!-- 这里可以添加未来的工具栏按钮 -->
-      </div>
-    </div>
+    <Tools/>
     <!-- 输入区域 -->
     <div class="relative h-1/4 border-t">
       <Textarea

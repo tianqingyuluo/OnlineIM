@@ -1,5 +1,5 @@
 <script setup lang="ts">
- import { Settings,MessageCircleMore,Users,UserRoundPlus } from "lucide-vue-next"
+ import { Settings,MessageCircleMore,Users,UserRoundPlus,User } from "lucide-vue-next"
  import {
    Sidebar,
    SidebarContent,
@@ -10,12 +10,11 @@
    SidebarMenuItem,
    SidebarFooter,
  } from "@/components/ui/sidebar"
- import {Button}from "@/components/ui/button"
  import {ref} from "vue";
 
  const defaultUser = ref({
    userName: "默认用户",
-   arg: "/image/help.png",
+   arg: "/images/help.png",
    lastTalk: "这是默认用户的最后一条消息",
    TalkingList: [
      {
@@ -37,9 +36,13 @@
 // Menu items.
 const items = [
   {
-    title: "好友",
+    title: "聊天",
     url: "#",
      icon: MessageCircleMore,
+  },
+  {
+    title: "好友",
+    icon: User,
   },
   {
     title: "群聊",
@@ -59,18 +62,18 @@ const items = [
      icon: Settings,
    },
  ]
- const activeItem = ref('好友')
+ const activeItem = ref('聊天')
 </script>
 
 <template>
-    <Sidebar collapsible=none style="--sidebar-width: 20%; min-height: 100vh" class="bg-gray-200">
+    <Sidebar collapsible=none style="--sidebar-width: 20%; min-height: 100vh ;border-right:1px solid #e5e7eb; " class="bg-gray-75">
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem v-for="item in items" :key="item.title" >
                 <SidebarMenuButton as-child :isActive="activeItem === item.title" @click="activeItem = item.title"
-                                   class="data-[active=true]:bg-white data-[active=true]:text-black h-[40px] mb-4 "  >
+                                   class="data-[active=true]:bg-gray-100 data-[active=true]:text-black h-[40px] mb-4 "  >
                   <a :href="item.url" style="display: flex; justify-content: center; align-items: center; width: 100%;">
                     <component :is="item.icon" style="width: 30px; height: 30px"/>
                   </a>
@@ -84,7 +87,7 @@ const items = [
         <SidebarMenu>
           <SidebarMenuItem v-for="item in buttonItems" :key="item.title">
             <SidebarMenuButton asChild :isActive="activeItem === item.title" @click="activeItem = item.title"
-                               class="data-[active=true]:bg-white data-[active=true]:text-black h-[40px] mb-4 " >
+                               class="data-[active=true]:bg-gray-100 data-[active=true]:text-black h-[40px] mb-4 " >
               <a :href="item.url" style="display: flex; justify-content: center; align-items: center; width: 100%; ">
                 <component :is="item.icon" style="width: 30px; height: 30px"/>
               </a>

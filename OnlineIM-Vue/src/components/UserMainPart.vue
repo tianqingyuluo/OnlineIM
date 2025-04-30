@@ -3,50 +3,16 @@ import { Ellipsis } from "lucide-vue-next"
 import { ref, computed } from "vue"
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-
-const props = defineProps<{
-  selectedUser?: {
-    userName: string
-    arg: string
-    lastTalk: string
-    TalkingList?: Array<{
-      messageId: number
-      message: string
-      sender: string
-      sendTo: string
-      sendTime: string
-    }>
-  }
-}>()
+import { useUserStore } from '@/stores/user'
+import Tools from "@/components/tools.vue";
 
 const theUser = ref({
   userName: "我",
-  arg: "/image/help.png"
+  arg: "/images/help.png"
 })
 
-const defaultUser = ref({
-  userName: "默认用户",
-  arg: "/image/help.png",
-  lastTalk: "这是默认用户的最后一条消息",
-  TalkingList: [
-    {
-      messageId: 1,
-      message: "你好，这是一条示例消息",
-      sender: "默认用户",
-      sendTo: "我",
-      sendTime: "2023-01-01 12:00"
-    },
-    {
-      messageId: 2,
-      message: "你好，这是我的回复",
-      sender: "我",
-      sendTo: "默认用户",
-      sendTime: "2023-01-02 12:05"
-    }
-  ]
-})
-
-const currentUser = computed(() => props.selectedUser || defaultUser.value)
+const userStore = useUserStore()
+const currentUser = computed(() => userStore.selectedUser)
 
 const items = [
   {
@@ -90,10 +56,10 @@ function shouldShowTime(index: number, list: any[]) {
 </script>
 
 <template>
-  <div class="flex flex-col h-full">
+  <div v-if="currentUser" class="flex flex-col h-full">
     <!-- 顶栏 -->
     <div class="flex items-center justify-between w-full p-4 border-b">
-      <span class="font-medium">{{ currentUser.userName }}</span>
+      <span class=" text-lg font-semibold">{{ currentUser.userName }}</span>
       <div class="flex space-x-4">
         <button v-for="item in items" :key="item.title"  >
           <a :href="item.url" class="flex items-center">
@@ -135,12 +101,7 @@ function shouldShowTime(index: number, list: any[]) {
         </template>
       </div>
     </div>
-    <!-- 新增工具栏 -->
-    <div class="flex items-center justify-between px-4 py-3.5 border-t border-b bg-gray-50">
-      <div class="flex space-x-2">
-        <!-- 这里可以添加未来的工具栏按钮 -->
-      </div>
-    </div>
+    <Tools />
     <!-- 输入区域 -->
     <div class="relative h-1/4 border-t">
       <Textarea
@@ -151,6 +112,9 @@ function shouldShowTime(index: number, list: any[]) {
       />
       <Button class="absolute bottom-4 right-4">发送</Button>
     </div>
+  </div>
+  <div v-else class="flex items-center justify-center h-full">
+    <span class="text-gray-500">请从左侧选择一个会话</span>
   </div>
 </template>
 
