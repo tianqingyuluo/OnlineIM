@@ -4,48 +4,65 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
 <mapper namespace="icu.tianqingyuluo.onlineim.mapper.GroupAnnouncementMapper">
-    <!-- 结果映射 -->
-    <resultMap id="BaseResultMap" type="icu.tianqingyuluo.onlineim.pojo.entity.GroupAnnouncement">
-        <id property="groupAnnouncementId" column="group_announcement_id" />
-        <result property="gid" column="gid" />
-        <result property="userid" column="userid" />
-        <result property="title" column="title" />
-        <result property="content" column="content" />
-        <result property="isPinned" column="is_pinned" />
-        <result property="status" column="status" />
-        <result property="createTime" column="create_time" />
-        <result property="updateTime" column="update_time" />
+    <!-- 群组公告结果映射 -->
+    <resultMap id="GroupAnnouncementResultMap" type="icu.tianqingyuluo.onlineim.pojo.entity.GroupAnnouncement">
+        <id property="id" column="id"/>
+        <result property="groupId" column="group_id"/>
+        <result property="publisherId" column="publisher_id"/>
+        <result property="title" column="title"/>
+        <result property="content" column="content"/>
+        <result property="status" column="status"/>
+        <result property="pin" column="pin"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
     </resultMap>
-    
-    <!-- 复杂查询公告与发布者信息示例 -->
-    <select id="getAnnouncementsWithPublisherInfo" resultType="java.util.Map">
-        SELECT ga.*, u.username, u.nickname, u.avatarurl 
-        FROM group_announcement ga
-        JOIN user u ON ga.userid = u.userid
-        WHERE ga.gid = #{gid} AND ga.status = 1
-        ORDER BY ga.is_pinned DESC, ga.create_time DESC
+
+    <!-- 获取群组的公告列表 -->
+    <select id="getByGroupId" resultMap="GroupAnnouncementResultMap">
+        SELECT * FROM group_announcements 
+        WHERE group_id = #{groupId} AND status = 1 
+        ORDER BY pin DESC, created_at DESC 
+        LIMIT #{limit} OFFSET #{offset}
     </select>
-    
-    <!-- 使用动态SQL条件查询公告 -->
-    <select id="getAnnouncementsWithCondition" resultMap="BaseResultMap">
-        SELECT * FROM group_announcement 
+
+    <!-- 搜索公告 -->
+    <select id="searchAnnouncements" resultMap="GroupAnnouncementResultMap">
+        SELECT * FROM group_announcements 
+        WHERE group_id = #{groupId} 
+        AND (title LIKE CONCAT('%', #{keyword}, '%') OR content LIKE CONCAT('%', #{keyword}, '%')) 
+        AND status = 1
+        ORDER BY pin DESC, created_at DESC
+    </select>
+
+    <!-- 获取公告与发布者信息 -->
+    <select id="getAnnouncementsWithPublisherInfo" resultType="java.util.Map">
+        SELECT ga.*, u.username, u.nickname, u.avatar 
+        FROM group_announcements ga
+        JOIN users u ON ga.publisher_id = u.id
+        WHERE ga.group_id = #{groupId} AND ga.status = 1
+        ORDER BY ga.pin DESC, ga.created_at DESC
+    </select>
+
+    <!-- 根据动态条件查询公告 -->
+    <select id="getAnnouncementsWithCondition" resultMap="GroupAnnouncementResultMap">
+        SELECT * FROM group_announcements 
         <where>
-            <if test="gid != null">
-                AND gid = #{gid}
+            <if test="groupId != null">
+                AND group_id = #{groupId}
             </if>
             <if test="status != null">
                 AND status = #{status}
             </if>
-            <if test="isPinned != null">
-                AND is_pinned = #{isPinned}
+            <if test="pin != null">
+                AND pin = #{pin}
             </if>
             <if test="beginTime != null">
-                AND create_time &gt;= #{beginTime}
+                AND created_at &gt;= #{beginTime}
             </if>
             <if test="endTime != null">
-                AND create_time &lt;= #{endTime}
+                AND created_at &lt;= #{endTime}
             </if>
         </where>
-        ORDER BY is_pinned DESC, create_time DESC
+        ORDER BY pin DESC, created_at DESC
     </select>
-</mapper>
+</mapper> 

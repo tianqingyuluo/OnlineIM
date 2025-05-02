@@ -3,7 +3,7 @@ package icu.tianqingyuluo.onlineim.mapper;
 import icu.tianqingyuluo.onlineim.pojo.entity.GroupMember;
 import org.apache.ibatis.annotations.*;
 
-import java.util.Date;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -14,72 +14,90 @@ import java.util.Map;
 @Mapper
 public interface GroupMemberMapper {
 
-    @Select("SELECT * FROM group_member WHERE gid = #{gid} AND userid = #{userid}")
-    GroupMember getGroupMember(@Param("gid") String gid, @Param("userid") String userid);
-    
-    @Select("SELECT * FROM group_member WHERE group_member_id = #{groupMemberId}")
-    GroupMember getGroupMemberById(String groupMemberId);
-    
-    @Select("SELECT * FROM group_member WHERE gid = #{gid}")
-    List<GroupMember> getGroupMembers(String gid);
-    
-    @Select("SELECT * FROM group_member WHERE gid = #{gid} AND role = #{role}")
-    List<GroupMember> getGroupMembersByRole(@Param("gid") String gid, @Param("role") int role);
-    
-    @Select("SELECT * FROM group_member WHERE userid = #{userid}")
-    List<GroupMember> getUserGroups(String userid);
-    
-    @Select("SELECT COUNT(*) FROM group_member WHERE gid = #{gid}")
-    int getGroupMemberCount(String gid);
-    
-    @Insert("INSERT INTO group_member(group_member_id, gid, userid, role, group_nickname) " +
-            "VALUES(#{groupMemberId}, #{gid}, #{userid}, #{role}, #{groupNickname})")
-    int addGroupMember(GroupMember groupMember);
-    
-    @Update("UPDATE group_member SET role = #{role} WHERE gid = #{gid} AND userid = #{userid}")
-    int updateMemberRole(@Param("gid") String gid, @Param("userid") String userid, @Param("role") int role);
-    
-    @Update("UPDATE group_member SET group_nickname = #{groupNickname} WHERE gid = #{gid} AND userid = #{userid}")
-    int updateGroupNickname(@Param("gid") String gid, @Param("userid") String userid, @Param("groupNickname") String groupNickname);
-    
-    @Update("UPDATE group_member SET silence_until = #{silenceUntil} WHERE gid = #{gid} AND userid = #{userid}")
-    int silenceMember(@Param("gid") String gid, @Param("userid") String userid, @Param("silenceUntil") Date silenceUntil);
-    
-    @Update("UPDATE group_member SET last_active_time = NOW() WHERE gid = #{gid} AND userid = #{userid}")
-    int updateLastActiveTime(@Param("gid") String gid, @Param("userid") String userid);
-    
-    @Delete("DELETE FROM group_member WHERE gid = #{gid} AND userid = #{userid}")
-    int removeGroupMember(@Param("gid") String gid, @Param("userid") String userid);
-    
-    @Delete("DELETE FROM group_member WHERE gid = #{gid}")
-    int removeAllGroupMembers(String gid);
-    
-    @Select("SELECT gm.* FROM group_member gm " +
-            "JOIN `group` g ON gm.gid = g.gid " +
-            "WHERE gm.gid = #{gid} AND gm.role = 2")
-    GroupMember getGroupOwner(String gid);
-    
-    @Select("SELECT * FROM group_member WHERE gid = #{gid} AND role = 1")
-    List<GroupMember> getGroupAdmins(String gid);
-    
-    @Select("SELECT * FROM group_member WHERE gid = #{gid} ORDER BY role DESC LIMIT #{offset}, #{limit}")
-    List<GroupMember> getGroupMembersWithPagination(@Param("gid") String gid, @Param("offset") int offset, @Param("limit") int limit);
-    
-    @Select("SELECT * FROM group_member WHERE gid = #{gid} AND silence_until > NOW()")
-    List<GroupMember> getSilencedMembers(String gid);
+    /**
+     * 根据ID查询群成员
+     */
+    @Select("SELECT * FROM group_members WHERE id = #{id}")
+    GroupMember getById(String id);
     
     /**
-     * 批量根据用户ID获取群成员
-     * @param gid 群组ID
-     * @param userIds 用户ID列表
-     * @return 群成员列表
+     * 根据群组ID和用户ID查询群成员
      */
-    List<GroupMember> batchGetMembersByUserIds(@Param("gid") String gid, @Param("userIds") List<String> userIds);
+    @Select("SELECT * FROM group_members WHERE group_id = #{groupId} AND user_id = #{userId}")
+    GroupMember getByGroupIdAndUserId(@Param("groupId") String groupId, @Param("userId") String userId);
     
     /**
-     * 获取群成员及用户信息
-     * @param gid 群组ID
-     * @return 包含群成员和用户信息的映射列表
+     * 获取群组的所有成员（XML实现带排序和分页）
      */
-    List<Map<String, Object>> getGroupMembersWithUserInfo(String gid);
+    List<GroupMember> getByGroupId(@Param("groupId") String groupId, @Param("offset") int offset, @Param("limit") int limit);
+    
+    /**
+     * 统计群组的成员数量
+     */
+    @Select("SELECT COUNT(*) FROM group_members WHERE group_id = #{groupId} AND status = 1")
+    int countByGroupId(String groupId);
+    
+    /**
+     * 根据角色查询群成员
+     */
+    @Select("SELECT * FROM group_members WHERE group_id = #{groupId} AND role = #{role} AND status = 1")
+    List<GroupMember> getByGroupIdAndRole(@Param("groupId") String groupId, @Param("role") int role);
+    
+    /**
+     * 新增群成员
+     */
+    @Insert("INSERT INTO group_members(id, group_id, user_id, nickname, role, mute_end_time, join_time, status, created_at, updated_at) " +
+           "VALUES(#{id}, #{groupId}, #{userId}, #{nickname}, #{role}, #{muteEndTime}, #{joinTime}, #{status}, #{createdAt}, #{updatedAt})")
+    int insert(GroupMember member);
+    
+    /**
+     * 更新群成员昵称
+     */
+    @Update("UPDATE group_members SET nickname = #{nickname}, updated_at = #{updatedAt} WHERE id = #{id}")
+    int updateNickname(@Param("id") String id, @Param("nickname") String nickname, @Param("updatedAt") String updatedAt);
+    
+    /**
+     * 更新群成员角色
+     */
+    @Update("UPDATE group_members SET role = #{role}, updated_at = #{updatedAt} WHERE id = #{id}")
+    int updateRole(@Param("id") String id, @Param("role") int role, @Param("updatedAt") String updatedAt);
+    
+    /**
+     * 更新群成员禁言时间
+     */
+    @Update("UPDATE group_members SET mute_end_time = #{muteEndTime}, updated_at = #{updatedAt} WHERE id = #{id}")
+    int updateMuteTime(@Param("id") String id, @Param("muteEndTime") LocalDateTime muteEndTime, @Param("updatedAt") String updatedAt);
+    
+    /**
+     * 更新群成员状态
+     */
+    @Update("UPDATE group_members SET status = #{status}, updated_at = #{updatedAt} WHERE id = #{id}")
+    int updateStatus(@Param("id") String id, @Param("status") int status, @Param("updatedAt") String updatedAt);
+    
+    /**
+     * 删除群成员
+     */
+    @Delete("DELETE FROM group_members WHERE id = #{id}")
+    int delete(String id);
+    
+    /**
+     * 获取用户加入的所有群组的成员信息（XML实现连表查询）
+     */
+    List<GroupMember> getUserJoinedGroups(String userId);
+    
+    /**
+     * 获取被禁言的群成员
+     */
+    @Select("SELECT * FROM group_members WHERE group_id = #{groupId} AND mute_end_time > NOW() AND status = 1")
+    List<GroupMember> getMutedMembers(@Param("groupId") String groupId);
+    
+    /**
+     * 批量获取群成员（XML实现，包含IN查询）
+     */
+    List<GroupMember> batchGetMembersByUserIds(@Param("groupId") String groupId, @Param("userIds") List<String> userIds);
+    
+    /**
+     * 获取群成员及用户信息（XML实现连表查询）
+     */
+    List<Map<String, Object>> getGroupMembersWithUserInfo(@Param("groupId") String groupId);
 }

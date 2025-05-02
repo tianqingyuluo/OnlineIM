@@ -12,42 +12,101 @@ import java.util.List;
 @Mapper
 public interface UserMapper {
 
-    @Select("SELECT * FROM user WHERE userid = #{userid}")
-    User getUserByUserid(String userid);
+    /**
+     * 测试数据库连接
+     */
+    @Select("SELECT 'Connection Successful'")
+    String testConnection();
+
+    /**
+     * 根据ID查询用户
+     */
+    @Select("SELECT id, username, nickname, avatar, email, phone, signature, gender, birthday, status, last_login_time, last_login_ip, created_at, updated_at FROM users WHERE id = #{id}")
+    User getById(String id);
     
-    @Select("SELECT * FROM user WHERE username = #{username}")
-    User getUserByUsername(String username);
+    /**
+     * 根据用户名查询用户
+     */
+    @Select("SELECT * FROM users WHERE username = #{username}")
+    User getByUsername(String username);
     
-    @Select("SELECT * FROM user WHERE nickname LIKE CONCAT('%', #{keyword}, '%')")
-    List<User> searchUsersByNickname(String keyword);
+    /**
+     * 根据用户名或邮箱查询用户
+     */
+    @Select("SELECT * FROM users WHERE username = #{account} OR email = #{account}")
+    User getByUsernameOrEmail(String account);
     
-    @Select("SELECT * FROM user ORDER BY createat DESC")
-    List<User> getAllUsers();
+    /**
+     * 根据邮箱查询用户
+     */
+    @Select("SELECT * FROM users WHERE email = #{email}")
+    User getByEmail(String email);
     
-    @Insert("INSERT INTO user(userid, username, nickname, password, avatarurl) VALUES(#{userid}, #{username}, #{nickname}, #{password}, #{avatarurl})")
-    int insertUser(User user);
+    /**
+     * 根据手机号查询用户
+     */
+    @Select("SELECT * FROM users WHERE phone = #{phone}")
+    User getByPhone(String phone);
     
-    @Update("UPDATE user SET nickname = #{nickname} WHERE userid = #{userid}")
-    int updateNickname(@Param("userid") String userid, @Param("nickname") String nickname);
+    /**
+     * 获取用户列表（使用XML实现动态查询）
+     */
+    List<User> getList(@Param("keyword") String keyword, @Param("status") Integer status, @Param("offset") Integer offset, @Param("limit") Integer limit);
     
-    @Update("UPDATE user SET password = #{password} WHERE userid = #{userid}")
-    int updatePassword(@Param("userid") String userid, @Param("password") String password);
+    /**
+     * 统计符合条件的用户数量（使用XML实现动态查询）
+     */
+    int count(@Param("keyword") String keyword, @Param("status") Integer status);
     
-    @Update("UPDATE user SET avatarurl = #{avatarurl} WHERE userid = #{userid}")
-    int updateAvatar(@Param("userid") String userid, @Param("avatarurl") String avatarurl);
+    /**
+     * 插入用户
+     */
+    @Insert("INSERT INTO users(id, username, password, salt, nickname, avatar, email, phone, signature, gender, birthday, status, last_login_time, last_login_ip, created_at, updated_at) " +
+           "VALUES(#{id}, #{username}, #{password}, #{salt}, #{nickname}, #{avatar}, #{email}, #{phone}, #{signature}, #{gender}, #{birthday}, #{status}, #{lastLoginTime}, #{lastLoginIp}, #{createdAt}, #{updatedAt})")
+    int insert(User user);
     
-    @Update("UPDATE user SET nickname = #{nickname}, avatarurl = #{avatarurl} WHERE userid = #{userid}")
-    int updateUserProfile(User user);
+    /**
+     * 更新用户信息（使用XML实现动态更新）
+     */
+    int update(User user);
     
-    @Delete("DELETE FROM user WHERE userid = #{userid}")
-    int deleteUser(String userid);
+    /**
+     * 更新头像
+     */
+    @Update("UPDATE users SET avatar = #{avatar}, updated_at = #{updatedAt} WHERE id = #{id}")
+    int updateAvatar(@Param("id") String id, @Param("avatar") String avatar, @Param("updatedAt") String updatedAt);
     
-    @Select("SELECT COUNT(*) FROM user WHERE username = #{username}")
-    int checkUsernameExists(String username);
+    /**
+     * 更新密码
+     */
+    @Update("UPDATE users SET password = #{password}, updated_at = #{updatedAt} WHERE id = #{id}")
+    int updatePassword(@Param("id") String id, @Param("password") String password, @Param("updatedAt") String updatedAt);
     
-    @Select("SELECT COUNT(*) FROM user")
-    int getTotalUserCount();
+    /**
+     * 更新登录信息
+     */
+    @Update("UPDATE users SET last_login_time = #{lastLoginTime}, last_login_ip = #{lastLoginIp}, updated_at = #{updatedAt} WHERE id = #{id}")
+    int updateLoginInfo(@Param("id") String id, @Param("lastLoginTime") String lastLoginTime, @Param("lastLoginIp") String lastLoginIp, @Param("updatedAt") String updatedAt);
     
-    @Select("SELECT * FROM user ORDER BY createat DESC LIMIT #{limit} OFFSET #{offset}")
-    List<User> getUsersWithPagination(@Param("offset") int offset, @Param("limit") int limit);
+    /**
+     * 更新用户状态
+     */
+    @Update("UPDATE users SET status = #{status}, updated_at = #{updatedAt} WHERE id = #{id}")
+    int updateStatus(@Param("id") String id, @Param("status") Integer status, @Param("updatedAt") String updatedAt);
+    
+    /**
+     * 删除用户
+     */
+    @Delete("DELETE FROM users WHERE id = #{id}")
+    int delete(String id);
+    
+    /**
+     * 批量获取用户信息（使用XML实现）
+     */
+    List<User> batchGetUsersByIds(@Param("userIds") List<String> userIds);
+    
+    /**
+     * 模糊搜索用户（使用XML实现）
+     */
+    List<User> searchUsers(@Param("keyword") String keyword, @Param("limit") int limit, @Param("offset") int offset);
 }

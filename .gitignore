@@ -36,3 +36,6 @@ build/
 
 ### password ###
 db.properties
+
+### tests ###
+onlineIM-server/src/test

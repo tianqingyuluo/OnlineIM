@@ -13,46 +13,94 @@ import java.util.Map;
 @Mapper
 public interface GroupMapper {
 
-    @Select("SELECT * FROM `group` WHERE gid = #{gid}")
-    Group getGroupById(String gid);
-    
-    @Select("SELECT * FROM `group` WHERE ownerid = #{ownerid}")
-    List<Group> getGroupsByOwnerId(String ownerid);
-    
-    @Select("SELECT * FROM `group` WHERE gname LIKE CONCAT('%', #{keyword}, '%')")
-    List<Group> searchGroupsByName(String keyword);
-    
-    @Insert("INSERT INTO `group`(gid, gname, gavatar, ownerid) VALUES(#{gid}, #{gname}, #{gavatar}, #{ownerid})")
-    int createGroup(Group group);
-    
-    @Update("UPDATE `group` SET gname = #{gname} WHERE gid = #{gid}")
-    int updateGroupName(@Param("gid") String gid, @Param("gname") String gname);
-    
-    @Update("UPDATE `group` SET gavatar = #{gavatar} WHERE gid = #{gid}")
-    int updateGroupAvatar(@Param("gid") String gid, @Param("gavatar") String gavatar);
-    
-    @Update("UPDATE `group` SET ownerid = #{newOwnerId} WHERE gid = #{gid}")
-    int transferGroupOwnership(@Param("gid") String gid, @Param("newOwnerId") String newOwnerId);
-    
-    @Delete("DELETE FROM `group` WHERE gid = #{gid}")
-    int deleteGroup(String gid);
-    
-    @Select("SELECT COUNT(*) FROM `group`")
-    int getTotalGroupCount();
-    
-    @Select("SELECT g.* FROM `group` g " +
-            "JOIN group_member gm ON g.gid = gm.gid " +
-            "WHERE gm.userid = #{userId}")
-    List<Group> getGroupsByUserId(String userId);
-    
-    @Select("SELECT g.* FROM `group` g " +
-            "JOIN group_member gm ON g.gid = gm.gid " +
-            "WHERE gm.userid = #{userId} " +
-            "ORDER BY gm.last_active_time DESC LIMIT #{limit}")
-    List<Group> getRecentActiveGroupsByUserId(@Param("userId") String userId, @Param("limit") int limit);
+    /**
+     * 根据ID查询群组
+     */
+    @Select("SELECT * FROM groups WHERE id = #{id}")
+    Group getById(String id);
     
     /**
-     * 查询群组以及成员数量
+     * 根据名称模糊搜索群组
+     */
+    @Select("SELECT * FROM groups WHERE name LIKE CONCAT('%', #{keyword}, '%') AND status = 1")
+    List<Group> searchByName(String keyword);
+    
+    /**
+     * 新增群组
+     */
+    @Insert("INSERT INTO groups(id, name, avatar, description, owner_id, max_members, current_members, " +
+           "join_type, mute_type, status, created_at, updated_at) " +
+           "VALUES(#{id}, #{name}, #{avatar}, #{description}, #{ownerId}, #{maxMembers}, #{currentMembers}, " +
+           "#{joinType}, #{muteType}, #{status}, #{createdAt}, #{updatedAt})")
+    int insert(Group group);
+    
+    /**
+     * 更新群组基本信息
+     */
+    @Update("UPDATE groups SET name = #{name}, avatar = #{avatar}, description = #{description}, " +
+           "join_type = #{joinType}, mute_type = #{muteType}, updated_at = #{updatedAt} WHERE id = #{id}")
+    int update(Group group);
+    
+    /**
+     * 更新群组状态
+     */
+    @Update("UPDATE groups SET status = #{status}, updated_at = #{updatedAt} WHERE id = #{id}")
+    int updateStatus(@Param("id") String id, @Param("status") Integer status, @Param("updatedAt") String updatedAt);
+    
+    /**
+     * 更新群主
+     */
+    @Update("UPDATE groups SET owner_id = #{newOwnerId}, updated_at = #{updatedAt} WHERE id = #{id}")
+    int updateOwner(@Param("id") String id, @Param("newOwnerId") String newOwnerId, @Param("updatedAt") String updatedAt);
+    
+    /**
+     * 更新群组成员数量
+     */
+    @Update("UPDATE groups SET current_members = current_members + #{delta} WHERE id = #{id}")
+    int updateMemberCount(@Param("id") String id, @Param("delta") int delta);
+    
+    /**
+     * 更新群组加入方式
+     */
+    @Update("UPDATE groups SET join_type = #{joinType}, updated_at = #{updatedAt} WHERE id = #{id}")
+    int updateJoinType(@Param("id") String id, @Param("joinType") Integer joinType, @Param("updatedAt") String updatedAt);
+    
+    /**
+     * 更新群组禁言类型
+     */
+    @Update("UPDATE groups SET mute_type = #{muteType}, updated_at = #{updatedAt} WHERE id = #{id}")
+    int updateMuteType(@Param("id") String id, @Param("muteType") Integer muteType, @Param("updatedAt") String updatedAt);
+    
+    /**
+     * 获取用户加入的群组列表（XML实现连表查询）
+     */
+    List<Group> getUserJoinedGroups(@Param("userId") String userId, @Param("offset") int offset, @Param("limit") int limit);
+    
+    /**
+     * 获取用户加入的群组数量（XML实现连表查询）
+     */
+    int countUserJoinedGroups(String userId);
+    
+    /**
+     * 根据群主ID获取群组列表
+     */
+    @Select("SELECT * FROM groups WHERE owner_id = #{ownerId} AND status = 1")
+    List<Group> getGroupsByOwnerId(String ownerId);
+    
+    /**
+     * 获取群组总数
+     */
+    @Select("SELECT COUNT(*) FROM groups WHERE status = 1")
+    int getTotalGroupCount();
+    
+    /**
+     * 分页获取所有群组
+     */
+    @Select("SELECT * FROM groups WHERE status = 1 ORDER BY created_at DESC LIMIT #{limit} OFFSET #{offset}")
+    List<Group> getGroupsWithPagination(@Param("offset") int offset, @Param("limit") int limit);
+    
+    /**
+     * 查询群组以及成员数量（XML实现复杂查询）
      * @param groupIds 群组ID列表
      * @return 包含群组信息和成员数量的Map列表
      */

@@ -5,14 +5,27 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * 用户简要信息响应体
+ */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class UserLoginResponse {
-    private String token;
-    private String userid;
-    private String username;
+public class UserBriefResponse {
+    
+    /**
+     * 用户ID
+     */
+    private String userId;
+    
+    /**
+     * 昵称
+     */
     private String nickname;
-    private String avatarurl;
-}
+    
+    /**
+     * 头像URL
+     */
+    private String avatarUrl;
+} 
