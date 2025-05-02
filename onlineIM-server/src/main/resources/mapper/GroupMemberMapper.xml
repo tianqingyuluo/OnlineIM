@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="icu.tianqingyuluo.onlineim.mapper.GroupMemberMapper">
+    <!-- 群成员结果映射 -->
+    <resultMap id="GroupMemberResultMap" type="icu.tianqingyuluo.onlineim.pojo.entity.GroupMember">
+        <id property="id" column="id"/>
+        <result property="groupId" column="group_id"/>
+        <result property="userId" column="user_id"/>
+        <result property="nickname" column="nickname"/>
+        <result property="role" column="role"/>
+        <result property="muteEndTime" column="mute_end_time"/>
+        <result property="joinTime" column="join_time"/>
+        <result property="status" column="status"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <!-- 获取群组的所有成员 -->
+    <select id="getByGroupId" resultMap="GroupMemberResultMap">
+        SELECT * FROM group_members 
+        WHERE group_id = #{groupId} AND status = 1 
+        ORDER BY role DESC, join_time ASC 
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <!-- 获取用户加入的所有群组的成员信息 -->
+    <select id="getUserJoinedGroups" resultMap="GroupMemberResultMap">
+        SELECT gm.* FROM group_members gm 
+        JOIN groups g ON gm.group_id = g.id 
+        WHERE gm.user_id = #{userId} AND gm.status = 1 AND g.status = 1 
+        ORDER BY gm.join_time DESC
+    </select>
+
+    <!-- 批量获取群成员 -->
+    <select id="batchGetMembersByUserIds" resultMap="GroupMemberResultMap">
+        SELECT * FROM group_members 
+        WHERE group_id = #{groupId} AND user_id IN
+        <foreach collection="userIds" item="userId" open="(" separator="," close=")">
+            #{userId}
+        </foreach>
+        AND status = 1
+    </select>
+
+    <!-- 获取群成员及用户信息 -->
+    <select id="getGroupMembersWithUserInfo" resultType="java.util.Map">
+        SELECT gm.*, u.username, u.nickname as user_nickname, u.avatar, u.status as user_status
+        FROM group_members gm 
+        JOIN users u ON gm.user_id = u.id
+        WHERE gm.group_id = #{groupId} AND gm.status = 1
+        ORDER BY gm.role DESC, gm.join_time ASC
+    </select>
+</mapper> 

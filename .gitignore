@@ -32,4 +32,10 @@ build/
 .vscode/
 
 ### Xcode ###
-/.xcodemap/
+/onlineIM-server/.xcodemap/
+
+### password ###
+db.properties
+
+### tests ###
+onlineIM-server/src/test
