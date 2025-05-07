@@ -1,0 +1,285 @@
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { useUserStore } from "@/stores/user.ts";
+import { meService } from "@/services/me.service.ts";
+import { toTypedSchema } from '@vee-validate/zod';
+import { useForm } from 'vee-validate';
+import * as z from 'zod';
+
+// 表单验证规则
+const formSchema = toTypedSchema(
+    z.object({
+      nickname: z.string()
+          .min(2, "昵称至少需要2个字符")
+          .max(20, "昵称最多20个字符")
+          .optional(),
+      email: z.string()
+          .max(50, "邮箱最多50个字符")
+          .refine(
+              (val) => val === "" || z.string().email().safeParse(val).success,
+              "请输入有效的邮箱地址"
+          )
+          .optional(),
+      phone: z.string()
+          .refine(
+              (val) => val === "" || /^1[3-9]\d{9}$/.test(val),
+              "请输入有效的手机号"
+          )
+          .optional()
+          .transform(val => val === "" ? null : val),
+      region: z.string()
+          .max(20, "地区最多20个字符")
+          .optional(),
+      signature: z.string()
+          .max(100, "个性签名最多100个字符")
+          .optional(),
+      gender: z.enum(['male', 'female']) // 添加gender到验证schema
+    })
+);
+
+const userStore = useUserStore();
+
+const tempSettings = computed(() => ({
+  ...userStore.loggedInUser,
+  nickname: userStore.loggedInUser?.nickname || '',
+  email: userStore.loggedInUser?.email || '',
+  region: userStore.loggedInUser?.region || '',
+  gender: userStore.loggedInUser?.gender || 'male', // 确保默认值
+  phone: userStore.loggedInUser?.phone || '',
+  signature: userStore.loggedInUser?.signature || '',
+  avatar_url: userStore.loggedInUser?.avatar_url || ''
+}));
+
+const { handleSubmit, errors, defineField } = useForm({
+  validationSchema: formSchema,
+  initialValues: tempSettings.value
+});
+
+// 为每个字段添加绑定
+const [nickname] = defineField('nickname');
+const [email] = defineField('email');
+const [phone] = defineField('phone');
+const [region] = defineField('region');
+const [signature] = defineField('signature');
+const [gender] = defineField('gender'); // 确保正确绑定
+
+const saveSettings = handleSubmit(async (values) => {
+  try {
+    const updatedUser = await meService.updateMe({
+      nickname: values.nickname || null,
+      email: values.email || null,
+      region: values.region || null,
+      gender: values.gender || 'male', // 使用表单中的值
+      phone: values.phone || null,
+      signature: values.signature || null,
+      avatar_url: tempSettings.value.avatar_url || null
+    });
+    userStore.setLoggedInUser(updatedUser);
+    emit('close');
+  } catch (error) {
+    console.error('更新失败:', error);
+  }
+});
+const emit = defineEmits(['close']);
+// 拖动相关逻辑
+const modalRef = ref<HTMLElement | null>(null);
+let isDragging = false;
+let initialX = 0;
+let initialY = 0;
+let currentX = 0;
+let currentY = 0;
+
+
+// 更换头像逻辑
+const changeAvatar = () => {
+  // 这里实现更换头像的实际逻辑
+  console.log('更换头像');
+};
+// 关闭模态框
+const closeModal = () => {
+  emit('close');
+};
+// 拖动处理函数
+const startDrag = (e: MouseEvent) => {
+  if (!modalRef.value) return;
+  isDragging = true;
+  initialX = e.clientX;
+  initialY = e.clientY;
+  document.addEventListener('mousemove', drag);
+  document.addEventListener('mouseup', stopDrag);
+};
+const drag = (e: MouseEvent) => {
+  if (!isDragging || !modalRef.value) return;
+  e.preventDefault();
+  currentX = e.clientX - initialX;
+  currentY = e.clientY - initialY;
+  initialX = e.clientX;
+  initialY = e.clientY;
+  const modal = modalRef.value;
+  modal.style.top = `${modal.offsetTop + currentY}px`;
+  modal.style.left = `${modal.offsetLeft + currentX}px`;
+};
+const stopDrag = () => {
+  isDragging = false;
+  document.removeEventListener('mousemove', drag);
+  document.removeEventListener('mouseup', stopDrag);
+};
+// 清理事件监听
+onUnmounted(() => {
+  document.removeEventListener('mousemove', drag);
+  document.removeEventListener('mouseup', stopDrag);
+});
+</script>
+<template>
+  <div class="fixed z-50 top-[10%] left-[30%] w-[40%]" ref="modalRef">
+    <div class="bg-white rounded-lg p-6 w-full shadow-md border border-gray-200">
+      <!-- 标题和拖动区域 -->
+      <div
+          class="flex items-center h-12 w-[calc(100%+48px)] bg-gray-100 -mx-6 -mt-6 mb-6 cursor-move rounded-t-lg pl-6"
+          @mousedown="startDrag"
+      >
+        <h2 class="text-lg font-medium text-gray-800">用户设置</h2>
+      </div>
+
+      <!-- 头像区域 - 居中显示并整合更换功能 -->
+      <div class="mb-5 flex flex-col items-center">
+        <div
+            class="w-24 h-24 rounded-full overflow-hidden bg-gray-100 border border-gray-200 relative cursor-pointer hover:opacity-90 transition-opacity"
+            @click="changeAvatar"
+        >
+          <img
+              :src="tempSettings.avatar_url || '/images/help.png'"
+              class="w-full h-full object-cover"
+              alt="用户头像"
+          >
+          <div class="absolute inset-0  hover:bg-black/80 bg-opacity-30 flex items-center justify-center transition-all">
+            <span class="text-white opacity-0 hover:opacity-100 text-sm">更换头像</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 表单字段 -->
+      <div class="space-y-5">
+        <!-- 昵称字段 -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">昵称</label>
+          <!-- 昵称字段 -->
+          <input
+              v-model="nickname"
+              type="text"
+              class="w-full p-2.5 border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 bg-white text-gray-800"
+              placeholder="请输入昵称"
+              :class="{'border-red-500': errors.nickname}"
+          >
+          <!-- 其他字段也类似修改v-model绑定 -->
+          <p v-if="errors.nickname" class="text-red-500 text-sm mt-1">{{ errors.nickname }}</p>
+        </div>
+
+        <!-- 邮箱和手机号并排放置 -->
+        <div class="grid grid-cols-2 gap-4">
+          <!-- 邮箱 -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">邮箱</label>
+            <input
+                v-model="email"
+                type="email"
+                class="w-full p-2.5 border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 bg-white text-gray-800"
+                placeholder="请输入邮箱"
+                :class="{'border-red-500': errors.email}"
+            >
+            <p v-if="errors.email" class="text-red-500 text-sm mt-1">{{ errors.email }}</p>
+          </div>
+          <!-- 手机号码 -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">手机号</label>
+            <input
+                v-model="phone"
+                type="tel"
+                class="w-full p-2.5 border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 bg-white text-gray-800"
+                placeholder="请输入手机号码"
+                :class="{'border-red-500': errors.phone}"
+            >
+            <p v-if="errors.phone" class="text-red-500 text-sm mt-1">{{ errors.phone }}</p>
+          </div>
+        </div>
+
+        <!-- 地区和性别并排放置 -->
+        <div class="grid grid-cols-2 gap-4">
+          <!-- 地区 -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">地区</label>
+            <input
+                v-model="region"
+                type="text"
+                class="w-full p-2.5 border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 bg-white text-gray-800"
+                placeholder="请输入所在地区"
+                :class="{'border-red-500': errors.region}"
+            >
+            <p v-if="errors.region" class="text-red-500 text-sm mt-1">{{ errors.region }}</p>
+          </div>
+          <!-- 性别选择 -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">性别</label>
+            <select
+                v-model="gender"
+                class="w-full p-2.5 border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 bg-white text-gray-800"
+            >
+              <option value="male">男</option>
+              <option value="female">女</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 个性签名 -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">个性签名</label>
+          <textarea
+              v-model="signature"
+              rows="3"
+              class="w-full p-2.5 border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 bg-white text-gray-800"
+              placeholder="请输入个性签名"
+              :class="{'border-red-500': errors.signature}"
+          ></textarea>
+          <p v-if="errors.signature" class="text-red-500 text-sm mt-1">{{ errors.signature }}</p>
+        </div>
+      </div>
+
+      <!-- 按钮区域 -->
+      <div class="flex justify-end space-x-3 mt-6">
+        <button
+            @click="closeModal"
+            class="px-4 py-2 border border-gray-200 rounded-md text-gray-600 hover:bg-gray-50 transition-colors"
+        >
+          取消
+        </button>
+        <button
+            @click="saveSettings"
+            class="px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-700 transition-colors"
+        >
+          保存设置
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+/* 原有样式保持不变 */
+.modal-enter-active,
+.modal-leave-active {
+  transition: opacity 0.3s ease;
+}
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+.modal-content-enter-active,
+.modal-content-leave-active {
+  transition: all 0.3s ease;
+}
+.modal-content-enter-from,
+.modal-content-leave-to {
+  transform: translateY(-20px);
+  opacity: 0;
+}
+</style>

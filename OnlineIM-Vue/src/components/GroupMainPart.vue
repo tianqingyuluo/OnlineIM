@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useUserStore } from '@/stores/user'
 import Tools from "@/components/tools.vue";
+import UserTextArea from "@/components/UserTextArea.vue";
 
 const theUser = ref({
   userName: "我",
@@ -57,7 +58,7 @@ function shouldShowTime(index: number, list: any[]) {
   <div class="flex flex-col h-full">
     <!-- 顶栏显示群名 -->
     <div class="flex items-center justify-between w-full p-4 border-b">
-      <span class="font-medium">{{ currentGroup.groupName }}</span>
+      <span class="text-lg font-semibold">{{ currentGroup.groupName }}</span>
       <div class="flex space-x-4">
         <button v-for="item in items" :key="item.title">
           <a :href="item.url" class="flex items-center">
@@ -80,22 +81,32 @@ function shouldShowTime(index: number, list: any[]) {
 
           <!-- 消息内容 -->
           <div :class="['flex', msg.sender === theUser.userName ? 'justify-end' : 'justify-start']">
-            <!-- 群成员消息 -->
-            <div v-if="msg.sender !== theUser.userName" class="flex items-start max-w-[80%]">
-              <img :src="currentGroup.groupAvatar" :alt="msg.sender" class="w-10 h-10 rounded-full mr-2" />
-              <div class="bg-white rounded-lg p-3 shadow-sm max-w-[calc(100%-3rem)]">
-                <div class="text-xs text-gray-500 mb-1">{{ msg.sender }}</div>
-                {{ msg.message }}
+            <!-- 对方消息 -->
+            <template v-if="msg.sender !== theUser.userName" >
+              <div class="flex flex-col items-start max-w-[80%]"> <!-- 恢复原始flex-col结构 -->
+                <div class="text-xs text-gray-500 mb-1 ml-12"> <!-- 恢复ml-12 -->
+                  {{ msg.sender }}
+                </div>
+                <div class="flex items-start">
+                  <img :src="currentGroup.groupAvatar" :alt="msg.sender" class="w-10 h-10 rounded-full mr-2 mt-1" /> <!-- 仅添加mt-1微调头像位置 -->
+                  <UserTextArea
+                      :message="msg.message"
+                      :isSelf="false"
+                  />
+                </div>
               </div>
-            </div>
-
-            <!-- 我的消息 -->
-            <div v-else class="flex items-start max-w-[80%]">
-              <div class="bg-blue-50 rounded-lg p-3 shadow-sm mr-2 max-w-[calc(100%-3rem)]">
-                {{ msg.message }}
+            </template>
+            
+            <!-- 自己的消息 -->
+            <template v-else>
+              <div class="flex items-start">
+                <UserTextArea 
+                  :message="msg.message"
+                  :isSelf="true"
+                />
+                <img :src="theUser.avatar" :alt="theUser.userName" class="w-10 h-10 rounded-full ml-2" />
               </div>
-              <img :src="theUser.avatar" :alt="theUser.userName" class="w-10 h-10 rounded-full" />
-            </div>
+            </template>
           </div>
         </template>
       </div>
