@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useUserStore } from '@/stores/user'
 import Tools from "@/components/tools.vue";
+import UserTextArea from "@/components/UserTextArea.vue";
 
 const theUser = ref({
   userName: "我",
@@ -83,20 +84,26 @@ function shouldShowTime(index: number, list: any[]) {
           <!-- 消息内容 -->
           <div :class="['flex', msg.sender === theUser.userName ? 'justify-end' : 'justify-start']">
             <!-- 对方消息 -->
-            <div v-if="msg.sender !== theUser.userName" class="flex items-start max-w-[80%]">
-              <img :src="currentUser.arg" :alt="currentUser.userName" class="w-10 h-10 rounded-full mr-2" />
-              <div class="bg-white rounded-lg p-3 shadow-sm max-w-[calc(100%-3rem)]">
-                {{ msg.message }}
+            <template v-if="msg.sender !== theUser.userName">
+              <div class="flex items-start max-w-[80%]">
+                <img :src="currentUser.arg" :alt="currentUser.userName" class="w-10 h-10 rounded-full mr-2" />
+                <UserTextArea 
+                  :message="msg.message"
+                  :isSelf="false"
+                />
               </div>
-            </div>
-
-            <!-- 我的消息 -->
-            <div v-else class="flex items-start max-w-[80%]">
-              <div class="bg-blue-50 rounded-lg p-3 shadow-sm mr-2 max-w-[calc(100%-3rem)]">
-                {{ msg.message }}
+            </template>
+            
+            <!-- 自己的消息 -->
+            <template v-else>
+              <div class="flex items-start">
+                <UserTextArea 
+                  :message="msg.message"
+                  :isSelf="true"
+                />
+                <img :src="theUser.arg" :alt="theUser.userName" class="w-10 h-10 rounded-full ml-2" />
               </div>
-              <img :src="theUser.arg" :alt="theUser.userName" class="w-10 h-10 rounded-full" />
-            </div>
+            </template>
           </div>
         </template>
       </div>
@@ -119,11 +126,5 @@ function shouldShowTime(index: number, list: any[]) {
 </template>
 
 <style scoped>
-/* 气泡样式微调 */
-.bg-white {
-  border-top-left-radius: 0;
-}
-.bg-blue-50 {
-  border-top-right-radius: 0;
-}
+/* 移除气泡样式，因为已经移到 UserTextArea 组件中 */
 </style>
