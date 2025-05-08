@@ -19,7 +19,7 @@ public class FriendGroupResponse {
     /**
      * 分组ID
      */
-    private String groupId;
+    private String groupID;
     
     /**
      * 分组名称

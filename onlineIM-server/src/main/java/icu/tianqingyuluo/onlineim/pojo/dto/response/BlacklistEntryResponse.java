@@ -17,7 +17,7 @@ public class BlacklistEntryResponse {
     /**
      * 用户ID
      */
-    private String userId;
+    private String userID;
     
     /**
      * 昵称

@@ -17,12 +17,12 @@ public class FriendResponse {
     /**
      * 好友关系ID
      */
-    private String friendshipId;
+    private String friendshipID;
     
     /**
      * 好友用户ID
      */
-    private String userId;
+    private String userID;
     
     /**
      * 好友用户名
@@ -47,7 +47,7 @@ public class FriendResponse {
     /**
      * 好友分组ID
      */
-    private String friendGroupId;
+    private String friendGroupID;
     
     /**
      * 在线状态

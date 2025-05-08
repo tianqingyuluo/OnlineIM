@@ -17,7 +17,7 @@ public class GroupResponse {
     /**
      * 群组ID
      */
-    private String groupId;
+    private String groupID;
     
     /**
      * 群组名称
@@ -27,7 +27,7 @@ public class GroupResponse {
     /**
      * 群主ID
      */
-    private String ownerId;
+    private String ownerID;
     
     /**
      * 群头像URL

@@ -17,12 +17,12 @@ public class GroupAnnouncementResponse {
     /**
      * 公告ID
      */
-    private String announcementId;
+    private String announcementID;
     
     /**
      * 群组ID
      */
-    private String groupId;
+    private String groupID;
     
     /**
      * 发布者信息
