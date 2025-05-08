@@ -3,6 +3,7 @@ package icu.tianqingyuluo.onlineim.mapper;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.UserUpdateRequest;
 import icu.tianqingyuluo.onlineim.pojo.entity.User;
 import org.apache.ibatis.annotations.*;
+
 import java.util.List;
 
 /**
