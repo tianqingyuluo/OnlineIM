@@ -14,5 +14,5 @@ public class UserLoginResponse {
     private String userid;
     private String username;
     private String nickname;
-    private String avatarurl;
+    private String avatarUrl;
 }

@@ -17,7 +17,7 @@ public class FriendRequestResponse {
     /**
      * 请求ID
      */
-    private String requestId;
+    private String requestID;
     
     /**
      * 发送者信息

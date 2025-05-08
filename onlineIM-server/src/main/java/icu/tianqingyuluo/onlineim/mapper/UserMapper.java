@@ -21,7 +21,7 @@ public interface UserMapper {
     /**
      * 根据ID查询用户
      */
-    @Select("SELECT id, username, nickname, avatar, email, phone, signature, gender, birthday, status, last_login_time, last_login_ip, created_at, updated_at FROM users WHERE id = #{id}")
+    @Select("SELECT id, username, nickname, avatar, email, phone, signature, gender, status, last_login_time, last_login_ip, created_at, updated_at FROM users WHERE id = #{id}")
     User getById(String id);
     
     /**
@@ -29,7 +29,13 @@ public interface UserMapper {
      */
     @Select("SELECT * FROM users WHERE username = #{username}")
     User getByUsername(String username);
-    
+
+    /**
+     * 根据用户名查询密码
+     */
+    @Select("SELECT password FROM users WHERE username = #{username}")
+    String getPasswordByUsername(String username);
+
     /**
      * 根据用户名或邮箱查询用户
      */
@@ -61,7 +67,7 @@ public interface UserMapper {
     /**
      * 插入用户
      */
-    @Insert("INSERT INTO users(id, username, password, salt, nickname, avatar, email, phone, signature, gender, birthday, status, last_login_time, last_login_ip, created_at, updated_at) " +
+    @Insert("INSERT INTO users(id, username, password, nickname, avatar, email, phone, signature, gender, status, last_login_time, last_login_ip, created_at, updated_at) " +
            "VALUES(#{id}, #{username}, #{password}, #{salt}, #{nickname}, #{avatar}, #{email}, #{phone}, #{signature}, #{gender}, #{birthday}, #{status}, #{lastLoginTime}, #{lastLoginIp}, #{createdAt}, #{updatedAt})")
     int insert(User user);
     
@@ -81,7 +87,13 @@ public interface UserMapper {
      */
     @Update("UPDATE users SET password = #{password}, updated_at = #{updatedAt} WHERE id = #{id}")
     int updatePassword(@Param("id") String id, @Param("password") String password, @Param("updatedAt") String updatedAt);
-    
+
+    /**
+     * 根据用户名更新密码
+     */
+    @Update("UPDATE users SET password = #{password}, updated_at = #{updatedAt} WHERE username = #{username}")
+    int updatePasswordByUsername(@Param("username") String username, @Param("password") String password, @Param("updatedAt") String updatedAt);
+
     /**
      * 更新登录信息
      */

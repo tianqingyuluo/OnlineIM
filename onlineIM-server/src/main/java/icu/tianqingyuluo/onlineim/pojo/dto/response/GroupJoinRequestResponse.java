@@ -17,12 +17,12 @@ public class GroupJoinRequestResponse {
     /**
      * 请求ID
      */
-    private String requestId;
+    private String requestID;
     
     /**
      * 群组ID
      */
-    private String groupId;
+    private String groupID;
     
     /**
      * 群组名称

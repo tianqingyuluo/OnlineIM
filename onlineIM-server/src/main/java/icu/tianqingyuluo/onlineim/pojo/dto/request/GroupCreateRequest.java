@@ -39,7 +39,7 @@ public class GroupCreateRequest {
     /**
      * 初始成员ID列表
      */
-    private List<String> memberIds;
+    private List<String> memberIDs;
     
     /**
      * 加入方式：0-需要验证，1-无需验证，2-禁止加入
