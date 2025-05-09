@@ -1,54 +1,49 @@
 package icu.tianqingyuluo.onlineim.controller;
 
-import icu.tianqingyuluo.onlineim.pojo.dto.request.UserLoginRequest;
-import icu.tianqingyuluo.onlineim.pojo.dto.request.UserRegisterRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.UserUpdateRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserResponse;
+import icu.tianqingyuluo.onlineim.service.UserService;
+import icu.tianqingyuluo.onlineim.service.impl.UserDetailsServiceImpl;
+import icu.tianqingyuluo.onlineim.util.JwtUtil;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.ibatis.exceptions.PersistenceException;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
  * 用户管理接口
  */
+@Slf4j
 @RestController
 @RequestMapping("/api/v1/users")
 public class UserController {
 
-    /**
-     * 用户注册
-     * @param request 注册请求
-     * @return 注册结果
-     */
-    @PostMapping("/register")
-    public ResponseEntity<Map<String, Object>> register(@RequestBody UserRegisterRequest request) {
-        // TODO: 实现注册逻辑
-        return null;
+    private final UserService userService;
+
+    private final JwtUtil jwtUtil;
+
+    public UserController(UserDetailsServiceImpl userDetailsService, UserService userService, JwtUtil jwtUtil) {
+        this.userService = userService;
+        this.jwtUtil = jwtUtil;
     }
-    
-    /**
-     * 用户登录
-     * @param request 登录请求
-     * @return 登录结果，包含token
-     */
-    @PostMapping("/login")
-    public ResponseEntity<Map<String, Object>> login(@RequestBody UserLoginRequest request) {
-        // TODO: 实现登录逻辑
-        return null;
-    }
-    
+
     /**
      * 获取当前用户信息
      * @return 用户信息
      */
     @GetMapping("/me")
-    public ResponseEntity<UserResponse> getCurrentUser() {
+    public ResponseEntity<UserResponse> getCurrentUser(@RequestHeader(value = "Authorization") String token) {
         // TODO: 实现获取当前用户信息逻辑
-        return null;
+        String username = jwtUtil.getUsernameFromToken(token.substring(7));
+        return ResponseEntity.ok(userService.getUserInfoByUsername(username));
     }
     
     /**
@@ -59,7 +54,13 @@ public class UserController {
     @GetMapping("/{userId}")
     public ResponseEntity<UserResponse> getUserInfo(@PathVariable String userId) {
         // TODO: 实现获取指定用户信息逻辑
-        return null;
+        try {
+            return ResponseEntity.ok(userService.getUserInfoByUserID(userId));
+        }
+        catch (PersistenceException e) {
+            log.error(e.getMessage());
+            return ResponseEntity.notFound().build();
+        }
     }
     
     /**
@@ -68,9 +69,17 @@ public class UserController {
      * @return 更新结果
      */
     @PutMapping("/me")
-    public ResponseEntity<UserResponse> updateUserInfo(@RequestBody UserUpdateRequest request) {
+    public ResponseEntity<UserResponse> updateUserInfo(@RequestHeader(value = "Authorization") String token, @RequestBody UserUpdateRequest request) {
         // TODO: 实现更新用户信息逻辑
-        return null;
+        String username = jwtUtil.getUsernameFromToken(token.substring(7));
+        try {
+            userService.updateByUsername(username);
+            return ResponseEntity.ok(userService.getUserInfoByUsername(username));
+        }
+        catch (PersistenceException e) {
+            log.error(e.getMessage());
+            return ResponseEntity.badRequest().build();
+        }
     }
     
     /**
@@ -81,6 +90,7 @@ public class UserController {
     @PostMapping("/me/avatar")
     public ResponseEntity<Map<String, String>> uploadAvatar(@RequestParam("file") MultipartFile avatar) {
         // TODO: 实现上传头像逻辑
+        // UNDO: 使用minio传入数据桶中
         return null;
     }
     
@@ -90,9 +100,20 @@ public class UserController {
      * @return 修改结果
      */
     @PutMapping("/me/password")
-    public ResponseEntity<Map<String, String>> updatePassword(@RequestBody Map<String, String> request) {
+    public ResponseEntity<Map<String, String>> updatePassword(@RequestHeader(value = "Authorization") String token, @RequestBody Map<String, String> request) {
         // TODO: 实现修改密码逻辑
-        return null;
+        Map<String, String> response = new HashMap<>();
+        String username = jwtUtil.getUsernameFromToken(token);
+        String newPassword = request.get("new_password");
+        String oldPassword = request.get("old_password");
+
+        BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+        if (passwordEncoder.matches(oldPassword, userService.getPasswordByUsername(username))) {
+            // UNDO: 作废当前token
+            userService.updatePasswordByUsername(username, passwordEncoder.encode(newPassword));
+            return ResponseEntity.ok().build();
+        }
+        else return ResponseEntity.badRequest().build();
     }
     
     /**
@@ -101,28 +122,17 @@ public class UserController {
      * @return 用户列表
      */
     @GetMapping("/search")
-    public ResponseEntity<List<UserBriefResponse>> searchUsers(@RequestParam String keyword) {
+    public ResponseEntity<List<UserBriefResponse>> searchUsers(@RequestParam String keyword, @RequestParam Integer offset) {
         // TODO: 实现搜索用户逻辑
+        final int LIMIT = 5; // 用户搜索页分页参数
+        List<UserBriefResponse> userBriefResponseList = new ArrayList<>();
+
+        // 先搜索 userid
+        userService.searchByUserID(keyword, LIMIT, offset);
+
+        // 再搜索 username
+        userService.searchByUsername(keyword, LIMIT, offset);
         return null;
     }
-    
-    /**
-     * 刷新token
-     * @return 新token
-     */
-    @PostMapping("/refresh-token")
-    public ResponseEntity<Map<String, String>> refreshToken() {
-        // TODO: 实现刷新token逻辑
-        return null;
-    }
-    
-    /**
-     * 用户登出
-     * @return 登出结果
-     */
-    @PostMapping("/logout")
-    public ResponseEntity<Map<String, String>> logout() {
-        // TODO: 实现登出逻辑
-        return null;
-    }
+
 } 
