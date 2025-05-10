@@ -2,7 +2,7 @@
 import api from './api.service';
 import { useUserStore } from '@/stores/user';
 import { toast } from 'vue-sonner';
-import type { FormContext } from 'vee-validate';
+
 export const LoginService = {
     validationRules: {
         username: {
@@ -26,18 +26,17 @@ export const LoginService = {
     /**
      * 登录方法（集成完整错误处理）
      * @param credentials 登录凭证
-     * @param formContext 可选的表单上下文，用于设置字段错误
+     * @param router
      */
     async login(
         credentials: { username: string; password: string },
-        router,  // 添加路由参数
-        formContext?: FormContext
+        router
     ) {
         const userStore = useUserStore();
 
         try {
-            const response = await api.post('login', credentials);
-
+            console.log('准备发送请求...');
+             const response = await api.post('/auth/login', credentials);
             if (response.data.access_token) {
                 // 更新用户状态
                 userStore.setLoggedInUser({
@@ -45,10 +44,9 @@ export const LoginService = {
                     username: response.data.user_info.username,
                     nickname: response.data.user_info.nickname,
                     avatar_url: response.data.user_info.avatar_url || null, // 使用 avatar_url
-                    token: response.data.access_token
                 });
-                localStorage.setItem('token', response.data.access_token);
-                console.log("token"+response.data.access_token);
+                userStore.token = response.data.access_token
+                console.log("token:\n"+response.data.access_token);
 
                 // 显示欢迎消息
                 toast.success('登录成功', {
@@ -57,42 +55,46 @@ export const LoginService = {
 
                 // 延迟1秒后跳转
                 await new Promise(resolve => setTimeout(resolve, 1000));
-                await router.push('/main');
+                await router.push('/main/chat');
             }
             return response;
         } catch (error: any) {
-            // 处理字段级验证错误（400）
-            if (error.code === 'VALIDATION_ERROR' && formContext) {
-                Object.entries(error.details || {}).forEach(([field, message]) => {
-                    formContext.setFieldError(field, message as string);
-                });
-                return;
-            }
-
-            // 处理业务特定错误
-            switch (error.code) {
-                case 'AUTH_FAILED':
-                    toast.error('登录失败', {
-                        description: '用户名或密码错误'
-                    });
-                    break;
-
-                case 'ACCOUNT_LOCKED':
-                    toast.error('账户已锁定', {
-                        description: '请联系管理员解锁账户'
-                    });
-                    break;
-
-                case 'CONFLICT':
-                    if (error.conflictField === 'username' && formContext) {
-                        formContext.setFieldError('username', '该用户名已被注册');
-                    }
-                    break;
-
-                default:
-                    // 其他错误已在api拦截器统一处理
-                    throw error;
-            }
+            const errorMsg = error.message;
+            toast.error('登录失败', {
+                description: errorMsg
+            });
+            // // 处理字段级验证错误（400）
+            // if (error.code === 'VALIDATION_ERROR' && formContext) {
+            //     Object.entries(error.details || {}).forEach(([field, message]) => {
+            //         formContext.setFieldError(field, message as string);
+            //     });
+            //     return;
+            // }
+            //
+            // // 处理业务特定错误
+            // switch (error.code) {
+            //     case 'AUTH_FAILED':
+            //         toast.error('登录失败', {
+            //             description: '用户名或密码错误'
+            //         });
+            //         break;
+            //
+            //     case 'ACCOUNT_LOCKED':
+            //         toast.error('账户已锁定', {
+            //             description: '请联系管理员解锁账户'
+            //         });
+            //         break;
+            //
+            //     case 'CONFLICT':
+            //         if (error.conflictField === 'username' && formContext) {
+            //             formContext.setFieldError('username', '该用户名已被注册');
+            //         }
+            //         break;
+            //
+            //     default:
+            //         // 其他错误已在api拦截器统一处理
+            //         throw error;
+            //}
         }
     }
 };

@@ -8,34 +8,45 @@ import * as z from 'zod';
 
 // 表单验证规则
 const formSchema = toTypedSchema(
-    z.object({
-      nickname: z.string()
-          .min(2, "昵称至少需要2个字符")
-          .max(20, "昵称最多20个字符")
-          .optional(),
-      email: z.string()
-          .max(50, "邮箱最多50个字符")
-          .refine(
-              (val) => val === "" || z.string().email().safeParse(val).success,
-              "请输入有效的邮箱地址"
-          )
-          .optional(),
-      phone: z.string()
-          .refine(
-              (val) => val === "" || /^1[3-9]\d{9}$/.test(val),
-              "请输入有效的手机号"
-          )
-          .optional()
-          .transform(val => val === "" ? null : val),
-      region: z.string()
-          .max(20, "地区最多20个字符")
-          .optional(),
-      signature: z.string()
-          .max(100, "个性签名最多100个字符")
-          .optional(),
-      gender: z.enum(['male', 'female']) // 添加gender到验证schema
-    })
-);
+  z.object({
+    nickname: z.union([
+      z.string()
+        .min(2, "昵称至少需要2个字符")
+        .max(20, "昵称最多20个字符"),
+      z.null()
+    ]).transform(val => val || ''),
+    email: z.union([
+      z.string()
+        .max(50, "邮箱最多50个字符")
+        .refine(
+          (val) => !val || z.string().email().safeParse(val).success,
+          "请输入有效的邮箱地址"
+        ),
+      z.null()
+    ]).transform(val => val || ''),
+    phone: z.union([
+      z.string()
+        .refine(
+          (val) => !val || /^1[3-9]\d{9}$/.test(val),
+          "请输入有效的手机号"
+        ),
+      z.null()
+    ]).transform(val => val || ''),
+    region: z.union([
+      z.string()
+        .max(20, "地区最多20个字符"),
+      z.null()
+    ]).transform(val => val || ''),
+    signature: z.union([
+      z.string()
+        .max(100, "个性签名最多100个字符"),
+      z.null()
+    ]).transform(val => val || ''),
+    gender: z.enum(['male', 'female'])
+      .default('male')
+  })
+)
+
 
 const userStore = useUserStore();
 
@@ -49,12 +60,14 @@ const tempSettings = computed(() => ({
   signature: userStore.loggedInUser?.signature || '',
   avatar_url: userStore.loggedInUser?.avatar_url || ''
 }));
-
 const { handleSubmit, errors, defineField } = useForm({
   validationSchema: formSchema,
-  initialValues: tempSettings.value
-});
-
+  initialValues: tempSettings.value,
+  validateOnBlur: false,  // 禁用blur验证
+  validateOnChange: false, // 禁用change验证
+  validateOnInput: false,  // 禁用input验证
+  validateOnModelUpdate: false // 禁用model更新验证
+})
 // 为每个字段添加绑定
 const [nickname] = defineField('nickname');
 const [email] = defineField('email');
@@ -66,12 +79,12 @@ const [gender] = defineField('gender'); // 确保正确绑定
 const saveSettings = handleSubmit(async (values) => {
   try {
     const updatedUser = await meService.updateMe({
-      nickname: values.nickname || null,
-      email: values.email || null,
-      region: values.region || null,
+      nickname: values.nickname || undefined,
+      email: values.email || undefined,
+      region: values.region || undefined,
       gender: values.gender || 'male', // 使用表单中的值
-      phone: values.phone || null,
-      signature: values.signature || null,
+      phone: values.phone || undefined,
+      signature: values.signature || undefined,
       avatar_url: tempSettings.value.avatar_url || null
     });
     userStore.setLoggedInUser(updatedUser);

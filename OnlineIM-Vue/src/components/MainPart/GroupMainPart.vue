@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { Ellipsis } from "lucide-vue-next"
-import { ref, computed } from "vue"
-import { Textarea } from "@/components/ui/textarea";
+import { ref, computed, provide } from "vue"
 import { Button } from "@/components/ui/button";
-import { useUserStore } from '@/stores/user'
-import Tools from "@/components/tools.vue";
-import UserTextArea from "@/components/UserTextArea.vue";
+import { useUserStore } from '@/stores/user.ts'
+import Tools from "@/components/MainPart/tools.vue";
+import UserTextArea from "@/components/MainPart/UserTextArea.vue";
+import { Textarea } from "@/components/ui/textarea";
 
 const theUser = ref({
   userName: "我",
@@ -52,11 +52,47 @@ function shouldShowTime(index: number, list: any[]) {
   const currentTime = parseChineseDate(list[index].sendTime).getTime();
   return currentTime - prevTime > 5 * 60 * 1000;
 }
+
+const messageInputRef = ref<HTMLTextAreaElement | null>(null)
+provide('messageInputRef', messageInputRef)
+
+function handleEmojiSelect(emoji: string) {
+  const textareaEl = document.getElementById('message-2') as HTMLTextAreaElement
+  if (textareaEl) {
+    // 获取当前光标位置
+    const cursorPos = textareaEl.selectionStart || 0
+    const currentValue = textareaEl.value || ''
+    
+    // 在光标位置插入表情
+    const newValue = 
+      currentValue.substring(0, cursorPos) + 
+      emoji + 
+      currentValue.substring(cursorPos)
+    
+    // 更新文本框值
+    textareaEl.value = newValue
+    
+    // 设置新的光标位置
+    const newCursorPos = cursorPos + emoji.length
+    textareaEl.selectionStart = newCursorPos
+    textareaEl.selectionEnd = newCursorPos
+    
+    // 保持焦点
+    textareaEl.focus()
+  }
+}
+
+function handleSendClick() {
+  const textareaEl = document.getElementById('message-2') as HTMLTextAreaElement
+  if (textareaEl) {
+    console.log('当前输入内容:', textareaEl.value)
+  }
+}
 </script>
 
 <template>
   <div class="flex flex-col h-full">
-    <!-- 顶栏显示群名 -->
+    <!-- 顶栏 -->
     <div class="flex items-center justify-between w-full p-4 border-b">
       <span class="text-lg font-semibold">{{ currentGroup.groupName }}</span>
       <div class="flex space-x-4">
@@ -68,7 +104,7 @@ function shouldShowTime(index: number, list: any[]) {
       </div>
     </div>
 
-    <!-- 群消息历史区域 -->
+    <!-- 主内容区 -->
     <div class="flex-1 overflow-y-auto p-4">
       <div v-if="currentGroup.MessageList" class="space-y-4">
         <template v-for="(msg, index) in currentGroup.MessageList" :key="msg.messageId">
@@ -82,18 +118,13 @@ function shouldShowTime(index: number, list: any[]) {
           <!-- 消息内容 -->
           <div :class="['flex', msg.sender === theUser.userName ? 'justify-end' : 'justify-start']">
             <!-- 对方消息 -->
-            <template v-if="msg.sender !== theUser.userName" >
-              <div class="flex flex-col items-start max-w-[80%]"> <!-- 恢复原始flex-col结构 -->
-                <div class="text-xs text-gray-500 mb-1 ml-12"> <!-- 恢复ml-12 -->
-                  {{ msg.sender }}
-                </div>
-                <div class="flex items-start">
-                  <img :src="currentGroup.groupAvatar" :alt="msg.sender" class="w-10 h-10 rounded-full mr-2 mt-1" /> <!-- 仅添加mt-1微调头像位置 -->
-                  <UserTextArea
-                      :message="msg.message"
-                      :isSelf="false"
-                  />
-                </div>
+            <template v-if="msg.sender !== theUser.userName">
+              <div class="flex items-start max-w-[80%]">
+                <img :src="currentGroup.groupAvatar" :alt="msg.sender" class="w-10 h-10 rounded-full mr-2" />
+                <UserTextArea 
+                  :message="msg.message"
+                  :isSelf="false"
+                />
               </div>
             </template>
             
@@ -111,14 +142,15 @@ function shouldShowTime(index: number, list: any[]) {
         </template>
       </div>
     </div>
-    <Tools/>
+    <Tools @select="handleEmojiSelect" />
     <!-- 输入区域 -->
     <div class="relative h-1/4 border-t">
       <Textarea
           id="message-2"
+          ref="messageInputRef"
           placeholder="请在这里输入"
           class="h-full w-full resize-none pr-20 rounded-none focus:ring-0 focus:shadow-none"
-          style="outline: none;box-shadow: none;"
+          style="outline: none;box-shadow: none; font-size: 24px; text-align: left; padding-top: 0.5rem; padding-left: 0.5rem"
       />
       <Button class="absolute bottom-4 right-4">发送</Button>
     </div>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Smile } from "lucide-vue-next"
 import { ref } from "vue"
-import EmojiArea from "@/components/EmojiArea.vue"
+import EmojiArea from "@/components/independent/emojiArea/EmojiArea.vue"
 
 const tools = [
   {
@@ -11,6 +11,13 @@ const tools = [
 ]
 
 const emojiAreaRef = ref<InstanceType<typeof EmojiArea> | null>(null)
+
+// 定义emit
+const emit = defineEmits(['select'])
+
+function handleEmojiSelect(emoji: string) {
+  emit('select', emoji)
+}
 
 function toggleEmojiArea(e?: MouseEvent) {
   emojiAreaRef.value?.toggleEmojiArea(e)
@@ -27,7 +34,29 @@ function toggleEmojiArea(e?: MouseEvent) {
         </div>
       </template>
     </div>
-
-    <EmojiArea ref="emojiAreaRef" />
+    <transition name="fade-slide" mode="out-in">
+    <EmojiArea ref="emojiAreaRef" @select="handleEmojiSelect" />
+    </transition>
   </div>
 </template>
+<style scoped>
+/* 统一过渡效果 */
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all 0.3s ease;
+}
+.fade-slide-enter-from {
+  opacity: 0;
+  transform: translateY(20px);
+}
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-20px);
+}
+
+/* 拖动光标反馈 */
+.cursor-move {
+  cursor: move;
+  user-select: none;
+}
+</style>

@@ -1,15 +1,13 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { useUserStore } from "@/stores/user";
+import {ref,  onMounted, onUnmounted, watch} from 'vue';
+import { useUserStore } from "@/stores/user.ts";
 import UserSettings from "./UserSettings.vue";
-import { meService } from "@/services/me.service.ts";
 
 // 用户数据逻辑
-const userStore = useUserStore();
 const isLoading = ref(false);
 const error = ref<Error | null>(null);
 const showSettings = ref(false);
-
+const userStore=useUserStore();
 const userInfo = ref({
   nickname: '未设置',
   email: '未设置',
@@ -19,6 +17,7 @@ const userInfo = ref({
   signature: '未设置',
   avatar_url: '/images/help.png'
 });
+// 监听用户数据变化
 
 // 拖动逻辑（新增）
 const modalRef = ref<HTMLElement | null>(null);
@@ -59,7 +58,7 @@ const stopDrag = () => {
 onMounted(async () => {
   try {
     isLoading.value = true;
-    const userData = await meService.me();
+    const userData = userStore.loggedInUser
     userInfo.value = {
       nickname: userData.nickname ||"未设置",
       email: userData.email ||"未设置",
@@ -82,6 +81,23 @@ onUnmounted(() => {
   document.removeEventListener('mouseup', stopDrag);
 });
 
+watch(
+    () => userStore.selectedUser,
+    (newUser) => {
+      if (newUser) {
+        userInfo.value = {
+          nickname: newUser.nickname || "未设置",
+          email: newUser.email || "未设置",
+          phone: newUser.phone || "未设置",
+          region: newUser.region || "未设置",
+          gender: newUser.gender ? (newUser.gender === 'male' ? '男' : '女') : '未设置',
+          signature: newUser.signature || "未设置",
+          avatar_url: newUser.avatar_url || '/images/help.png'
+        };
+      }
+    },
+    { immediate: true, deep: true }
+);
 // 跳转编辑
 const editProfile = () => {
   showSettings.value = true;
