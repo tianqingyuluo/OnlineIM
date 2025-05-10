@@ -72,6 +72,9 @@ public class AuthController {
             response.put("message", "用户名或密码错误");
             return ResponseEntity.status(401).body(response);
         }
+        catch (Exception e) {
+            log.error(e.getMessage());
+        }
 
         Map<String, Object> response = new HashMap<>();
         Map<String, String> userInfo = new HashMap<>();

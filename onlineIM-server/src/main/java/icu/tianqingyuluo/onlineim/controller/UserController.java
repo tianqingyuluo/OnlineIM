@@ -8,7 +8,6 @@ import icu.tianqingyuluo.onlineim.service.impl.UserDetailsServiceImpl;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ibatis.exceptions.PersistenceException;
-import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
@@ -74,7 +73,7 @@ public class UserController {
         // TODO: 实现更新用户信息逻辑
         String username = jwtUtil.getUsernameFromToken(token.substring(7));
         try {
-            userService.updateByUsername(username);
+            userService.updateByUsername(username, request);
             return ResponseEntity.ok(userService.getUserInfoByUsername(username));
         }
         catch (PersistenceException e) {
@@ -123,17 +122,29 @@ public class UserController {
      * @return 用户列表
      */
     @GetMapping("/search/{keyword}/{offset}")
-    public ResponseEntity<List<UserBriefResponse>> searchUsers(@PathVariable("keyword") String keyword, @PathVariable("offset")Integer offset) {
+    public ResponseEntity<?> searchUsers(@PathVariable("keyword") String keyword, @PathVariable("offset")Integer offset) {
         // TODO: 实现搜索用户逻辑
         final int LIMIT = 5; // 用户搜索页分页参数
-        List<UserBriefResponse> userBriefResponseList = new ArrayList<>();
-
         // 先搜索 userid
-        userService.searchByUserID(keyword, LIMIT, offset);
-
+        List<UserBriefResponse> userBriefResponseList = new ArrayList<>(userService.searchByUserID(keyword, LIMIT, offset));
         // 再搜索 username
-        userService.searchByUsername(keyword, LIMIT, offset);
-        return null;
+        userBriefResponseList.addAll(userService.searchByUsername(keyword, LIMIT, offset));
+        Map<String, Object> response = new HashMap<>();
+        List<Map<String, Object>> userlist = new ArrayList<>();
+
+        userBriefResponseList.forEach(userBriefResponse -> {
+            Map<String, Object> user = new HashMap<>();
+            user.put("user_id", userBriefResponse.getUserId());
+            user.put("username", userBriefResponse.getUsername());
+            user.put("nickname", userBriefResponse.getNickname());
+            user.put("avatar_url", userBriefResponse.getAvatarUrl());
+            userlist.add(user);
+        });
+
+        response.put("users", userlist);
+        response.put("total", userlist.size());
+
+        return ResponseEntity.ok(response);
     }
 
 } 

@@ -4,14 +4,14 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
 <mapper namespace="icu.tianqingyuluo.onlineim.mapper.UserBriefResponseMapper">
-    <resultMap id="UserBriefResponseMap" type="com.example.UserBriefResponse">
+    <resultMap id="UserBriefResponseMap" type="icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse">
         <id property="userId" column="id"/>
         <result property="avatarUrl" column="avatar"/>
     </resultMap>
     <!-- 根据id查询用户简要信息 -->
     <select id="searchUsersByUserID" resultMap="UserBriefResponseMap">
         SELECT
-            id,nickname,avatar
+            id,username,nickname,avatar
         FROM users
         WHERE (id LIKE CONCAT('%', #{id}, '%'))
         ORDER BY created_at DESC
@@ -21,7 +21,7 @@
     <!-- 根据username查询用户简要信息 -->
     <select id="searchUsersByUsername" resultMap="UserBriefResponseMap">
         SELECT
-            id,nickname,avatar
+            id,username,nickname,avatar
         FROM users
         WHERE (username LIKE CONCAT('%', #{username}, '%'))
         ORDER BY created_at DESC

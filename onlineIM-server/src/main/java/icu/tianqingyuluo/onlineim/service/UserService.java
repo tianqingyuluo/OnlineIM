@@ -14,9 +14,10 @@ public interface UserService {
     void registerUser(User user);
     UserResponse getUserInfoByUsername(String username);
     UserResponse getUserInfoByUserID(String username);
-    UserUpdateRequest updateByUsername(String username);
+    void updateByUsername(String username, UserUpdateRequest userUpdateRequest);
     String getPasswordByUsername(String username);
     void updatePasswordByUsername(String username, String password);
     List<UserBriefResponse> searchByUserID(String keyword,int LIMIT,int offset);
     List<UserBriefResponse> searchByUsername(String keyword,int LIMIT,int offset);
+    UserBriefResponse getUserBriefInfoByUsername(String username);
 }
