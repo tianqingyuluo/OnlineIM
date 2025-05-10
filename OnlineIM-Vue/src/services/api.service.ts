@@ -4,7 +4,6 @@ import { API_BASE_URL } from '@/config';
 import { useUserStore } from '@/stores/user';
 import { toast } from 'vue-sonner';
 import router from '@/router';
-
 // 定义标准API响应格式
 export type ApiResponse<T = any> = {
   data?: T;
@@ -24,16 +23,18 @@ const api = axios.create({
     'Accept': 'application/json'
   },
 });
-
 // 请求拦截器
+// 请求拦截器添加调试日志
 api.interceptors.request.use(
   (config) => {
+    console.log('请求配置:', config) // 添加调试日志
+    const userStore=useUserStore();
     // 从 localStorage 获取 token
-    const token = localStorage.getItem('token');
+    const token = userStore.token
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      config.headers.Authorization = `Bearer ${token}`
     }
-    return config;
+    return config
   },
   (error) => {
     // 请求配置出错时直接reject
@@ -49,11 +50,7 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => {
     // 直接返回数据部分，同时保留完整的响应结构
-    return {
-      data: response.data,
-      status: response.status,
-      headers: response.headers
-    };
+    return response;
   },
   (error) => {
     const userStore = useUserStore();
@@ -97,8 +94,8 @@ api.interceptors.response.use(
         break;
         
       case 401:
-        if (userStore.isLoggedIn) {
-          userStore.logout(); // 使用store的统一logout方法
+        if (userStore.isAuthenticated()) {
+          userStore.clearUser(); // 使用store的统一logout方法
           toast.error('会话已过期', {
             description: '请重新登录',
             duration: 5000

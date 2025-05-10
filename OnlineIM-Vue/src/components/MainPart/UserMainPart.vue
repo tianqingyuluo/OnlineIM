@@ -1,19 +1,38 @@
 <script setup lang="ts">
 import { Ellipsis } from "lucide-vue-next"
-import { ref, computed } from "vue"
+import { ref, provide,  } from "vue"
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { useUserStore } from '@/stores/user'
-import Tools from "@/components/tools.vue";
-import UserTextArea from "@/components/UserTextArea.vue";
-
+import Tools from "@/components/MainPart/tools.vue";
+import UserTextArea from "@/components/MainPart/UserTextArea.vue";
+const currentUser = ref({
+  userName: "测试用户",
+  avatar: "/images/avatar-test.jpg", // 替换为你的图片路径
+  TalkingList: [
+    {
+      messageId: "1",
+      sender: "对方",
+      message: "你好，今天有空吗？",
+      sendTime: "2023-10-01T10:30:00"
+    },
+    {
+      messageId: "2",
+      sender: "我",
+      message: "有的，下午 2 点可以",
+      sendTime: "2023-10-01T11:45:00"
+    },
+    {
+      messageId: "3",
+      sender: "对方",
+      message: "好的，到时见！😊",
+      sendTime: "2023-10-01T12:00:00"
+    }
+  ]
+});
 const theUser = ref({
   userName: "我",
   arg: "/images/help.png"
 })
-
-const userStore = useUserStore()
-const currentUser = computed(() => userStore.selectedUser)
 
 const items = [
   {
@@ -54,15 +73,59 @@ function shouldShowTime(index: number, list: any[]) {
   const currentTime = parseChineseDate(list[index].sendTime).getTime();
   return currentTime - prevTime > 5 * 60 * 1000;
 }
+
+// 在onBeforeMount中创建ref和provide
+
+
+const messageInputRef = ref<HTMLTextAreaElement | null>(null)
+provide('messageInputRef', messageInputRef)
+console.log("currentUser 数据:", currentUser.value);
+
+
+
+// 添加处理表情选择的函数
+function handleEmojiSelect(emoji: string) {
+  const textareaEl = document.getElementById('message-2') as HTMLTextAreaElement
+  if (textareaEl) {
+    // 获取当前光标位置
+    const cursorPos = textareaEl.selectionStart || 0
+    const currentValue = textareaEl.value || ''
+    
+    // 在光标位置插入表情
+    const newValue = 
+      currentValue.substring(0, cursorPos) + 
+      emoji + 
+      currentValue.substring(cursorPos)
+    
+    // 更新文本框值
+    textareaEl.value = newValue
+    
+    // 设置新的光标位置
+    const newCursorPos = cursorPos + emoji.length
+    textareaEl.selectionStart = newCursorPos
+    textareaEl.selectionEnd = newCursorPos
+    
+    // 保持焦点
+    textareaEl.focus()
+  }
+}
+
+function handleSendClick() {
+  const textareaEl = document.getElementById('message-2') as HTMLTextAreaElement
+  if (textareaEl) {
+    console.log('当前输入内容:', textareaEl.value)
+  }
+}
 </script>
 
 <template>
-  <div v-if="currentUser" class="flex flex-col h-full">
+  <!-- 移除v-if="currentUser"条件，直接显示内容 -->
+  <div class="flex flex-col h-full">
     <!-- 顶栏 -->
     <div class="flex items-center justify-between w-full p-4 border-b">
-      <span class=" text-lg font-semibold">{{ currentUser.userName }}</span>
+      <span class="text-lg font-semibold">聊天</span>
       <div class="flex space-x-4">
-        <button v-for="item in items" :key="item.title"  >
+        <button v-for="item in items" :key="item.title">
           <a :href="item.url" class="flex items-center">
             <component :is="item.icon" class="w-5 h-5" />
           </a>
@@ -72,6 +135,8 @@ function shouldShowTime(index: number, list: any[]) {
 
     <!-- 主内容区 -->
     <div class="flex-1 overflow-y-auto p-4">
+      <!-- 暂时注释掉消息列表相关内容 -->
+
       <div v-if="currentUser.TalkingList" class="space-y-4">
         <template v-for="(msg, index) in currentUser.TalkingList" :key="msg.messageId">
           <!-- 时间显示 -->
@@ -86,7 +151,7 @@ function shouldShowTime(index: number, list: any[]) {
             <!-- 对方消息 -->
             <template v-if="msg.sender !== theUser.userName">
               <div class="flex items-start max-w-[80%]">
-                <img :src="currentUser.arg" :alt="currentUser.userName" class="w-10 h-10 rounded-full mr-2" />
+                <img :src="currentUser.avatar" :alt="currentUser.userName" class="w-10 h-10 rounded-full mr-2" />
                 <UserTextArea 
                   :message="msg.message"
                   :isSelf="false"
@@ -108,20 +173,18 @@ function shouldShowTime(index: number, list: any[]) {
         </template>
       </div>
     </div>
-    <Tools />
+    <Tools @select="handleEmojiSelect" />
     <!-- 输入区域 -->
     <div class="relative h-1/4 border-t">
       <Textarea
           id="message-2"
+          ref="messageInputRef"
           placeholder="请在这里输入"
           class="h-full w-full resize-none pr-20 rounded-none focus:ring-0 focus:shadow-none"
-          style="outline: none;box-shadow: none;"
+          style="outline: none;box-shadow: none; font-size: 24px"
       />
-      <Button class="absolute bottom-4 right-4">发送</Button>
+      <Button class="absolute bottom-4 right-4" @click="handleSendClick">发送</Button>
     </div>
-  </div>
-  <div v-else class="flex items-center justify-center h-full">
-    <span class="text-gray-500">请从左侧选择一个会话</span>
   </div>
 </template>
 

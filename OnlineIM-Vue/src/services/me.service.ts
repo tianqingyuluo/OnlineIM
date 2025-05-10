@@ -1,19 +1,9 @@
 import api from './api.service';
 import type { FormContext } from 'vee-validate';
 import { useUserStore } from '@/stores/user.ts';
-// 定义用户类型（根据API文档调整）
-export type User = {
-    user_id: `usr_${string}`;
-    username: string;
-    nickname: string;
-    avatar_url: string | null;
-    region: string;
-    gender: 'male' | 'female';
-    email: string;
-    phone: string;
-    signature: string;
-    created_at: string; // ISO 8601格式
-};
+import {type User}from '@/type/User.ts'
+
+
 
 export const meService = {
     async me(formContext?: FormContext): Promise<User> {
