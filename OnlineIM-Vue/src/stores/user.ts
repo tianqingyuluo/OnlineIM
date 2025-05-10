@@ -38,10 +38,11 @@ export const useUserStore = defineStore('user', {
     
 
     // 清除当前登录用户（重置为默认用户）
-    clearUser() {
+    async clearUser() {
       // 清空当前store
+      console.log("清除当前登录用户 token"+this.token)
+      await authService.logout()
       this.loggedInUser = JSON.parse(JSON.stringify(DEFAULT_USER))
-      authService.logout()
       this.token=""
       // 清空list store
       const listStore = useListStore()

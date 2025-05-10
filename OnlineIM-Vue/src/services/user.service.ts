@@ -14,7 +14,7 @@ export const searchService = {
     formContext?: FormContext
   ): Promise<UserSearchResponse> {
     try {
-      const response = await api.get<UserSearchResponse>(`/users/search/${encodeURIComponent(query)}`, {
+      const response = await api.get<UserSearchResponse>(`/users/search/${encodeURIComponent(query)}/0`, {
         params
       });
       return response.data;
