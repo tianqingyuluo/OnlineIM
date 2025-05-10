@@ -50,11 +50,6 @@ public class FriendResponse {
     private String friendGroupID;
     
     /**
-     * 在线状态
-     */
-    private String onlineStatus;
-    
-    /**
      * 创建时间
      */
     private String createdAt;

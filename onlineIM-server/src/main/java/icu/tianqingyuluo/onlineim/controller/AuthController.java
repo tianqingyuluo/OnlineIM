@@ -4,6 +4,7 @@ import cn.hutool.core.util.IdUtil;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.AuthRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.UserRegisterRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.AuthResponse;
+import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
 import icu.tianqingyuluo.onlineim.pojo.entity.User;
 import icu.tianqingyuluo.onlineim.service.UserService;
 import icu.tianqingyuluo.onlineim.service.impl.UserDetailsServiceImpl;
@@ -66,17 +67,31 @@ public class AuthController {
             );
         } catch (BadCredentialsException e) {
             // 如果身份验证失败，返回401未授权状态
-            return ResponseEntity.status(401).body("用户名或密码错误");
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", "401");
+            response.put("message", "用户名或密码错误");
+            return ResponseEntity.status(401).body(response);
         }
 
+        Map<String, Object> response = new HashMap<>();
+        Map<String, String> userInfo = new HashMap<>();
         // 身份验证成功，加载用户详情
         final UserDetails userDetails = userDetailsService.loadUserByUsername(authRequest.getUsername());
 
+        UserBriefResponse briefResponse = userService.getUserBriefInfoByUsername(userDetails.getUsername());
+        userInfo.put("user_id", briefResponse.getUserId());
+        userInfo.put("username", userDetails.getUsername());
+        userInfo.put("nickname", briefResponse.getNickname());
+        userInfo.put("avatar_url", briefResponse.getAvatarUrl());
+
         // 生成JWT令牌
         final String jwt = jwtUtil.generateToken(userDetails);
+        response.put("access_token", jwt);
+        response.put("expires_in", JwtUtil.GET_EXPIRE_TIME());
+        response.put("user_info", userInfo);
 
         // 返回JWT令牌
-        return ResponseEntity.ok(new AuthResponse(jwt));
+        return ResponseEntity.ok(response);
     }
 
     /**

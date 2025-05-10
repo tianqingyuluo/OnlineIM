@@ -8,6 +8,7 @@ import icu.tianqingyuluo.onlineim.service.impl.UserDetailsServiceImpl;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ibatis.exceptions.PersistenceException;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
@@ -121,8 +122,8 @@ public class UserController {
      * @param keyword 关键词
      * @return 用户列表
      */
-    @GetMapping("/search")
-    public ResponseEntity<List<UserBriefResponse>> searchUsers(@RequestParam String keyword, @RequestParam Integer offset) {
+    @GetMapping("/search/{keyword}/{offset}")
+    public ResponseEntity<List<UserBriefResponse>> searchUsers(@PathVariable("keyword") String keyword, @PathVariable("offset")Integer offset) {
         // TODO: 实现搜索用户逻辑
         final int LIMIT = 5; // 用户搜索页分页参数
         List<UserBriefResponse> userBriefResponseList = new ArrayList<>();
