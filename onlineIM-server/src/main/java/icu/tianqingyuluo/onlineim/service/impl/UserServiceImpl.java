@@ -2,25 +2,28 @@ package icu.tianqingyuluo.onlineim.service.impl;
 import icu.tianqingyuluo.onlineim.mapper.UserBriefResponseMapper;
 import icu.tianqingyuluo.onlineim.mapper.UserMapper;
 import icu.tianqingyuluo.onlineim.mapper.UserResponseMapper;
-import icu.tianqingyuluo.onlineim.mapper.UserUpdateRequestMapper;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.UserUpdateRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserResponse;
 import icu.tianqingyuluo.onlineim.pojo.entity.User;
-import org.springframework.beans.factory.annotation.Autowired;
+import icu.tianqingyuluo.onlineim.service.UserService;
 import org.springframework.stereotype.Service;
-
-import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
-public class UserServiceImpl implements UserService{
-    @Autowired
-    private UserMapper userMapper;
+public class UserServiceImpl implements UserService {
+    private final UserMapper userMapper;
+    private final UserResponseMapper userResponseMapper;
+    private final UserBriefResponseMapper userBriefResponseMapper;
+
+    public UserServiceImpl(UserMapper userMapper, UserResponseMapper userResponseMapper, UserBriefResponseMapper userBriefResponseMapper) {
+        this.userMapper = userMapper;
+        this.userResponseMapper = userResponseMapper;
+        this.userBriefResponseMapper = userBriefResponseMapper;
+    }
     @Override
     public boolean existsByUsername(String username) {
-        User user=userMapper.getByUsername(username);
-        return user != null;
+        return userMapper.existsByUsername(username);
     }
 
     @Override
@@ -30,20 +33,17 @@ public class UserServiceImpl implements UserService{
 
     @Override
     public UserResponse getUserInfoByUsername(String username) {
-        User user=userMapper.getByUsername(username);
-        return UserResponseMapper.INSTANCE.toUserResponse(user);
+        return userResponseMapper.getUserResponseByUsername(username);
     }
 
     @Override
-    public UserResponse getUserInfoByUserID(String username) {
-        User user=userMapper.getById(username);
-        return UserResponseMapper.INSTANCE.toUserResponse(user);
+    public UserResponse getUserInfoByUserID(String ID) {
+        return userResponseMapper.getUserResponseByUserID(ID);
     }
 
     @Override
-    public UserUpdateRequest updateByUsername(String username) {
-        User user=userMapper.getById(username);
-        return UserUpdateRequestMapper.INSTANCE.toUserUpdateRequest(user);
+    public void updateByUsername(String username, UserUpdateRequest userUpdateRequest) {
+        userMapper.update(username,userUpdateRequest);
     }
 
     @Override
@@ -53,16 +53,21 @@ public class UserServiceImpl implements UserService{
 
     @Override
     public void updatePasswordByUsername(String username,String password) {
-        userMapper.updatePasswordByUsername(username,password, LocalDateTime.now().toString());
+        userMapper.updatePasswordByUsername(username,password);
     }
 
     @Override
-    public List<UserBriefResponse> searchByUserID(String keyword, int LIMIT, int offset) {
-        return UserBriefResponseMapper.INSTANCE.searchUsersByUserID(keyword, LIMIT, offset);
+    public List<UserBriefResponse> searchByUserID(String UserID, int LIMIT, int offset) {
+        return userBriefResponseMapper.searchUsersByUserID(UserID, LIMIT, offset);
     }
 
     @Override
-    public List<UserBriefResponse> searchByUsername(String keyword, int LIMIT, int offset) {
-        return UserBriefResponseMapper.INSTANCE.searchUsersByUsername(keyword, LIMIT, offset);
+    public List<UserBriefResponse> searchByUsername(String Username, int LIMIT, int offset) {
+        return userBriefResponseMapper.searchUsersByUsername(Username, LIMIT, offset);
+    }
+
+    @Override
+    public List<User> TestGetList(String name) {
+        return userMapper.getList(name,5,0,0);
     }
 }

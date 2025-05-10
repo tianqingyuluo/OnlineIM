@@ -1,8 +1,8 @@
 package icu.tianqingyuluo.onlineim.mapper;
 
+import icu.tianqingyuluo.onlineim.pojo.dto.request.UserUpdateRequest;
 import icu.tianqingyuluo.onlineim.pojo.entity.User;
 import org.apache.ibatis.annotations.*;
-
 import java.util.List;
 
 /**
@@ -29,7 +29,11 @@ public interface UserMapper {
      */
     @Select("SELECT * FROM users WHERE username = #{username}")
     User getByUsername(String username);
-
+    /**
+     * 查询用户名是否存在
+     */
+    @Select("SELECT EXISTS(SELECT 1 FROM users WHERE username = #{username})")
+    boolean existsByUsername(String username);
     /**
      * 根据用户名查询密码
      */
@@ -67,14 +71,14 @@ public interface UserMapper {
     /**
      * 插入用户
      */
-    @Insert("INSERT INTO users(id, username, password, nickname, avatar, email, phone, signature, gender, status, last_login_time, last_login_ip, created_at, updated_at) " +
-           "VALUES(#{id}, #{username}, #{password}, #{salt}, #{nickname}, #{avatar}, #{email}, #{phone}, #{signature}, #{gender}, #{birthday}, #{status}, #{lastLoginTime}, #{lastLoginIp}, #{createdAt}, #{updatedAt})")
+    @Insert("INSERT INTO users(id, username, password, nickname) " +
+           "VALUES(#{id}, #{username}, #{password}, #{nickname})")
     int insert(User user);
     
     /**
      * 更新用户信息（使用XML实现动态更新）
      */
-    int update(User user);
+    int update(@Param("username") String username,@Param("userUpdateRequest") UserUpdateRequest userUpdateRequest);
     
     /**
      * 更新头像
@@ -83,7 +87,7 @@ public interface UserMapper {
     int updateAvatar(@Param("id") String id, @Param("avatar") String avatar, @Param("updatedAt") String updatedAt);
     
     /**
-     * 更新密码
+     * 根据ID更新密码
      */
     @Update("UPDATE users SET password = #{password}, updated_at = #{updatedAt} WHERE id = #{id}")
     int updatePassword(@Param("id") String id, @Param("password") String password, @Param("updatedAt") String updatedAt);
@@ -91,8 +95,8 @@ public interface UserMapper {
     /**
      * 根据用户名更新密码
      */
-    @Update("UPDATE users SET password = #{password}, updated_at = #{updatedAt} WHERE username = #{username}")
-    int updatePasswordByUsername(@Param("username") String username, @Param("password") String password, @Param("updatedAt") String updatedAt);
+    @Update("UPDATE users SET password = #{password} WHERE username = #{username}")
+    int updatePasswordByUsername(@Param("username") String username, @Param("password") String password);
 
     /**
      * 更新登录信息
