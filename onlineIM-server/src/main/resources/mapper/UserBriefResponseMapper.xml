@@ -5,16 +5,15 @@
 
 <mapper namespace="icu.tianqingyuluo.onlineim.mapper.UserBriefResponseMapper">
     <resultMap id="UserBriefResponseMap" type="com.example.UserBriefResponse">
-        <id property="id" column="userID"/>
-        <result property="nickname" column="nickname"/>
-        <result property="avatar" column="avatarUrl"/>
+        <id property="userId" column="id"/>
+        <result property="avatarUrl" column="avatar"/>
     </resultMap>
     <!-- 根据id查询用户简要信息 -->
     <select id="searchUsersByUserID" resultMap="UserBriefResponseMap">
         SELECT
             id,nickname,avatar
         FROM users
-        WHERE (id LIKE CONCAT('%', #{UserID}, '%'))
+        WHERE (id LIKE CONCAT('%', #{id}, '%'))
         ORDER BY created_at DESC
             LIMIT #{limit} OFFSET #{offset}
     </select>
@@ -24,7 +23,7 @@
         SELECT
             id,nickname,avatar
         FROM users
-        WHERE (username LIKE CONCAT('%', #{Username}, '%'))
+        WHERE (username LIKE CONCAT('%', #{username}, '%'))
         ORDER BY created_at DESC
             LIMIT #{limit} OFFSET #{offset}
     </select>
