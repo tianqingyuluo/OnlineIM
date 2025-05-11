@@ -1,10 +1,8 @@
 package icu.tianqingyuluo.onlineim.mapper;
 
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
-import icu.tianqingyuluo.onlineim.pojo.entity.User;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
 @Mapper
