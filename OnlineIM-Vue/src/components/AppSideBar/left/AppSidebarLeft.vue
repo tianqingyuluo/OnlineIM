@@ -165,6 +165,7 @@ const activeItem = ref('聊天')
 
   <!-- 修改为Teleport到body的userThings弹出框 -->
   <Teleport to="body">
+    <Transition name="fade-slide">
     <div
         v-if="showUserThings"
         ref="userThingsRef"
@@ -179,15 +180,18 @@ const activeItem = ref('聊天')
     >
     <UserThings />
     </div>
+    </Transition>
   </Teleport>
-  
-  <!-- 添加userFounding组件和蒙版 -->
-  <template v-if="showUserFounding">
-    <div class="fixed inset-0 bg-white/80 z-40" @click="showUserFounding = false"></div>
-    <userFounding 
-      @close="showUserFounding = false"
-    />
-  </template>
+
+  <Transition name="fade-slide" mode="out-in">
+    <div v-if="showUserFounding" class="fixed inset-0 flex  z-50">
+      <div class="fixed inset-0 bg-white/80 transition-opacity" @click="showUserFounding = false"></div>
+      <userFounding
+          class="relative z-50"
+          @close="showUserFounding = false"
+      />
+    </div>
+  </Transition>
 </template>
 
 <style scoped>
@@ -197,18 +201,23 @@ const activeItem = ref('聊天')
   border-right: 1px solid #e5e7eb;
   background-color: rgb(249 250 251); /* bg-gray-75 */
 }
-
-/* 修正后的淡入淡出+滑动过渡效果 */
+/* 修改过渡样式为 */
 .fade-slide-enter-active,
 .fade-slide-leave-active {
   transition: all 0.3s ease;
 }
-.fade-slide-enter-from {
+.fade-slide-enter-from,
+.fade-slide-leave-to {
   opacity: 0;
   transform: translateY(20px);
 }
-.fade-slide-leave-to {
+
+/* 蒙版过渡 */
+.bg-white {
+  transition: opacity 0.3s ease;
+}
+.fade-slide-enter-from .bg-white,
+.fade-slide-leave-to .bg-white {
   opacity: 0;
-  transform: translateY(-20px);
 }
 </style>

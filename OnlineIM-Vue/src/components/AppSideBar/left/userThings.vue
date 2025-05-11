@@ -39,9 +39,31 @@ const handleProfile = () => {
         信息
       </button>
     </div>
-
+    <Transition name="fade-slide">
     <div v-if="showProfile" class="fixed inset-0 bg-white/80 flex items-center justify-center z-[9999]">
       <UserProfile @close="showProfile = false" />
     </div>
+    </Transition>
   </div>
 </template>
+<style>
+/* 修改过渡样式为 */
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+transition: all 0.3s ease;
+}
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+opacity: 0;
+transform: translateY(20px);
+}
+
+/* 蒙版过渡 */
+.bg-white {
+transition: opacity 0.3s ease;
+}
+.fade-slide-enter-from .bg-white,
+.fade-slide-leave-to .bg-white {
+opacity: 0;
+}
+</style>

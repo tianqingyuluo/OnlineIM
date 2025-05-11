@@ -115,7 +115,7 @@ const handleSubmit = async () => {
       description: form.value.description || undefined,
       initial_members: form.value.initial_members
     })
-    router.push(`/group/${response.group_id}`)
+    router.push(`/main/groups/${response.group_id}`)
   } catch (error) {
     console.error('创建群组失败:', error)
   } finally {
@@ -127,8 +127,10 @@ const changeAvatar = () => {
   console.log('更换头像')
 }
 
+const emit = defineEmits(['close'])
+
 const closeModal = () => {
-  router.back()
+  emit('close')
 }
 
 const toggleFriendSelection = (userId: string) => {

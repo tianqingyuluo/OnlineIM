@@ -12,6 +12,8 @@ import {
 import { ref } from "vue";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-vue-next";
+import CreateGroup from "@/components/independent/group/CreateGroup.vue";
+import {Button} from "@/components/ui/button";
 
 interface Group {
   groupId: string;
@@ -45,14 +47,26 @@ function handleGroupClick(group: Group) {
   activeItem.value = group.groupId;
   emits('groupSelected', group);
 }
+
+const showCreateGroup = ref(false);
+
+function handleCreateGroup() {
+  showCreateGroup.value = true;
+}
 </script>
 
 <template>
   <Sidebar collapsible="none" style="--sidebar-width: 80%; min-height: 100vh; margin-left: 0 ;border-right: 1px solid #e5e7eb; " class="bg-white">
-    <sidebarGroupLabel style="border-bottom: 1px solid #e5e7eb; border-radius: 0" class="p-6.5">
-      <div>
+    <sidebarGroupLabel style="border-bottom: 1px solid #e5e7eb; border-radius: 0" class="p-6.5 ;flax" >
+      <div class="flex justify-between items-center">
         <h2 class="text-lg font-semibold text-gray-800">群组列表</h2>
       </div>
+      <Button
+          @click="handleCreateGroup"
+          class="p-2 text-sm bg-gray-100 text-gray-800 rounded-md hover:bg-gray-100 transition-colors flex items-center justify-center border border-gray-200 ml-auto"
+      >
+        <span class="text-xl">+</span>
+      </Button>
     </sidebarGroupLabel>
     <SidebarGroupLabel style="padding: 30px 0; display: flex; justify-content: center; align-items: center;">
       <div class="relative w-[90%]" style="margin-top:5px">
@@ -95,5 +109,10 @@ function handleGroupClick(group: Group) {
         </SidebarGroupContent>
       </SidebarGroup>
     </SidebarContent>
+    <div v-if="showCreateGroup" class="fixed inset-0 bg-white/80 flex items-center justify-center z-[9999]">
+      <div class="w-[800px] max-w-[90vw]">
+        <CreateGroup @close="showCreateGroup = false" />
+      </div>
+    </div>
   </Sidebar>
 </template>

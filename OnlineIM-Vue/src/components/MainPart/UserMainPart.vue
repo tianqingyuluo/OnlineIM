@@ -179,11 +179,15 @@ function handleSendClick() {
       <Textarea
           id="message-2"
           ref="messageInputRef"
-          placeholder="请在这里输入"
           class="h-full w-full resize-none pr-20 rounded-none focus:ring-0 focus:shadow-none"
           style="outline: none;box-shadow: none; font-size: 24px"
       />
-      <Button class="absolute bottom-4 right-4" @click="handleSendClick">发送</Button>
+      <Button 
+        class="absolute bottom-4 right-4 transition-all duration-200 active:scale-95 hover:bg-primary/90 hover:scale-125"
+        @click="handleSendClick"
+      >
+        发送
+      </Button>
     </div>
   </div>
 </template>
