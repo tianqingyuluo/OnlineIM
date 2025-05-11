@@ -12,7 +12,7 @@ const DEFAULT_USER: User = {
   nickname: '游客',
   avatar_url: '/images/group.png',
   region: undefined,
-  gender: undefined,
+  gender: 0,
   email: undefined,
   phone: undefined,
   signature: '这个用户很懒，什么都没写~',

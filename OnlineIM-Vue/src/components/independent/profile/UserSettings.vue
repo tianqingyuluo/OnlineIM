@@ -56,7 +56,7 @@ const tempSettings = computed(() => ({
   nickname: userStore.loggedInUser?.nickname || '',
   email: userStore.loggedInUser?.email || '',
   region: userStore.loggedInUser?.region || '',
-  gender: userStore.loggedInUser?.gender || 'male', // 确保默认值
+  gender: userStore.loggedInUser?.gender || 0, // 确保默认值
   phone: userStore.loggedInUser?.phone || '',
   signature: userStore.loggedInUser?.signature || '',
   avatar_url: userStore.loggedInUser?.avatar_url || ''
@@ -83,7 +83,7 @@ const saveSettings = handleSubmit(async (values) => {
       nickname: values.nickname || undefined,
       email: values.email || undefined,
       region: values.region || undefined,
-      gender: values.gender || 'male', // 使用表单中的值
+      gender: values.gender || 0, // 使用表单中的值
       phone: values.phone || undefined,
       signature: values.signature || undefined,
       avatar_url: tempSettings.value.avatar_url || undefined
