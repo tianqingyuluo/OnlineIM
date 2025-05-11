@@ -9,14 +9,13 @@
         <id property="id" column="id"/>
         <result property="username" column="username"/>
         <result property="password" column="password"/>
-        <result property="salt" column="salt"/>
         <result property="nickname" column="nickname"/>
         <result property="avatar" column="avatar"/>
+        <result property="gender" column="gender"/>
+        <result property="signature" column="signature"/>
+        <result property="region" column="region"/>
         <result property="email" column="email"/>
         <result property="phone" column="phone"/>
-        <result property="signature" column="signature"/>
-        <result property="gender" column="gender"/>
-        <result property="birthday" column="birthday"/>
         <result property="status" column="status"/>
         <result property="lastLoginTime" column="last_login_time"/>
         <result property="lastLoginIp" column="last_login_ip"/>
@@ -62,20 +61,18 @@
     </select>
 
     <!-- 更新用户信息 -->
-    <update id="update" parameterType="icu.tianqingyuluo.onlineim.pojo.entity.User">
+    <update id="update">
         UPDATE users
         <set>
-            <if test="nickname != null">nickname = #{nickname},</if>
-            <if test="avatar != null">avatar = #{avatar},</if>
-            <if test="email != null">email = #{email},</if>
-            <if test="phone != null">phone = #{phone},</if>
-            <if test="signature != null">signature = #{signature},</if>
-            <if test="gender != null">gender = #{gender},</if>
-            <if test="birthday != null">birthday = #{birthday},</if>
-            <if test="status != null">status = #{status},</if>
-            updated_at = #{updatedAt}
+            <if test="nickname != null">nickname = #{userUpdateRequest.nickname},</if>
+            <if test="avatarUrl != null">avatar = #{userUpdateRequest.avatarUrl},</if>
+            <if test="signature != null">signature = #{userUpdateRequest.signature},</if>
+            <if test="region != null">region = #{userUpdateRequest.region},</if>
+            <if test="gender != null">gender = #{userUpdateRequest.gender},</if>
+            <if test="email != null">email = #{userUpdateRequest.email},</if>
+            <if test="phone != null">phone = #{userUpdateRequest.phone},</if>
         </set>
-        WHERE id = #{id}
+        WHERE username = #{username}
     </update>
 
     <!-- 批量获取用户信息 -->

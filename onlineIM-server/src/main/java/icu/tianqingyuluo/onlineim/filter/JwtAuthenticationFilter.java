@@ -47,9 +47,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             jwt = authorizationHeader.substring(7);
             try {
                 username = jwtUtil.getUsernameFromToken(jwt);
-            } catch (Exception e) {
-                log.error("JWT令牌无效: {}", e.getMessage());
-            }
+            } catch (Exception ignored) {}
         }
 
         // 如果找到了用户名且当前没有认证信息

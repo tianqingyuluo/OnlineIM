@@ -10,7 +10,9 @@ export const meService = {
         try {
             const response = await api.get<User>('/users/me');
             const userStore = useUserStore();
+            const id =userStore.loggedInUser.user_id
             userStore.setLoggedInUser(response.data); // 更新 store 状态
+            userStore.loggedInUser.user_id=id
             return response.data;
         } catch (error: any) {
             if (formContext && error.response?.data?.errors) {

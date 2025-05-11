@@ -45,6 +45,7 @@ export const LoginService = {
                     nickname: response.data.user_info.nickname,
                     avatar_url: response.data.user_info.avatar_url || null, // 使用 avatar_url
                 });
+                userStore.loggedInUser.user_id=response.data.user_info.user_id
                 userStore.token = response.data.access_token
                 console.log("token:\n"+response.data.access_token);
 

@@ -17,5 +17,5 @@ public class GroupInvitationRequest {
     /**
      * 要邀请的用户ID列表
      */
-    private List<String> userIds;
+    private List<String> userIDs;
 } 

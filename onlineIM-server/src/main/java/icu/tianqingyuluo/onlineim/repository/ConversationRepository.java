@@ -12,6 +12,7 @@ import java.util.List;
 
 /**
  * 会话列表MongoDB仓库接口
+ * 将page/list 优化为游标分页
  */
 @Repository
 public interface ConversationRepository extends MongoRepository<Conversation, String> {

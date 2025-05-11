@@ -95,4 +95,8 @@ public class JwtUtil {
         final String username = getUsernameFromToken(token);
         return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
     }
+
+    public static String GET_EXPIRE_TIME() {
+        return String.valueOf(JWT_TOKEN_VALIDITY);
+    }
 }

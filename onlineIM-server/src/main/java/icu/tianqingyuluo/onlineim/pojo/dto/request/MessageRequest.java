@@ -32,7 +32,7 @@ public class MessageRequest {
     /**
      * 提及的用户ID列表
      */
-    private List<String> mentionedUserIds;
+    private List<String> mentionedUserIDs;
     
     /**
      * 客户端消息ID（用于消息去重）

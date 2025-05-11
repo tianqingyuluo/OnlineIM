@@ -7,6 +7,7 @@ import {type User,type UserSearchResponse } from "@/type/User.ts";
 export const searchService = {
   async searchUsers(
     query: string,
+    page: number,
     params?: {
       limit?: number;
       offset?: number;
@@ -14,8 +15,9 @@ export const searchService = {
     formContext?: FormContext
   ): Promise<UserSearchResponse> {
     try {
-      const response = await api.get<UserSearchResponse>(`/users/search/${encodeURIComponent(query)}`, {
-        params
+
+      const response = await api.get<UserSearchResponse>(`/users/search/${encodeURIComponent(query)}/${page}`, {
+
       });
       return response.data;
     } catch (error: any) {
@@ -34,27 +36,6 @@ export const userService = {
       return response.data;
     } catch (error) {
       console.error('获取用户信息失败:', error);
-      throw error;
-    }
-  },
-
-  // 删除好友
-  async deleteFriend(friendUserId: string) {
-    try {
-      await api.delete(`/friends/${friendUserId}`);
-    } catch (error) {
-      console.error('删除好友失败:', error);
-      throw error;
-    }
-  },
-
-  // 设置好友备注
-  async setFriendRemark(friendUserId: string, remark: string) {
-    try {
-      const response = await api.put(`/friends/${friendUserId}/remark`, { remark });
-      return response.data;
-    } catch (error) {
-      console.error('设置好友备注失败:', error);
       throw error;
     }
   }

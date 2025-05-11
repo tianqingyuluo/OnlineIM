@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import {ref,  onMounted, onUnmounted, watch} from 'vue';
+import {ref,  onMounted,  watch} from 'vue';
 import { useUserStore } from "@/stores/user.ts";
 import UserSettings from "./UserSettings.vue";
+import DraggableHeader from "@/components/common/DraggableHeader.vue";
 
 // 用户数据逻辑
 const isLoading = ref(false);
@@ -18,41 +19,25 @@ const userInfo = ref({
   avatar_url: '/images/help.png'
 });
 // 监听用户数据变化
+const modalRef = ref<HTMLElement | null>(null)
 
-// 拖动逻辑（新增）
-const modalRef = ref<HTMLElement | null>(null);
-let isDragging = false;
-let initialX = 0;
-let initialY = 0;
-let currentX = 0;
-let currentY = 0;
+const handleDrag = ({ deltaX, deltaY }: { deltaX: number; deltaY: number }) => {
+  if (!modalRef.value) return
 
-const startDrag = (e: MouseEvent) => {
-  if (!modalRef.value) return;
-  isDragging = true;
-  initialX = e.clientX;
-  initialY = e.clientY;
-  document.addEventListener('mousemove', drag);
-  document.addEventListener('mouseup', stopDrag);
-};
+  // 使用 getBoundingClientRect 获取精确位置
+  const rect = modalRef.value.getBoundingClientRect()
+  modalRef.value.style.top = `${rect.top + deltaY}px`
+  modalRef.value.style.left = `${rect.left + deltaX}px`
+}
 
-const drag = (e: MouseEvent) => {
-  if (!isDragging || !modalRef.value) return;
-  e.preventDefault();
-  currentX = e.clientX - initialX;
-  currentY = e.clientY - initialY;
-  initialX = e.clientX;
-  initialY = e.clientY;
-  const modal = modalRef.value;
-  modal.style.top = `${modal.offsetTop + currentY}px`;
-  modal.style.left = `${modal.offsetLeft + currentX}px`;
-};
-
-const stopDrag = () => {
-  isDragging = false;
-  document.removeEventListener('mousemove', drag);
-  document.removeEventListener('mouseup', stopDrag);
-};
+// 初始化时转换百分比为像素
+onMounted(() => {
+  if (!modalRef.value) return
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  modalRef.value.style.top = `${vh * 0.1}px`
+  modalRef.value.style.left = `${vw * 0.3}px`
+})
 
 // 生命周期
 onMounted(async () => {
@@ -76,13 +61,9 @@ onMounted(async () => {
   }
 });
 
-onUnmounted(() => {
-  document.removeEventListener('mousemove', drag);
-  document.removeEventListener('mouseup', stopDrag);
-});
 
 watch(
-    () => userStore.selectedUser,
+    () => userStore.loggedInUser,
     (newUser) => {
       if (newUser) {
         userInfo.value = {
@@ -110,12 +91,9 @@ const editProfile = () => {
     <transition name="fade-slide" mode="out-in">
       <div v-if="!showSettings" class="bg-white rounded-lg shadow-lg w-full max-w-md">
         <!-- 新增统一顶栏 -->
-        <div
-            class="flex items-center h-12 w-full bg-gray-100 rounded-t-lg px-6 cursor-move"
-            @mousedown="startDrag"
-        >
+        <DraggableHeader @drag="handleDrag">
           <h3 class="text-lg font-medium text-gray-900">用户信息</h3>
-        </div>
+        </DraggableHeader>
 
         <!-- 内容区域 -->
         <div class="p-6">

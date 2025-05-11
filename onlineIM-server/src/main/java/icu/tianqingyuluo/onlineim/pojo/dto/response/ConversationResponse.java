@@ -17,7 +17,7 @@ public class ConversationResponse {
     /**
      * 会话ID
      */
-    private String conversationId;
+    private String conversationID;
     
     /**
      * 会话类型：private, group

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import {searchService} from '@/services/user.service.ts'
-import { ref, watch } from 'vue'
+import {onMounted, onUnmounted, ref, watch} from 'vue'
 import OtherProfile from "@/components/independent/profile/otherProfile.vue";
 import { type UserSearchResult } from '@/type/User.ts';
 
@@ -14,6 +14,9 @@ const props = defineProps({
 let searchResults = ref([] as UserSearchResult[])
 const showProfile = ref(false)
 const selectedUserId = ref('')
+const page = ref(0)
+const loading = ref(false)
+const hasMore = ref(true)
 
 // 监听keyword变化
 watch(() => props.keyword, async (newKeyword) => {
@@ -33,14 +36,58 @@ async function handleUserClick(userId: string) {
   }
 }
 
-async function searchUsers(keyword: string) {
+// 监听滚动事件
+function handleScroll() {
+  if (loading.value || !hasMore.value) return
+  
+  const element = document.querySelector('.flex.flex-col.space-y-2.p-2')
+  if (element && element.scrollHeight - element.scrollTop <= element.clientHeight + 100) {
+    loadMore()
+  }
+}
+
+async function loadMore() {
+  if (!props.keyword || loading.value || !hasMore.value) return
+  
+  loading.value = true
+  page.value += 8
   try {
-    const response = await searchService.searchUsers(keyword)
+    const response = await searchService.searchUsers(props.keyword, page.value)
+    searchResults.value = [...searchResults.value, ...response.users]
+    hasMore.value = response.total >= 8
+  } catch (error) {
+    console.error('加载更多用户失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function searchUsers(keyword: string) {
+  page.value = 0
+  hasMore.value = true
+  try {
+    const response = await searchService.searchUsers(keyword, page.value)
     searchResults.value = response.users
+    hasMore.value = response.total >= 8
   } catch (error) {
     console.error('搜索用户失败:', error)
   }
 }
+
+onMounted(() => {
+  const container = document.querySelector('.flex.flex-col.space-y-2.p-2')
+  if (container) {
+    container.addEventListener('scroll', handleScroll)
+  }
+})
+
+onUnmounted(() => {
+  const container = document.querySelector('.flex.flex-col.space-y-2.p-2')
+  if (container) {
+    container.removeEventListener('scroll', handleScroll)
+  }
+})
+
 </script>
 
 <template>
@@ -61,6 +108,9 @@ async function searchUsers(keyword: string) {
           <span class="text-sm font-medium">{{ result.nickname }}</span>
           <span class="text-xs text-gray-500" v-if="result.username">{{ result.username }}</span>
         </div>
+      </div>
+      <div v-if="!hasMore" class="text-center py-4 text-gray-500">
+        没有更多数据了
       </div>
     </template>
     <template v-else>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { groupService } from '@/services/group.service.ts'
-import { ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import GroupProfile from "@/components/independent/profile/GroupProfile.vue"
 import { type GroupSearchResult } from '@/type/group.ts'
 
@@ -14,6 +14,9 @@ const props = defineProps({
 const searchResults = ref([] as GroupSearchResult[])
 const showGroupProfile = ref(false)
 const selectedGroupId = ref('')
+const page = ref(0)
+const loading = ref(false)
+const hasMore = ref(true)
 
 watch(() => props.keyword, async (newKeyword) => {
   if (newKeyword) {
@@ -33,14 +36,57 @@ async function handleGroupClick(groupId: string) {
   }
 }
 
-async function searchGroups(keyword: string) {
+// 监听滚动事件
+function handleScroll() {
+  if (loading.value || !hasMore.value) return
+  
+  const element = document.querySelector('.flex.flex-col.space-y-2.p-2')
+  if (element && element.scrollHeight - element.scrollTop <= element.clientHeight + 100) {
+    loadMore()
+  }
+}
+
+async function loadMore() {
+  if (!props.keyword || loading.value || !hasMore.value) return
+  
+  loading.value = true
+  page.value += 8
   try {
-    const response = await groupService.searchGroups(keyword)
+    const response = await groupService.searchGroups(props.keyword, page.value)
+    searchResults.value = [...searchResults.value, ...response.groups]
+    hasMore.value = response.total >= 8
+  } catch (error) {
+    console.error('加载更多群组失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function searchGroups(keyword: string) {
+  page.value = 0
+  hasMore.value = true
+  try {
+    const response = await groupService.searchGroups(keyword, page.value)
     searchResults.value = response.groups
+    hasMore.value = response.total >= 8
   } catch (error) {
     console.error('搜索群组失败:', error)
   }
 }
+
+onMounted(() => {
+  const container = document.querySelector('.flex.flex-col.space-y-2.p-2')
+  if (container) {
+    container.addEventListener('scroll', handleScroll)
+  }
+})
+
+onUnmounted(() => {
+  const container = document.querySelector('.flex.flex-col.space-y-2.p-2')
+  if (container) {
+    container.removeEventListener('scroll', handleScroll)
+  }
+})
 </script>
 
 <template>
@@ -61,6 +107,9 @@ async function searchGroups(keyword: string) {
           <span class="text-sm font-medium">{{ result.name }}</span>
           <span class="text-xs text-gray-500">成员: {{ result.member_count }}</span>
         </div>
+      </div>
+      <div v-if="!hasMore" class="text-center py-4 text-gray-500">
+        没有更多数据了
       </div>
     </template>
     <template v-else>

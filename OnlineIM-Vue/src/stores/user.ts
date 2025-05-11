@@ -38,20 +38,20 @@ export const useUserStore = defineStore('user', {
     
 
     // 清除当前登录用户（重置为默认用户）
-    clearUser() {
-      // 清空当前store
-      this.loggedInUser = JSON.parse(JSON.stringify(DEFAULT_USER))
-      authService.logout()
-      this.token=""
-      // 清空list store
-      const listStore = useListStore()
-      listStore.conversations = [] as Conversation[]
-      listStore.total = 0
-      listStore.friends = [] as Friend[]
-      listStore.friendTotal = 0
-      listStore.searchResults = [] as UserSearchResult[]
-      listStore.searchResultsTotal = 0
-    },
+     async clearUser() {
+       // 清空当前store
+       this.loggedInUser = JSON.parse(JSON.stringify(DEFAULT_USER))
+       await authService.logout()
+       this.token = ""
+       // 清空list store
+       const listStore = useListStore()
+       listStore.conversations = [] as Conversation[]
+       listStore.total = 0
+       listStore.friends = [] as Friend[]
+       listStore.friendTotal = 0
+       listStore.searchResults = [] as UserSearchResult[]
+       listStore.searchResultsTotal = 0
+     },
 
     isAuthenticated(): boolean {//是否拥有token
       return !!this.token
