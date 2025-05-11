@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.pojo.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -17,6 +18,7 @@ public class UserResponse {
     /**
      * 用户ID
      */
+    @JsonProperty("user_id")
     private String userId;
     
     /**
@@ -32,6 +34,7 @@ public class UserResponse {
     /**
      * 头像URL
      */
+    @JsonProperty("avatar_url")
     private String avatarUrl;
     
     /**
@@ -67,5 +70,6 @@ public class UserResponse {
     /**
      * 创建时间
      */
+    @JsonProperty("created_at")
     private String createdAt;
 } 
