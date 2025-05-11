@@ -26,6 +26,7 @@ export const groupService = {
   // 搜索群组
     async searchGroups(
         query: string,
+        page: number,
         params?: {
             limit?: number;
             offset?: number;
@@ -33,7 +34,7 @@ export const groupService = {
         formContext?: FormContext
     ): Promise<GroupSearchResponse> {
         try {
-            const response = await api.get<GroupSearchResponse>(`/groups/search/${encodeURIComponent(query)}`, {
+            const response = await api.get<GroupSearchResponse>(`/groups/search/${encodeURIComponent(query)}/${page}`, {
                 params
             });
 

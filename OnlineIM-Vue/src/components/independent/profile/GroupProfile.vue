@@ -1,10 +1,20 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import DraggableHeader from '@/components/common/DraggableHeader.vue'
 import { Button } from "@/components/ui/button"
 import { groupService } from '@/services/group.service.ts'
-import {userService} from "@/services/user.service.ts";
+import { userService } from "@/services/user.service.ts";
 
 const emit = defineEmits(['close'])
+const modalRef = ref<HTMLElement | null>(null)
+const props = defineProps({
+  groupId: {
+    type: String,
+    required: true
+  }
+})
+
+// 群组信息数据结构
 const groupInfo = ref({
   group_id: '',
   name: '加载中...',
@@ -28,12 +38,25 @@ const groupInfo = ref({
     message_history_visible: true
   }
 })
+
 let ownerName = ref('')
-const props = defineProps({
-  groupId: {
-    type: String,
-    required: true
-  }
+
+// 拖动处理逻辑（改为您指定的方式）
+const handleDrag = ({ deltaX, deltaY }: { deltaX: number; deltaY: number }) => {
+  if (!modalRef.value) return
+  const currentTop = parseInt(modalRef.value.style.top || '10%', 10)
+  const currentLeft = parseInt(modalRef.value.style.left || '30%', 10)
+  modalRef.value.style.top = `${currentTop + deltaY}px`
+  modalRef.value.style.left = `${currentLeft + deltaX}px`
+}
+
+// 初始化定位（改为您指定的方式）
+onMounted(() => {
+  if (!modalRef.value) return
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  modalRef.value.style.top = `${vh * 0.1}px`
+  modalRef.value.style.left = `${vw * 0.3}px`
 })
 
 // 加载群组信息
@@ -41,7 +64,7 @@ onMounted(async () => {
   try {
     const data = await groupService.getGroupInfo(props.groupId)
     groupInfo.value = data
-    let response = await userService.getUserById(data.owner_id)
+    const response = await userService.getUserById(data.owner_id)
     ownerName.value = response.username
   } catch (error) {
     console.error('加载群组信息失败:', error)
@@ -53,33 +76,35 @@ function handleClose() {
   emit('close')
 }
 
-// 显示成员头像，最多5个
+// 显示成员头像（最多5个）
 function getDisplayMembers() {
-  if (!groupInfo.value.members) return []
-  return groupInfo.value.members.slice(0, 5)
+  return groupInfo.value.members?.slice(0, 5) || []
 }
 </script>
 
 <template>
-  <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
-    <div class="bg-white rounded-lg w-[500px] max-h-[80vh] overflow-y-auto">
-      <!-- 头部 -->
-      <div class="p-4 border-b flex justify-between items-center">
-        <h3 class="text-lg font-semibold">群组信息</h3>
-      </div>
+  <div ref="modalRef" class="fixed z-50 top-[10%] left-[30%] w-[500px]">
+    <div class="bg-white rounded-lg shadow-lg max-h-[80vh] overflow-y-auto">
+      <DraggableHeader @drag="handleDrag">
+        <div class="p-4 border-b">
+          <h3 class="text-lg font-semibold">群组信息</h3>
+        </div>
+      </DraggableHeader>
 
       <!-- 内容区 -->
       <div class="p-4">
         <!-- 群组基本信息 -->
         <div class="flex items-start mb-6">
-          <img 
-            :src="groupInfo.avatar_url" 
-            :alt="groupInfo.name"
-            class="w-20 h-20 rounded-full mr-4"
+          <img
+              :src="groupInfo.avatar_url"
+              :alt="groupInfo.name"
+              class="w-20 h-20 rounded-full mr-4"
           >
           <div>
             <h2 class="text-xl font-bold">{{ groupInfo.name }}</h2>
-            <p class="text-gray-500 text-sm mt-1">创建时间: {{ new Date(groupInfo.created_at).toLocaleString() }}</p>
+            <p class="text-gray-500 text-sm mt-1">
+              创建时间: {{ new Date(groupInfo.created_at).toLocaleString() }}
+            </p>
             <p class="text-gray-500 text-sm">群主: {{ ownerName }}</p>
           </div>
         </div>
@@ -88,7 +113,7 @@ function getDisplayMembers() {
         <div class="mb-6">
           <h4 class="font-medium mb-2">群描述</h4>
           <div class="bg-gray-100 p-3 rounded">
-            {{ groupInfo.description || '暂无描述'  }}
+            {{ groupInfo.description || '暂无描述' }}
           </div>
         </div>
 
@@ -98,17 +123,17 @@ function getDisplayMembers() {
           <div class="flex flex-wrap gap-2">
             <template v-for="member in getDisplayMembers()" :key="member.user_id">
               <div class="flex flex-col items-center w-16">
-                <img 
-                  :src="member.avatar_url || '/images/help.png'" 
-                  :alt="member.username"
-                  class="w-10 h-10 rounded-full mb-1"
+                <img
+                    :src="member.avatar_url || '/images/help.png'"
+                    :alt="member.username"
+                    class="w-10 h-10 rounded-full mb-1"
                 >
                 <span class="text-xs truncate w-full text-center">{{ member.username }}</span>
               </div>
             </template>
-            <div 
-              v-if="groupInfo.member_count > 5" 
-              class="flex flex-col items-center w-16"
+            <div
+                v-if="groupInfo.member_count > 5"
+                class="flex flex-col items-center w-16"
             >
               <div class="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center mb-1">
                 +{{ groupInfo.member_count - 5 }}
@@ -129,5 +154,5 @@ function getDisplayMembers() {
 </template>
 
 <style scoped>
-/* 可根据需要添加自定义样式 */
+/* 移除不必要的过渡效果 */
 </style>

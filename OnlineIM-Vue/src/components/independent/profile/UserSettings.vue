@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import {ref, computed, onMounted} from 'vue';
 import { useUserStore } from "@/stores/user.ts";
 import { meService } from "@/services/me.service.ts";
 import { toTypedSchema } from '@vee-validate/zod';
 import { useForm } from 'vee-validate';
 import * as z from 'zod';
+import DraggableHeader from "@/components/common/DraggableHeader.vue";
 
 // 表单验证规则
 const formSchema = toTypedSchema(
@@ -85,7 +86,7 @@ const saveSettings = handleSubmit(async (values) => {
       gender: values.gender || 'male', // 使用表单中的值
       phone: values.phone || undefined,
       signature: values.signature || undefined,
-      avatar_url: tempSettings.value.avatar_url || null
+      avatar_url: tempSettings.value.avatar_url || undefined
     });
     userStore.setLoggedInUser(updatedUser);
     emit('close');
@@ -94,13 +95,6 @@ const saveSettings = handleSubmit(async (values) => {
   }
 });
 const emit = defineEmits(['close']);
-// 拖动相关逻辑
-const modalRef = ref<HTMLElement | null>(null);
-let isDragging = false;
-let initialX = 0;
-let initialY = 0;
-let currentX = 0;
-let currentY = 0;
 
 
 // 更换头像逻辑
@@ -112,47 +106,33 @@ const changeAvatar = () => {
 const closeModal = () => {
   emit('close');
 };
-// 拖动处理函数
-const startDrag = (e: MouseEvent) => {
-  if (!modalRef.value) return;
-  isDragging = true;
-  initialX = e.clientX;
-  initialY = e.clientY;
-  document.addEventListener('mousemove', drag);
-  document.addEventListener('mouseup', stopDrag);
-};
-const drag = (e: MouseEvent) => {
-  if (!isDragging || !modalRef.value) return;
-  e.preventDefault();
-  currentX = e.clientX - initialX;
-  currentY = e.clientY - initialY;
-  initialX = e.clientX;
-  initialY = e.clientY;
-  const modal = modalRef.value;
-  modal.style.top = `${modal.offsetTop + currentY}px`;
-  modal.style.left = `${modal.offsetLeft + currentX}px`;
-};
-const stopDrag = () => {
-  isDragging = false;
-  document.removeEventListener('mousemove', drag);
-  document.removeEventListener('mouseup', stopDrag);
-};
-// 清理事件监听
-onUnmounted(() => {
-  document.removeEventListener('mousemove', drag);
-  document.removeEventListener('mouseup', stopDrag);
-});
+
+const modalRef = ref<HTMLElement | null>(null)
+
+const handleDrag = ({ deltaX, deltaY }: { deltaX: number; deltaY: number }) => {
+  if (!modalRef.value) return
+
+  // 使用 getBoundingClientRect 获取精确位置
+  const rect = modalRef.value.getBoundingClientRect()
+  modalRef.value.style.top = `${rect.top + deltaY}px`
+  modalRef.value.style.left = `${rect.left + deltaX}px`
+}
+
+// 初始化时转换百分比为像素
+onMounted(() => {
+  if (!modalRef.value) return
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  modalRef.value.style.top = `${vh * 0.1}px`
+  modalRef.value.style.left = `${vw * 0.3}px`
+})
 </script>
 <template>
-  <div class="fixed z-50 top-[10%] left-[30%] w-[40%]" ref="modalRef">
+  <div ref="modalRef" class="fixed z-50 top-[10%] left-[30%] w-[40%]">
+    <DraggableHeader @drag="handleDrag">
+      <h2 class="text-lg font-medium text-gray-800">用户设置</h2>
+    </DraggableHeader>
     <div class="bg-white rounded-lg p-6 w-full shadow-md border border-gray-200">
-      <!-- 标题和拖动区域 -->
-      <div
-          class="flex items-center h-12 w-[calc(100%+48px)] bg-gray-100 -mx-6 -mt-6 mb-6 cursor-move rounded-t-lg pl-6"
-          @mousedown="startDrag"
-      >
-        <h2 class="text-lg font-medium text-gray-800">用户设置</h2>
-      </div>
 
       <!-- 头像区域 - 居中显示并整合更换功能 -->
       <div class="mb-5 flex flex-col items-center">

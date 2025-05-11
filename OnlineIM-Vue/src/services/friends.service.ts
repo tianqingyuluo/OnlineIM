@@ -39,9 +39,9 @@ export const friendsService = {
   },
 
   // 设置好友备注
-  async setFriendRemark(friendUserId: string, remark: string) {
+  async setFriendRemark(friendshipId: string, remark: string) {
     try {
-      const response = await api.put(`/friends/${friendUserId}/remark`, { remark });
+      const response = await api.put(`/friends/${friendshipId}/remark`, { remark });
       return response.data;
     } catch (error) {
       console.error('设置好友备注失败:', error);

@@ -4,7 +4,6 @@ import {SidebarGroupLabel} from "@/components/ui/sidebar";
 import {Input} from "@/components/ui/input";
 import {Search} from "lucide-vue-next";
 import {Button} from "@/components/ui/button";
-import { searchService } from '@/services/user.service.ts';
 import usersSelectResult from './usersSelectResoult.vue'
 import {useListStore} from "@/stores/list.ts";
 import GroupSelectResult from './GroupSelectResult.vue';

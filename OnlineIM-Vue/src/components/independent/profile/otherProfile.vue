@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import { Button } from "@/components/ui/button";
 import { userService } from "@/services/user.service.ts";
+import DraggableHeader from "@/components/common/DraggableHeader.vue";
 
 const props = defineProps({
   userId: {
@@ -22,42 +23,22 @@ const userInfo = ref({
 
 // 好友状态管理
 const friendStatus = ref('apply'); // 'apply'|'applied'|'added'
+const modalRef = ref<HTMLElement | null>(null)
 
-// 拖动逻辑
-const modalRef = ref<HTMLElement | null>(null);
-let isDragging = false;
-let initialX = 0;
-let initialY = 0;
-let currentX = 0;
-let currentY = 0;
+const handleDrag = ({ deltaX, deltaY }: { deltaX: number; deltaY: number }) => {
+  if (!modalRef.value) return
+  const rect = modalRef.value.getBoundingClientRect()
+  modalRef.value.style.top = `${rect.top + deltaY}px`
+  modalRef.value.style.left = `${rect.left + deltaX}px`
+}
 
-const startDrag = (e: MouseEvent) => {
-  if (!modalRef.value) return;
-  isDragging = true;
-  initialX = e.clientX;
-  initialY = e.clientY;
-  document.addEventListener('mousemove', drag);
-  document.addEventListener('mouseup', stopDrag);
-};
-
-const drag = (e: MouseEvent) => {
-  if (!isDragging || !modalRef.value) return;
-  e.preventDefault();
-  currentX = e.clientX - initialX;
-  currentY = e.clientY - initialY;
-  initialX = e.clientX;
-  initialY = e.clientY;
-  const modal = modalRef.value;
-  modal.style.top = `${modal.offsetTop + currentY}px`;
-  modal.style.left = `${modal.offsetLeft + currentX}px`;
-};
-
-const stopDrag = () => {
-  isDragging = false;
-  document.removeEventListener('mousemove', drag);
-  document.removeEventListener('mouseup', stopDrag);
-};
-
+onMounted(() => {
+  if (!modalRef.value) return
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  modalRef.value.style.top = `${vh * 0.1}px`
+  modalRef.value.style.left = `${vw * 0.3}px`
+})
 // 处理好友申请
 function handleFriendApply() {
   friendStatus.value = 'applied';
@@ -82,21 +63,14 @@ onMounted(async () => {
   }
 });
 
-onUnmounted(() => {
-  document.removeEventListener('mousemove', drag);
-  document.removeEventListener('mouseup', stopDrag);
-});
 </script>
 
 <template>
   <div ref="modalRef" class="fixed z-50 top-[10%] left-[30%] w-[40%]">
     <div class="bg-white rounded-lg shadow-lg w-full max-w-md">
-      <div
-        class="flex items-center h-12 w-full bg-gray-100 rounded-t-lg px-6 cursor-move"
-        @mousedown="startDrag"
-      >
+      <DraggableHeader @drag="handleDrag">
         <h3 class="text-lg font-medium text-gray-900">用户信息</h3>
-      </div>
+      </DraggableHeader>
 
       <div class="p-6">
         <div class="flex flex-col items-center mb-6">
