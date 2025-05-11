@@ -5,7 +5,7 @@ export interface User {
     nickname: string;   // 显示昵称
     avatar_url: string ; // 头像URL
     region?: string;    // 可选-地区
-    gender?: 'male' | 'female'; // 可选-性别
+    gender?: 0|1|2; // 可选-性别
     email?: string;     // 可选-邮箱
     phone?: string;     // 可选-手机
     signature?: string; // 可选-个性签名
