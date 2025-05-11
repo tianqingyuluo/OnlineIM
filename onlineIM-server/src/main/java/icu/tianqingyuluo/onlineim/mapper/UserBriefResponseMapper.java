@@ -1,11 +1,17 @@
 package icu.tianqingyuluo.onlineim.mapper;
 
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
+import icu.tianqingyuluo.onlineim.pojo.entity.User;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
+
 import java.util.List;
 @Mapper
 public interface UserBriefResponseMapper {
+
+    UserBriefResponse getUserBriefInfoByUsername(String username);
+
     /**
      * 根据关键词查询用户简要信息，支持分页
      *
@@ -19,6 +25,7 @@ public interface UserBriefResponseMapper {
             @Param("limit") int limit,
             @Param("offset") int offset
     );
+
     List<UserBriefResponse> searchUsersByUsername(
             @Param("username") String username,
             @Param("limit") int limit,

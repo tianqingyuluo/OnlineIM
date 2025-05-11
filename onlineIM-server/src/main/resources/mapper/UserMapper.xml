@@ -64,13 +64,19 @@
     <update id="update">
         UPDATE users
         <set>
-            <if test="nickname != null">nickname = #{userUpdateRequest.nickname},</if>
-            <if test="avatarUrl != null">avatar = #{userUpdateRequest.avatarUrl},</if>
-            <if test="signature != null">signature = #{userUpdateRequest.signature},</if>
-            <if test="region != null">region = #{userUpdateRequest.region},</if>
-            <if test="gender != null">gender = #{userUpdateRequest.gender},</if>
-            <if test="email != null">email = #{userUpdateRequest.email},</if>
-            <if test="phone != null">phone = #{userUpdateRequest.phone},</if>
+            <if test="userUpdateRequest.nickname != null">nickname = #{userUpdateRequest.nickname},</if>
+            <if test="userUpdateRequest.avatarUrl != null">avatar = #{userUpdateRequest.avatarUrl},</if>
+            <if test="userUpdateRequest.signature != null">signature = #{userUpdateRequest.signature},</if>
+            <if test="userUpdateRequest.region != null">region = #{userUpdateRequest.region},</if>
+            <if test="userUpdateRequest.gender != null">
+            gender =
+                <choose>
+                    <when test="userUpdateRequest.gender == 'male'">1</when>
+                    <when test="userUpdateRequest.gender == 'female'">2</when>
+                </choose>,
+            </if>
+            <if test="userUpdateRequest.email != null">email = #{userUpdateRequest.email},</if>
+            <if test="userUpdateRequest.phone != null">phone = #{userUpdateRequest.phone},</if>
         </set>
         WHERE username = #{username}
     </update>

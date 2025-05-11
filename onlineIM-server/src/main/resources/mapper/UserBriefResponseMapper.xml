@@ -8,6 +8,13 @@
         <id property="userId" column="id"/>
         <result property="avatarUrl" column="avatar"/>
     </resultMap>
+    <!-- 根据username查询该用户简要信息 -->
+    <select id="getUserBriefInfoByUsername" resultMap="UserBriefResponseMap">
+        SELECT
+            id,username,nickname,avatar
+        FROM users
+        WHERE (username = #{username})
+    </select>
     <!-- 根据id查询用户简要信息 -->
     <select id="searchUsersByUserID" resultMap="UserBriefResponseMap">
         SELECT

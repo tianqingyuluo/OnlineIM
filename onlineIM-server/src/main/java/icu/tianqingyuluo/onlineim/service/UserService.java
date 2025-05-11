@@ -5,7 +5,6 @@ import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserResponse;
 import icu.tianqingyuluo.onlineim.pojo.entity.User;
 import org.springframework.stereotype.Service;
-
 import java.util.List;
 
 @Service
