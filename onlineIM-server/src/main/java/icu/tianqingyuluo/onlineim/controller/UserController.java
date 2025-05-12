@@ -5,9 +5,11 @@ import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserResponse;
 import icu.tianqingyuluo.onlineim.service.UserService;
 import icu.tianqingyuluo.onlineim.service.impl.UserDetailsServiceImpl;
+import icu.tianqingyuluo.onlineim.util.ErrorCodeUtil;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ibatis.exceptions.PersistenceException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
@@ -52,14 +54,14 @@ public class UserController {
      * @return 用户信息
      */
     @GetMapping("/{userId}")
-    public ResponseEntity<UserResponse> getUserInfo(@PathVariable String userId) {
+    public ResponseEntity<?> getUserInfo(@PathVariable String userId) {
         // TODO: 实现获取指定用户信息逻辑
         try {
             return ResponseEntity.ok(userService.getUserInfoByUserID(userId));
         }
         catch (PersistenceException e) {
             log.error(e.getMessage());
-            return ResponseEntity.notFound().build();
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "啊哦，发生了些小错误"));
         }
     }
     
@@ -69,7 +71,7 @@ public class UserController {
      * @return 更新结果
      */
     @PutMapping("/me")
-    public ResponseEntity<UserResponse> updateUserInfo(@RequestHeader(value = "Authorization") String token, @RequestBody UserUpdateRequest request) {
+    public ResponseEntity<?> updateUserInfo(@RequestHeader(value = "Authorization") String token, @RequestBody UserUpdateRequest request) {
         // TODO: 实现更新用户信息逻辑
         String username = jwtUtil.getUsernameFromToken(token.substring(7));
         try {
@@ -78,7 +80,7 @@ public class UserController {
         }
         catch (PersistenceException e) {
             log.error(e.getMessage());
-            return ResponseEntity.badRequest().build();
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "啊哦，发生了些小错误"));
         }
     }
     
@@ -113,7 +115,7 @@ public class UserController {
             userService.updatePasswordByUsername(username, passwordEncoder.encode(newPassword));
             return ResponseEntity.ok().build();
         }
-        else return ResponseEntity.badRequest().build();
+        else return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "啊哦，发生了些小错误"));
     }
     
     /**
@@ -147,4 +149,4 @@ public class UserController {
         return ResponseEntity.ok(response);
     }
 
-} 
+}
