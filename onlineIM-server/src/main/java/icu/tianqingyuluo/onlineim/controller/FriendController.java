@@ -5,6 +5,7 @@ import icu.tianqingyuluo.onlineim.pojo.dto.response.FriendRequestResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.FriendResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
 import icu.tianqingyuluo.onlineim.pojo.entity.User;
+import icu.tianqingyuluo.onlineim.service.FriendService;
 import icu.tianqingyuluo.onlineim.service.UserService;
 import icu.tianqingyuluo.onlineim.util.ErrorCodeUtil;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
@@ -97,9 +98,10 @@ public class FriendController {
      * @return 更新结果
      */
     @PutMapping("/{friendId}/remark")
-    public ResponseEntity<Map<String, String>> updateRemark(@PathVariable String friendId, @RequestBody Map<String, String> request) {
+    public ResponseEntity<Map<String, String>> updateRemark(@RequestHeader("Authorization") String token, @PathVariable String friendId, @RequestBody Map<String, String> request) {
         // TODO: 实现更新好友备注逻辑
-        if (!friendService.existFriendByID(friendId)) {
+        String userid = jwtUtil.getUserIDFromToken(token);
+        if (!friendService.existFriendByID(friendId, userid)) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ErrorCodeUtil.getErrorOutput("404", "未找到该好友"));
         }
         try {
@@ -109,7 +111,7 @@ public class FriendController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "啊哦，发生了些小错误"));
         }
 
-        FriendResponse friend = friendService.getByID();
+        FriendResponse friend = friendService.getByID(friendId);
         String remark = friend.getRemark();
         Map<String, String> response = new HashMap<>();
         response.put("friendship_id", friendId);
@@ -125,9 +127,10 @@ public class FriendController {
      * @return 更新结果
      */
     @PutMapping("/{friendId}/group")
-    public ResponseEntity<Map<String, String>> updateFriendGroup(@PathVariable String friendId, @RequestBody Map<String, String> request) {
+    public ResponseEntity<Map<String, String>> updateFriendGroup(@RequestHeader("Authorization") String token, @PathVariable String friendId, @RequestBody Map<String, String> request) {
         // TODO: 实现更新好友分组逻辑
-        if (!friendService.existFriendByID(friendId)) {
+        String userid = jwtUtil.getUserIDFromToken(token);
+        if (!friendService.existFriendByID(friendId, token)) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ErrorCodeUtil.getErrorOutput("404", "未找到该好友"));
         }
         try {
@@ -158,7 +161,7 @@ public class FriendController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ErrorCodeUtil.getErrorOutput("404", "未找到该好友"));
         }
         try {
-            friendService.updateStatusByID(friendId, FriendshipStatusEnum.BLOCKED.getValue());
+            friendService.updateStatusByID(friendId, String.valueOf(FriendshipStatusEnum.BLOCKED.getValue()));
         }
         catch (PersistenceException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "啊哦，发生了些小错误"));
@@ -172,17 +175,18 @@ public class FriendController {
      * @return 操作结果
      */
     @DeleteMapping("/{friendId}/block")
-    public ResponseEntity<Map<String, String>> unblockFriend(@PathVariable String friendId) {
+    public ResponseEntity<Map<String, String>> unblockFriend(@RequestHeader("Authorization") String token, @PathVariable String friendId) {
         // TODO: 实现取消拉黑好友逻辑
-        if (!friendService.existFriendByID(friendId)) {
+        String userid = jwtUtil.getUserIDFromToken(token);
+        if (!friendService.existFriendByID(friendId, userid)) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ErrorCodeUtil.getErrorOutput("404", "未找到该好友"));
         }
         try {
-            friendService.updateStatusByID(friendId, FriendshipStatusEnum.NORMAL.getValue());
+            friendService.updateStatusByID(friendId, String.valueOf(FriendshipStatusEnum.NORMAL.getValue()));
         }
         catch (PersistenceException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "啊哦，发送了些小错误"));
             log.error(e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "啊哦，发送了些小错误"));
         }
         return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
     }
@@ -197,6 +201,10 @@ public class FriendController {
         String username = jwtUtil.getUsernameFromToken(token);
         try {
             List<UserBriefResponse> userBriefResponses = friendService.getBlackListByUsername(username);
+            if (userBriefResponses.isEmpty()) {
+                return ResponseEntity.status(404).body(ErrorCodeUtil.getErrorOutput("404", "看起来你还没有把任一好友拉入黑名单"));
+            }
+
             Map<String,Object> response = new HashMap<>();
             response.put("blasklist", userBriefResponses);
             response.put("total", userBriefResponses.size());
@@ -204,9 +212,6 @@ public class FriendController {
         }
         catch (PersistenceException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "啊哦，发生了些小错误"));
-        }
-        if (userBriefResponses.isEmpty()) {
-            return ResponseEntity.status(404).body(ErrorCodeUtil.getErrorOutput("404", "看起来你还没有把任一好友拉入黑名单"));
         }
     }
 
