@@ -1,10 +1,11 @@
 package icu.tianqingyuluo.onlineim.util;
 
+import icu.tianqingyuluo.onlineim.pojo.entity.UserIDProvider;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
-import org.springframework.beans.factory.annotation.Value;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
@@ -17,6 +18,7 @@ import java.util.function.Function;
 /**
  * JWT工具类，用于生成和验证JWT令牌
  */
+@Slf4j
 @Component
 public class JwtUtil {
 
@@ -31,6 +33,15 @@ public class JwtUtil {
      */
     public String getUsernameFromToken(String token) {
         return getClaimFromToken(token, Claims::getSubject);
+    }
+
+    /**
+     * 从令牌中获取用户ID
+     * @param token JWT令牌
+     * @return userid
+     */
+    public String getUserIDFromToken(String token) {
+        return getClaimFromToken(token, claims -> claims.get("userid", String.class));
     }
 
     /**
@@ -72,6 +83,10 @@ public class JwtUtil {
      */
     public String generateToken(UserDetails userDetails) {
         Map<String, Object> claims = new HashMap<>();
+        if (userDetails instanceof UserIDProvider) {
+            claims.put("userid", ((UserIDProvider)userDetails).getID());
+        }
+        else log.error("UserDetails 未实现 UserIdProvider 接口, userId claim 将不会被添加");
         return doGenerateToken(claims, userDetails.getUsername());
     }
 

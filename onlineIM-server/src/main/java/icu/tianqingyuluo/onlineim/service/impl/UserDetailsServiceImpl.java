@@ -2,6 +2,7 @@ package icu.tianqingyuluo.onlineim.service.impl;
 
 import icu.tianqingyuluo.onlineim.mapper.UserMapper;
 import icu.tianqingyuluo.onlineim.pojo.entity.User;
+import icu.tianqingyuluo.onlineim.pojo.entity.UserDetail;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -34,10 +35,16 @@ public class UserDetailsServiceImpl implements UserDetailsService {
         
         // 创建Spring Security的UserDetails对象
         // 这里简单处理，所有用户都赋予"USER"角色
-        return new org.springframework.security.core.userdetails.User(
+//        return new org.springframework.security.core.userdetails.User(
+//                user.getUsername(),
+//                user.getPassword(),
+//                Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"))
+//        );
+        return new UserDetail(
                 user.getUsername(),
                 user.getPassword(),
-                Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"))
+                Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER")),
+                user.getId()
         );
     }
 }

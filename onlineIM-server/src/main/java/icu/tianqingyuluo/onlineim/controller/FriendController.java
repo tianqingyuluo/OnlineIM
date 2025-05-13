@@ -4,6 +4,7 @@ import icu.tianqingyuluo.onlineim.pojo.dto.request.FriendRequestCreateRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.FriendRequestResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.FriendResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
+import icu.tianqingyuluo.onlineim.pojo.entity.User;
 import icu.tianqingyuluo.onlineim.service.UserService;
 import icu.tianqingyuluo.onlineim.util.ErrorCodeUtil;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
@@ -149,9 +150,11 @@ public class FriendController {
      * @return 操作结果
      */
     @PutMapping("/{friendId}/block")
-    public ResponseEntity<Map<String, String>> blockFriend(@PathVariable String friendId) {
+    public ResponseEntity<Map<String, String>> blockFriend(@RequestHeader("Authorization") String token, @PathVariable String friendId) {
         // TODO: 实现拉黑好友逻辑
-        if (!friendService.existFriendByID(friendId)) {
+        String userid = userService.getUserInfoByUsername((jwtUtil.getUsernameFromToken(token))).getUserId();
+
+        if (!friendService.existFriendByID(friendId, userid)) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ErrorCodeUtil.getErrorOutput("404", "未找到该好友"));
         }
         try {
