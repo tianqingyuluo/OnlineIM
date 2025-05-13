@@ -39,6 +39,7 @@ export const LoginService = {
              const response = await api.post('/auth/login', credentials);
             if (response.data.access_token) {
                 // 更新用户状态
+
                 userStore.setLoggedInUser({
                     user_id: response.data.user_info.user_id, // 使用 user_id
                     username: response.data.user_info.username,
@@ -47,6 +48,7 @@ export const LoginService = {
                 });
                 userStore.loggedInUser.user_id=response.data.user_info.user_id
                 userStore.token = response.data.access_token
+                await userStore.updateToken()
                 console.log("token:\n"+response.data.access_token);
 
                 // 显示欢迎消息

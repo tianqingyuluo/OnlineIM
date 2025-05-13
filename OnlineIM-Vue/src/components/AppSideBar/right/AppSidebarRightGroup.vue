@@ -14,37 +14,14 @@ import { Input } from "@/components/ui/input";
 import { Search } from "lucide-vue-next";
 import CreateGroup from "@/components/independent/group/CreateGroup.vue";
 import {Button} from "@/components/ui/button";
+import { useListStore } from '@/stores/list'
 
-interface Group {
-  groupId: string;
-  groupName: string;
-  groupAvatar: string;
-  lastMessage: string;
-  memberCount?: number;
-}
-
-const groups: Group[] = [
-  {
-    groupId: "1",
-    groupName: "技术交流群",
-    groupAvatar: "/images/group.png",
-    lastMessage: "张三: 大家早上好",
-    memberCount: 12
-  },
-  {
-    groupId: "2",
-    groupName: "项目讨论组",
-    groupAvatar: "/images/group.png",
-    lastMessage: "李四: 会议纪要已上传",
-    memberCount: 8
-  }
-];
-
+const listStore = useListStore()
 const activeItem = ref<string | null>(null);
 const emits = defineEmits(['groupSelected'])
 
-function handleGroupClick(group: Group) {
-  activeItem.value = group.groupId;
+function handleGroupClick(group: any) {
+  activeItem.value = group.group_id;
   emits('groupSelected', group);
 }
 
@@ -83,24 +60,24 @@ function handleCreateGroup() {
       <SidebarGroup>
         <SidebarGroupContent>
           <SidebarMenu>
-            <SidebarMenuItem v-for="group in groups" :key="group.groupId">
+            <SidebarMenuItem v-for="group in listStore.groups" :key="group.group_id">
               <SidebarMenuButton
                   as-child
-                  :isActive="activeItem === group.groupId"
+                  :isActive="activeItem === group.group_id"
                   @click="handleGroupClick(group)"
                   class="data-[active=true]:bg-gray-100 data-[active=true]:text-black flex items-center w-full h-[80px] px-4 cursor-default hover:bg-gray-50 transition-colors"
               >
                 <div class="flex items-center w-full">
                   <div class="w-[50px] h-[50px] rounded-full overflow-hidden mr-4 flex-shrink-0">
                     <img
-                        :src="group.groupAvatar"
-                        :alt="group.groupName"
+                        :src="group.avatar_url || '/images/group.png'"
+                        :alt="group.name"
                         class="w-full h-full object-cover"
                     />
                   </div>
                   <div class="flex flex-col flex-grow space-y-1">
-                    <span class="text-[18px] font-bold">{{ group.groupName }}</span>
-                    <span class="text-[13px] text-gray-500">{{ group.lastMessage }}</span>
+                    <span class="text-[18px] font-bold">{{ group.name }}</span>
+                    <span class="text-[13px] text-gray-500">{{ group.announcement || '暂无公告' }}</span>
                   </div>
                 </div>
               </SidebarMenuButton>

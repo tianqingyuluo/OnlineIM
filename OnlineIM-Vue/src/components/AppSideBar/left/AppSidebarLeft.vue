@@ -89,13 +89,6 @@ function handleItemClick(item) {
 const handleAddClick = () => {
   showUserFounding.value = true;
 };
-const buttonItems = [
-  {
-    title: "设置",
-    url: "/main/setting",
-    icon: Settings,
-  },
-]
 
 const activeItem = ref('聊天')
 
@@ -110,11 +103,11 @@ const activeItem = ref('聊天')
             <SidebarMenuItem v-for="item in items" :key="item.title">
               <SidebarMenuButton 
                 as-child 
-                :isActive="activeItem === item.title" 
+                :isActive="$route.path.startsWith(item.path)" 
                 @click="handleItemClick(item)" 
                 class="data-[active=true]:bg-gray-100 data-[active=true]:text-black h-[40px] mb-4"
               >
-                <a :href="item.url" style="display: flex; justify-content: center; align-items: center; width: 100%;">
+                <a :href="item.path" style="display: flex; justify-content: center; align-items: center; width: 100%;">
                   <component :is="item.icon" style="width: 30px; height: 30px"/>
                 </a>
               </SidebarMenuButton>
@@ -137,16 +130,19 @@ const activeItem = ref('聊天')
     </SidebarContent>
     <SidebarFooter>
       <SidebarMenu>
-        <SidebarMenuItem v-for="item in buttonItems" :key="item.title">
-          <SidebarMenuButton asChild :isActive="activeItem === item.title" @click="activeItem = item.title"
-                             class="data-[active=true]:bg-gray-100 data-[active=true]:text-black h-[40px] mb-4">
-            <router-link 
-              :to="item.path"
-              style="display: flex; justify-content: center; align-items: center; width: 100%;"
-            >
-              <component :is="item.icon" style="width: 30px; height: 30px"/>
-            </router-link>
+        <!-- 单独渲染的设置按钮 -->
+        <SidebarMenuItem>
+          <SidebarMenuButton
+              as-child
+              class="data-[active=true]:bg-gray-100 data-[active=true]:text-black h-[40px] mb-4">
+          <a style="display: flex; justify-content: center; align-items: center; width: 100%;">
+            <component :is="Settings" style="width: 30px; height: 30px"/>
+          </a>
           </SidebarMenuButton>
+        </SidebarMenuItem>
+        
+        <!-- 头像按钮 -->
+        <SidebarMenuItem>
           <button 
             v-if="loggedUser"
             class="w-[40px] h-[40px] rounded-full overflow-hidden mx-auto flex-shrink-0 block"
@@ -165,12 +161,12 @@ const activeItem = ref('聊天')
 
   <!-- 修改为Teleport到body的userThings弹出框 -->
   <Teleport to="body">
-    <Transition name="fade-slide">
+    <Transition name="slide-up">
     <div
         v-if="showUserThings"
         ref="userThingsRef"
-        class="fixed z-[9999] bg-white border shadow-lg"
-        style="width: 200px; border-radius: 0;"
+        class="fixed z-[9999] bg-white border shadow-lg rounded-2xl"
+        style="width: 200px;"
         :style="{
           bottom: '0',
           left: '60px',
@@ -219,5 +215,18 @@ const activeItem = ref('聊天')
 .fade-slide-enter-from .bg-white,
 .fade-slide-leave-to .bg-white {
   opacity: 0;
+}
+</style>
+
+<style scoped>
+/* 新增从下往上滑动动画 */
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: all 0.3s ease;
+}
+.slide-up-enter-from,
+.slide-up-leave-to {
+  opacity: 0;
+  transform: translateX(-100%);
 }
 </style>

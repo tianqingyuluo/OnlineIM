@@ -12,14 +12,6 @@ export interface GroupMemberBrief {
     join_time: ISO8601DateTime;
 }
 
-// 6.1 创建群组
-export interface CreateGroupRequest {
-    name: string;
-    avatar_url?: string;
-    description?: string;
-    initial_members?: UUID[]; // 初始成员ID列表
-}
-
 export interface CreateGroupResponse {
     group_id: UUID;
     name: string;
@@ -71,4 +63,21 @@ export interface GroupListItem {
     last_message?: string;
     unread_count?: number;
     updated_at?: ISO8601DateTime;
+}
+
+export interface GroupResponse {
+    group_id: UUID;
+    name: string;
+    owner_id: UUID;
+    avatar_url?: string;
+    description?: string;
+    announcement?: string;
+    member_count: number;
+    my_role: GroupRole;
+    created_at: ISO8601DateTime;
+}
+
+export interface JoinedGroupsResponse {
+    groups: GroupResponse[];
+    total: number;
 }

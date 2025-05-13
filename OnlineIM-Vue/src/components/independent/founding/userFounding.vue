@@ -5,7 +5,7 @@ import {Input} from "@/components/ui/input";
 import {Search} from "lucide-vue-next";
 import {Button} from "@/components/ui/button";
 import usersSelectResult from './usersSelectResoult.vue'
-import {useListStore} from "@/stores/list.ts";
+import FriendRequestsList from "@/components/independent/founding/FriendRequestsList.vue";
 import GroupSelectResult from './GroupSelectResult.vue';
 // 拖动逻辑
 const modalRef = ref<HTMLElement | null>(null);
@@ -66,7 +66,6 @@ const emit = defineEmits(['close']);
 const handleClose = () => {
   // 在这里添加其他逻辑
   console.log('关闭按钮被点击');
-  useListStore().clearSearchResults();
   emit('close');
   
   // 可以添加更多操作
@@ -127,10 +126,13 @@ const handleClose = () => {
       <!-- 内容区域 -->
       <div class="p-6 bg-white h-[600px] overflow-auto">
         <template v-if="activeTab === '好友'">
-          <usersSelectResult :keyword="searchQuery" />
+          <usersSelectResult :keyword="searchQuery" class="h-full"/>
         </template>
         <template v-else-if="activeTab ==='群聊'">
-          <GroupSelectResult :keyword="searchQuery" />
+          <GroupSelectResult :keyword="searchQuery" class="h-full"/>
+        </template>
+        <template v-else-if="activeTab ==='未处理请求'">
+          <FriendRequestsList/>
         </template>
       </div>
     </div>

@@ -1,6 +1,7 @@
 import api from './api.service';
 import type { FormContext } from 'vee-validate';
-import {type GroupSearchResponse}from'@/type/group.ts'
+import {type GroupSearchResponse, type JoinedGroupsResponse}from'@/type/group.ts'
+import { useListStore } from '@/stores/list';
 export const groupService = {
   // 创建群组
   async createGroup(
@@ -14,6 +15,10 @@ export const groupService = {
   ) {
     try {
       const response = await api.post('/groups', data);
+      response.data={
+          ...response.data,
+          my_role:"owner"
+      }
       return response.data;
     } catch (error: any) {
       if (formContext && error.response?.data?.errors) {
@@ -76,5 +81,17 @@ export const groupService = {
       console.error('获取群组成员列表失败:', error);
       throw error;
     }
-  }
+  },
+  // 获取已加入的群组列表
+  async getJoinedGroups(): Promise<JoinedGroupsResponse> {
+    try {
+      const response = await api.get<JoinedGroupsResponse>('/groups/joined');
+      useListStore().groups =[...useListStore().groups,...response.data.groups];
+      useListStore().groupTotal =useListStore().groupTotal+ response.data.total;
+      return response.data;
+    } catch (error) {
+      console.error('获取已加入群组失败:', error);
+      throw error;
+    }
+  },
 };
