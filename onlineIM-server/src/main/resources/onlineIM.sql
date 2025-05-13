@@ -27,7 +27,7 @@ CREATE TABLE `user_friends` (
                                 `friend_id` VARCHAR(143) NOT NULL COMMENT '好友ID，格式为：usr_+UUID',
                                 `remark` VARCHAR(32) DEFAULT NULL COMMENT '好友备注',
                                 `group_id` VARCHAR(143) DEFAULT NULL COMMENT '好友分组ID，格式为：fgrp_+UUID',
-                                `status` TINYINT UNSIGNED DEFAULT 1 COMMENT '好友状态：0-已删除，1-正常，2-已拉黑',
+                                `status` TINYINT UNSIGNED DEFAULT 1 COMMENT '好友状态：0-已拉黑，1-正常',
                                 `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
                                 `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
                                 PRIMARY KEY (`id`),

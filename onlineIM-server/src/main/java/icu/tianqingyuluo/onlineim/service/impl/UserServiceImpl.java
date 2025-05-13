@@ -70,4 +70,9 @@ public class UserServiceImpl implements UserService {
     public UserBriefResponse getUserBriefInfoByUsername(String username) {
         return userBriefResponseMapper.getUserBriefInfoByUsername(username);
     }
+
+    @Override
+    public UserBriefResponse getUserBriefInfoByID(String id){
+        return  userBriefResponseMapper.getUserBriefInfoByID(id);
+    }
 }

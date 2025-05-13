@@ -15,6 +15,13 @@
         FROM users
         WHERE (username = #{username})
     </select>
+    <!-- 根据id查询该用户简要信息 -->
+    <select id="getUserBriefInfoByID" resultMap="UserBriefResponseMap">
+        SELECT
+            id,username,nickname,avatar
+        FROM users
+        WHERE (id = #{id})
+    </select>
     <!-- 根据id查询用户简要信息 -->
     <select id="searchUsersByUserID" resultMap="UserBriefResponseMap">
         SELECT
@@ -33,5 +40,20 @@
         WHERE (username LIKE CONCAT('%', #{username}, '%'))
         ORDER BY created_at DESC
             LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <!-- 根据username查询黑名单 -->
+    <select id="getBlackListByUsername" resultMap="UserBriefResponseMap">
+        SELECT u2.id,u2.username,u2.nickname,u2.avatar
+        FROM
+            users u1
+                INNER JOIN
+            user_friends uf ON u1.id = uf.user_id
+                INNER JOIN
+            users u2 ON uf.friend_id = u2.id
+        WHERE
+            u1.username = #{username}
+          AND
+            uf.status = 0;  -- 只查询拉黑的好友
     </select>
 </mapper>

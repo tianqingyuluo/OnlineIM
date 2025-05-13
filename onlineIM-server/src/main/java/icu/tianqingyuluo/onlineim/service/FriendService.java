@@ -1,6 +1,8 @@
 package icu.tianqingyuluo.onlineim.service;
 
+import icu.tianqingyuluo.onlineim.pojo.dto.response.FriendRequestResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.FriendResponse;
+import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -9,7 +11,11 @@ import java.util.List;
 public interface FriendService {
     List<FriendResponse> fetchFriendsByUsername(String username);
     FriendResponse getByID(String id);
-    boolean existFriendByID(String id);
-    void updateRemarkByID(String id);
-    void updateGroupByID(String id);
+    List<UserBriefResponse> getBlackListByUsername(String username);
+    List<FriendRequestResponse> getFriendRequestListByUserID(String id);
+    List<FriendRequestResponse> getSendFriendRequestListByUserID(String id);
+    boolean existFriendByID(String friendId,String userid);
+    void updateRemarkByID(String id,String remark);
+    void updateGroupByID(String id,String groupId);
+    void updateStatusByID(String id,String status);
 }

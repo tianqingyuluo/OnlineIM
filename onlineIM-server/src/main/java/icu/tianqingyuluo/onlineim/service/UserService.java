@@ -19,4 +19,5 @@ public interface UserService {
     List<UserBriefResponse> searchByUserID(String keyword,int LIMIT,int offset);
     List<UserBriefResponse> searchByUsername(String keyword,int LIMIT,int offset);
     UserBriefResponse getUserBriefInfoByUsername(String username);
+    UserBriefResponse getUserBriefInfoByID(String id);
 }

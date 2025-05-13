@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="icu.tianqingyuluo.onlineim.mapper.FriendResponseMapper">
+    <!-- 用户结果映射 -->
+    <resultMap id="FriendResponseMap" type="icu.tianqingyuluo.onlineim.pojo.dto.response.FriendResponse">
+        <id property="friendshipID" column="id"/>
+        <result property="userID" column="id"/>
+        <result property="avatarUrl" column="avatar"/>
+        <result property="friendGroupID" column="group_id"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+    <select id="getFriendListByUsername" resultMap="FriendResponseMap">
+        SELECT
+            uf.id
+            ,u2.id
+            ,u2.username
+            ,u2.nickname
+            ,u2.avatar
+            ,uf.remark
+            ,uf.group_id
+            ,uf.created_at
+        FROM
+            users u1
+                INNER JOIN
+            user_friends uf ON u1.id = uf.user_id
+                INNER JOIN
+            users u2 ON uf.friend_id = u2.id
+        WHERE
+            u1.username = #{username}
+          AND
+            uf.status = 1;  -- 只查询状态正常的好友
+    </select>
+    <select id="getFriendByID" resultMap="FriendResponseMap">
+        SELECT
+            uf.id,
+            u2.id,
+            u2.username,
+            u2.nickname,
+            u2.avatar,
+            uf.remark,
+            uf.group_id,
+            uf.created_at
+        FROM
+            user_friends uf
+                INNER JOIN
+            users u2 ON uf.friend_id = u2.id
+        WHERE
+            u2.id = #{id}
+    </select>
+</mapper>
