@@ -13,8 +13,10 @@ import { ref, computed } from "vue";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-vue-next";
 import { useListStore } from '@/stores/list.ts'
+import { useRouter } from 'vue-router'
 import type { Friend } from '@/type/Friends.ts'
 
+const router = useRouter()
 const activeItem = ref<string | null>(null);
 const emits = defineEmits(['userSelected'])
 const listStore = useListStore()
@@ -25,6 +27,8 @@ const friends = computed(() => listStore.friends)
 function handleUserClick(user: Friend) {
   activeItem.value = user.friend_info.user_id;
   emits('userSelected', user);
+  // 跳转到好友详情页
+  router.push(`/main/friends/${user.friend_info.user_id}`);
 }
 </script>
 

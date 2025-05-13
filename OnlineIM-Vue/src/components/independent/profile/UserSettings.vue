@@ -24,7 +24,7 @@ const formSchema = toTypedSchema(
           "请输入有效的邮箱地址"
         ),
       z.null()
-    ]).transform(val => val || ''),
+    ]),
     phone: z.union([
       z.string()
         .refine(
@@ -32,7 +32,7 @@ const formSchema = toTypedSchema(
           "请输入有效的手机号"
         ),
       z.null()
-    ]).transform(val => val || ''),
+    ]),
     region: z.union([
       z.string()
         .max(20, "地区最多20个字符"),
@@ -43,8 +43,10 @@ const formSchema = toTypedSchema(
         .max(100, "个性签名最多100个字符"),
       z.null()
     ]).transform(val => val || ''),
-    gender: z.enum(['male', 'female'])
-      .default('male')
+    gender: z.union([
+      z.number().min(0).max(2),
+      z.null()
+    ]).transform(val => val === null ? 0 : val).default(0)
   })
 )
 
@@ -83,7 +85,7 @@ const saveSettings = handleSubmit(async (values) => {
       nickname: values.nickname || undefined,
       email: values.email || undefined,
       region: values.region || undefined,
-      gender: values.gender || 0, // 使用表单中的值
+      gender: values.gender || 0, // 0表示未设置，1表示男，2表示女
       phone: values.phone || undefined,
       signature: values.signature || undefined,
       avatar_url: tempSettings.value.avatar_url || undefined
@@ -99,8 +101,31 @@ const emit = defineEmits(['close']);
 
 // 更换头像逻辑
 const changeAvatar = () => {
-  // 这里实现更换头像的实际逻辑
-  console.log('更换头像');
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/png, image/jpeg';
+  
+  input.onchange = (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    
+    // 验证文件类型
+    if (!['image/png', 'image/jpeg'].includes(file.type)) {
+      alert('请选择PNG或JPG格式的图片');
+      return;
+    }
+    
+    // 创建临时URL并更新avatar_url
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (event.target?.result) {
+        tempSettings.value.avatar_url = event.target.result as string;
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+  
+  input.click();
 };
 // 关闭模态框
 const closeModal = () => {
@@ -217,8 +242,9 @@ onMounted(() => {
                 v-model="gender"
                 class="w-full p-2.5 border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 bg-white text-gray-800"
             >
-              <option value="male">男</option>
-              <option value="female">女</option>
+              <option :value="0">未设置</option>
+              <option :value="1">男</option>
+              <option :value="2">女</option>
             </select>
           </div>
         </div>
