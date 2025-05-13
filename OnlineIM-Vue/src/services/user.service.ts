@@ -8,10 +8,6 @@ export const searchService = {
   async searchUsers(
     query: string,
     page: number,
-    params?: {
-      limit?: number;
-      offset?: number;
-    },
     formContext?: FormContext
   ): Promise<UserSearchResponse> {
     try {

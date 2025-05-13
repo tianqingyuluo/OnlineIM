@@ -54,7 +54,7 @@ onMounted(async () => {
       email: userData.email || "未设置",
       phone: userData.phone || "未设置",
       region: userData.region || "未设置",
-      gender: userData.gender ? (userData.gender === 'male' ? '男' : '女') : '未设置',
+      gender: userData.gender!==0 ? (userData.gender === 1 ? '男' : '女') : '未设置',
       signature: userData.signature || "未设置",
       avatar_url: userData.avatar_url || '/images/help.png'
     };

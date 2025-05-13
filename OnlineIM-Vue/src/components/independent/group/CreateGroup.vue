@@ -115,7 +115,15 @@ const handleSubmit = async () => {
       description: form.value.description || undefined,
       initial_members: form.value.initial_members
     })
-    router.push(`/main/groups/${response.group_id}`)
+
+    listStore.groups = [...listStore.groups, response]
+    router.push({
+      name: 'chat',
+      params: {
+        type: 'group',
+        id: response.group_id
+      }
+    })
   } catch (error) {
     console.error('创建群组失败:', error)
   } finally {

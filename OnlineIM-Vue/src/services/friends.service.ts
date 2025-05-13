@@ -1,7 +1,7 @@
 import api from './api.service';
 import type { FormContext } from 'vee-validate';
 import { useListStore } from '@/stores/list';
-import {type FriendsResponse} from "@/type/Friends.ts";
+import {type FriendRequestsResponse, type FriendsResponse} from "@/type/Friends.ts";
 
 
 export const friendsService = {
@@ -52,11 +52,10 @@ export const friendsService = {
 
   // 获取收到的好友请求列表
   async getReceivedFriendRequests(params?: {
-    limit?: number;
     offset?: number;
-  }) {
+  }): Promise<FriendRequestsResponse> {
     try {
-      const response = await api.get('/friends/requests/received', { params });
+      const response = await api.get<FriendRequestsResponse>('/friends/requests/received', { params });
       return response.data;
     } catch (error) {
       console.error('获取好友请求列表失败:', error);

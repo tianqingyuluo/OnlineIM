@@ -22,3 +22,7 @@ export type UserSearchResponse = {
     users: UserSearchResult[];
     total: number;
 };
+export interface TokenResponse {
+    access_token: string;
+    expires_in: number;
+}

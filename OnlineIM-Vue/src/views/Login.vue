@@ -26,7 +26,7 @@ const formSchema = toTypedSchema(
 )
 
 // 表单初始化
-const { handleSubmit, setFieldError } = useForm({
+const { handleSubmit } = useForm({
   validationSchema: formSchema,
   initialValues: {
     username: '',
@@ -49,6 +49,7 @@ const onSubmit = handleSubmit(async (values) => {
     console.error('登录错误:', error) // 添加错误日志
   }
 })
+
 </script>
 
 <template>
