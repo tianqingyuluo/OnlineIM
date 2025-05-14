@@ -49,5 +49,7 @@
             users u2 ON uf.friend_id = u2.id
         WHERE
             u2.id = #{id}
+          AND
+            uf.status = 1;  -- 只查询状态正常的好友
     </select>
 </mapper>
