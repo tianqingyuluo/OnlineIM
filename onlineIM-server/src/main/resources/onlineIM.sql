@@ -45,6 +45,7 @@ CREATE TABLE `friend_requests` (
                                    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
                                    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
                                    PRIMARY KEY (`id`),
+                                   UNIQUE KEY `uk_friend_request` (`from_user_id`, `to_user_id`),
                                    KEY `idx_from_user` (`from_user_id`, `status`),
                                    KEY `idx_to_user` (`to_user_id`, `status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='好友请求表';

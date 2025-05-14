@@ -1,6 +1,7 @@
 package icu.tianqingyuluo.onlineim.controller;
 
 import icu.tianqingyuluo.onlineim.pojo.dto.request.FriendRequestCreateRequest;
+import icu.tianqingyuluo.onlineim.pojo.dto.request.FriendRequestRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.FriendRequestResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.FriendResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
@@ -16,6 +17,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.*;
 
 /**
@@ -255,4 +257,15 @@ public class FriendController {
         return ResponseEntity.ok(response);
     }
 
+    @PostMapping("/request/send")
+    public ResponseEntity<?> sendFriendRequest(@RequestHeader("Authorization") String token, @RequestBody FriendRequestRequest friendRequestRequest) {
+        String userid = jwtUtil.getUserIDFromToken(token);
+        try {
+            friendService.sendFriendRequest(userid, friendRequestRequest);
+        }
+        catch (SQLIntegrityConstraintViolationException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "好友申请已存在"));
+        }
+        return ResponseEntity.status(HttpStatus.CREATED).build();
+    }
 }
