@@ -44,4 +44,16 @@ export const meService = {
         }
     },
 
+    async uploadAvatar(file: File) {
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            const response = await api.post<string>('/api/v1/users/me/avatar', formData);
+
+            return response.data;
+        } catch (error: any) {
+            throw error;
+        }
+    }
+
 };

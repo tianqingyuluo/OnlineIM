@@ -8,12 +8,12 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import { Toaster } from 'vue-sonner'
 import { toTypedSchema } from '@vee-validate/zod'
 import { useForm } from 'vee-validate'
 import { z } from 'zod'
 import { RegisterService } from '@/services/register.service'
 import { useRouter } from 'vue-router'
+import {UserPlus } from 'lucide-vue-next'
 
 const router = useRouter()
 
@@ -75,10 +75,8 @@ const onSubmit = handleSubmit(async (values) => {
       <!-- 头部区域 -->
       <div class="flex items-center justify-between w-full p-4 border-b border-gray-200">
         <div class="flex items-center space-x-3">
-          <div class="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 15a4 4 0 004 4h10a4 4 0 004-4v-4H3v4z" />
-            </svg>
+          <div class="w-10 h-10 bg-gray-100  rounded-lg flex items-center justify-center ">
+            <user-plus />
           </div>
           <span class="font-medium text-gray-800">用户注册</span>
         </div>
@@ -153,23 +151,10 @@ const onSubmit = handleSubmit(async (values) => {
       </div>
     </div>
 
-    <Toaster
-        position="top-center"
-        :theme="'light'"
-        richColors
-        closeButton
-    />
   </div>
 </template>
 
 <style scoped>
-/* 保持与登录页面一致的样式 */
-.bg-white {
-  border-top-left-radius: 0;
-}
-.bg-gray-100 {
-  border-top-right-radius: 0;
-}
 
 :focus {
   outline: none;
