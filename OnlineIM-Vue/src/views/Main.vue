@@ -72,7 +72,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="flex h-screen no-scroll">
+  <div class="flex h-screen no-scroll" style="min-height: 50vh;min-width: 50vw;">
     <SidebarProvider
         :style="{ width: `${sidebarWidth}px` }"
         class="flex-shrink-0 relative h-screen flex"

@@ -10,6 +10,22 @@ import { groupService } from '@/services/group.service'
 import type { GroupResponse } from '@/type/group'
 import { onActivated } from 'vue'
 import GroupInfoCard from '@/components/independent/group/GroupInfoCard.vue'
+import { onClickOutside } from '@vueuse/core'
+
+// 添加菜单元素的引用
+const menuRef = ref<HTMLElement | null>(null)
+const menuButtonRef = ref<HTMLElement | null>(null)
+
+// 点击区域外关闭菜单
+onClickOutside(menuRef, (event) => {
+  // 检查点击是否来自菜单按钮，如果是则不关闭
+  if (menuButtonRef.value && menuButtonRef.value.contains(event.target as Node)) {
+    return
+  }
+  showMenu.value = false
+}, {
+  ignore: [menuButtonRef] // 忽略菜单按钮的点击
+})
 
 const route = useRoute()
 const currentGroup = ref<GroupResponse | null>(null)
@@ -18,6 +34,7 @@ const groupId = computed(() => {
   const id = route.params.id
   return Array.isArray(id) ? id[0] : id
 })
+
 
 onMounted(async () => {
   try {
@@ -71,7 +88,7 @@ function handleEmojiSelect(emoji: string) {
     // 获取当前光标位置
     const cursorPos = textareaEl.selectionStart || 0
     const currentValue = textareaEl.value || ''
-    
+
     // 在光标位置插入表情
     const newValue =
       currentValue.substring(0, cursorPos) +
@@ -80,12 +97,12 @@ function handleEmojiSelect(emoji: string) {
 
     // 更新文本框值
     textareaEl.value = newValue
-    
+
     // 设置新的光标位置
     const newCursorPos = cursorPos + emoji.length
     textareaEl.selectionStart = newCursorPos
     textareaEl.selectionEnd = newCursorPos
-    
+
     // 保持焦点
     textareaEl.focus()
   }
@@ -114,18 +131,20 @@ function toggleMenu() {
     <!-- 顶栏 -->
     <div class="flex items-center justify-between w-full p-4 border-b relative">
       <span class="text-lg font-semibold">{{ currentGroup.name }}</span>
-      <div class="flex space-x-4">
-        <button @click="toggleMenu">
-          <a href="#" class="flex items-center">
-            <Ellipsis class="w-5 h-5" />
-          </a>
-        </button>
-      </div>
-      
+      <button @click="toggleMenu" ref="menuButtonRef">
+        <a href="#" class="flex items-center">
+          <Ellipsis class="w-5 h-5" />
+        </a>
+      </button>
+
       <!-- 滑动菜单 -->
       <Transition name="slide">
-        <div v-if="showMenu" class="absolute right-0 top-full w-80 bg-white shadow-lg z-50 ">
-          <GroupInfoCard :group="currentGroup" />
+        <div
+            v-if="showMenu"
+            ref="menuRef"
+            class="absolute right-0 top-full w-80 bg-white shadow-lg z-50 h-[calc(100vh-60px)]"
+        >
+          <GroupInfoCard :group="currentGroup" class="h-full" />
         </div>
       </Transition>
     </div>
@@ -177,7 +196,7 @@ function toggleMenu() {
           class="h-full w-full resize-none pr-20 rounded-none focus:ring-0 focus:shadow-none"
           style="outline: none;box-shadow: none; font-size: 24px"
       />
-      <Button 
+      <Button
         class="absolute bottom-4 right-4 transition-all duration-200 active:scale-95 hover:bg-primary/90 hover:scale-125"
         @click="handleSendClick"
       >

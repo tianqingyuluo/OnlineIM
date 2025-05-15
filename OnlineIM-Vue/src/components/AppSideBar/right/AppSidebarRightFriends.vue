@@ -34,7 +34,7 @@ function handleUserClick(user: Friend) {
 
 <template>
   <Sidebar collapsible="none" style="--sidebar-width: 80%; min-height: 100vh; margin-left: 0 ;border-right: 1px solid #e5e7eb; " class="bg-white">
-    <sidebarGroupLabel style="border-bottom: 1px solid #e5e7eb; border-radius: 0" class="p-6.5">
+    <sidebarGroupLabel style="border-bottom: 1px solid #e5e7eb; border-radius: 0 ;height: 60px" >
       <div>
         <h2 class="text-lg font-semibold text-gray-800">好友列表</h2>
       </div>

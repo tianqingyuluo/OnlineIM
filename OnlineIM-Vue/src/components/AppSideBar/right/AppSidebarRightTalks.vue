@@ -29,8 +29,8 @@ function handleChatClick(conversation: Conversation) {
 
 <template>
   <Sidebar collapsible="none" class="w-full bg-white" style="min-height: 100vh; border-right: 1px solid #e5e7eb;">
-    <sidebarGroupLabel class="p-6.5 border-b border-gray-200 rounded-none">
-      <div class="w-full">
+    <sidebarGroupLabel class=" border-b border-gray-200 rounded-none" style="height: 60px">
+      <div class="w-full ">
         <h2 class="text-lg font-semibold text-gray-800">聊天</h2>
       </div>
     </sidebarGroupLabel>

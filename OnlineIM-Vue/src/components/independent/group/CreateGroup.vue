@@ -61,18 +61,20 @@
       <div class="mb-4">
         <label class="block text-sm font-medium text-gray-700 mb-1">群组名称</label>
         <input
-          v-model="form.name"
+          v-model="name"
           type="text"
           required
           class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
+          :class="{'border-red-500': errors.name}"
         >
+        <p v-if="errors.name" class="text-red-500 text-sm mt-1">{{ errors.name }}</p>
       </div>
   
       <!-- 群组描述 -->
       <div class="mb-4">
         <label class="block text-sm font-medium text-gray-700 mb-1">群组描述</label>
         <textarea
-          v-model="form.description"
+          v-model="description"
           rows="3"
           class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
         ></textarea>
@@ -80,7 +82,7 @@
   
       <!-- 创建按钮 -->
       <button
-        @click="handleSubmit"
+        @click="saveGroup"
         :disabled="loading"
         class="w-full py-2 px-4 bg-gray-800 text-white rounded-md hover:bg-gray-700 transition-colors"
       >
@@ -96,23 +98,50 @@ import { ref } from 'vue'
 import { groupService } from '@/services/group.service'
 import { useRouter } from 'vue-router'
 import { useListStore } from '@/stores/list'
+import { toTypedSchema } from '@vee-validate/zod'
+import { useForm } from 'vee-validate'
+import * as z from 'zod'
 
 const router = useRouter()
 const listStore = useListStore()
 const loading = ref(false)
 
+// 表单验证规则
+const formSchema = toTypedSchema(
+  z.object({
+    name: z.string()
+      .min(1, "你的群组需要一个的名字")
+      .max(20, "群名称最多有20个字符"),
+    description: z.string().optional(),
+    initial_members: z.array(z.string()).optional()
+  })
+)
+
 const form = ref({
-  name: '',
-  description: '',
   initial_members: [] as string[]
 })
 
-const handleSubmit = async () => {
+// 使用defineField方式绑定表单字段
+const { handleSubmit, errors, defineField } = useForm({
+  validationSchema: formSchema,
+  initialValues: {
+    name: '',
+    description: '',
+    initial_members: []
+  }
+})
+
+// 为每个字段添加绑定
+const [name] = defineField('name')
+const [description] = defineField('description')
+
+// 提交处理
+const saveGroup = handleSubmit(async (values) => {
   try {
     loading.value = true
     const response = await groupService.createGroup({
-      name: form.value.name,
-      description: form.value.description || undefined,
+      name: values.name,
+      description: values.description || undefined,
       initial_members: form.value.initial_members
     })
 
@@ -129,7 +158,7 @@ const handleSubmit = async () => {
   } finally {
     loading.value = false
   }
-}
+})
 
 const changeAvatar = () => {
   console.log('更换头像')

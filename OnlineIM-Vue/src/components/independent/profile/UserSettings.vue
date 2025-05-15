@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import {ref, computed, onMounted} from 'vue';
-import { useUserStore } from "@/stores/user.ts";
-import { meService } from "@/services/me.service.ts";
-import { toTypedSchema } from '@vee-validate/zod';
-import { useForm } from 'vee-validate';
+import {computed, onMounted, ref} from 'vue';
+import {useUserStore} from "@/stores/user.ts";
+import {meService} from "@/services/me.service.ts";
+import {toTypedSchema} from '@vee-validate/zod';
+import {useForm} from 'vee-validate';
 import * as z from 'zod';
 import DraggableHeader from "@/components/common/DraggableHeader.vue";
 
@@ -105,24 +105,22 @@ const changeAvatar = () => {
   input.type = 'file';
   input.accept = 'image/png, image/jpeg';
   
-  input.onchange = (e) => {
+  input.onchange = async (e) => {
     const file = (e.target as HTMLInputElement).files?.[0];
     if (!file) return;
-    
     // 验证文件类型
     if (!['image/png', 'image/jpeg'].includes(file.type)) {
       alert('请选择PNG或JPG格式的图片');
       return;
     }
     
-    // 创建临时URL并更新avatar_url
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      if (event.target?.result) {
-        tempSettings.value.avatar_url = event.target.result as string;
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      // 使用uploadAvatar方法上传文件并获取URL
+      tempSettings.value.avatar_url = await meService.uploadAvatar(file);
+    } catch (error) {
+      console.error('头像上传失败:', error);
+      alert('头像上传失败，请重试');
+    }
   };
   
   input.click();

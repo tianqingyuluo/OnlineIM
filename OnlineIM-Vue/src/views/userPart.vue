@@ -85,8 +85,8 @@ async function saveRemark() {
     </div>
 
     <!-- 好友专属信息 -->
-    <div v-if="friendInfo" class="friend-info mt-6">
-      <div class="info-item">
+    <div v-if="friendInfo" class="friend-info mt-8">
+      <div class="info-item mb-6">
         <span class="label">备注名:</span>
         <template v-if="editingRemark">
           <Input 
@@ -104,12 +104,12 @@ async function saveRemark() {
           {{ friendInfo.friend_info.remark || '未设置备注名' }}
         </span>
       </div>
-      <div class="info-item mt-4">
+      <div class="info-item mb-6">
         <span class="label">分组:</span>
         <span>{{ friendInfo.friend_info.friend_group_id ||"我的好友"}}</span>
       </div>
     </div>
-    <Button class="flex flex-col items-center justify-center w-full p-4 hover:scale-105 transition-transform duration-200">发消息</Button>
+    <Button class="flex flex-col items-center justify-center w-full p-4 mt-8 hover:scale-105 transition-transform duration-200">发消息</Button>
   </div>
   <div v-else class="loading">
     加载中...
@@ -124,17 +124,19 @@ async function saveRemark() {
   overflow: auto;
 }
 .user-header {
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   margin-bottom: 20px;
 }
 .avatar {
   width: 100px;
   height: 100px;
-  border-radius: 50%;
-  object-fit: cover;
+  border-radius: 50%;  /* 这行代码确保头像显示为圆形 */
+  margin-bottom: 10px;
 }
 .info-item {
-  margin: 10px 0;
+  margin: 16px 0;
 }
 .label {
   font-weight: bold;
