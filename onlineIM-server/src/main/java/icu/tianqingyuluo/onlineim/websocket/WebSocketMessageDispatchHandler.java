@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Slf4j
 @Component
-public class WebSocketMessageHandler extends SimpleChannelInboundHandler<WebSocketFrame> {
+public class WebSocketMessageDispatchHandler extends SimpleChannelInboundHandler<WebSocketFrame> {
 
     // 存储所有已连接的WebSocket通道，键为用户名，值为通道
     private static final ConcurrentHashMap<String, Channel> channels = new ConcurrentHashMap<>();

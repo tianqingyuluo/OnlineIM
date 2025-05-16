@@ -4,7 +4,7 @@ import icu.tianqingyuluo.onlineim.service.impl.UserDetailsServiceImpl;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
 import icu.tianqingyuluo.onlineim.websocket.NettyWebSocketServer;
 import icu.tianqingyuluo.onlineim.websocket.WebSocketAuthHandler;
-import icu.tianqingyuluo.onlineim.websocket.WebSocketMessageHandler;
+import icu.tianqingyuluo.onlineim.websocket.WebSocketMessageDispatchHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -35,8 +35,8 @@ public class WebSocketConfig {
      * 注册WebSocket消息处理器
      */
     @Bean
-    public WebSocketMessageHandler webSocketMessageHandler() {
-        return new WebSocketMessageHandler();
+    public WebSocketMessageDispatchHandler webSocketMessageHandler() {
+        return new WebSocketMessageDispatchHandler();
     }
 
     /**
@@ -44,7 +44,7 @@ public class WebSocketConfig {
      */
     @Bean
     public NettyWebSocketServer nettyWebSocketServer(WebSocketAuthHandler webSocketAuthHandler, 
-                                                    WebSocketMessageHandler webSocketMessageHandler) {
-        return new NettyWebSocketServer(webSocketAuthHandler, webSocketMessageHandler);
+                                                    WebSocketMessageDispatchHandler webSocketMessageDispatchHandler) {
+        return new NettyWebSocketServer(webSocketAuthHandler, webSocketMessageDispatchHandler);
     }
 }

@@ -38,12 +38,12 @@ public class NettyWebSocketServer {
     private ChannelFuture channelFuture;
 
     private final WebSocketAuthHandler webSocketAuthHandler;
-    private final WebSocketMessageHandler webSocketMessageHandler;
+    private final WebSocketMessageDispatchHandler webSocketMessageDispatchHandler;
 
     public NettyWebSocketServer(WebSocketAuthHandler webSocketAuthHandler, 
-                               WebSocketMessageHandler webSocketMessageHandler) {
+                               WebSocketMessageDispatchHandler webSocketMessageDispatchHandler) {
         this.webSocketAuthHandler = webSocketAuthHandler;
-        this.webSocketMessageHandler = webSocketMessageHandler;
+        this.webSocketMessageDispatchHandler = webSocketMessageDispatchHandler;
     }
 
     /**
@@ -77,7 +77,7 @@ public class NettyWebSocketServer {
                                     // WebSocket协议处理
                                     new WebSocketServerProtocolHandler(websocketPath, null, true),
                                     // 自定义消息处理器
-                                    webSocketMessageHandler
+                                    webSocketMessageDispatchHandler
                             );
                         }
                     });

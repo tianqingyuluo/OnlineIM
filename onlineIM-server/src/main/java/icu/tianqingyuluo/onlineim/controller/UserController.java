@@ -44,7 +44,7 @@ public class UserController {
     @GetMapping("/me")
     public ResponseEntity<UserResponse> getCurrentUser(@RequestHeader(value = "Authorization") String token) {
         // TODO: 实现获取当前用户信息逻辑
-        String username = jwtUtil.getUsernameFromToken(token.substring(7));
+        String username = jwtUtil.getUsernameFromToken(token);
         return ResponseEntity.ok(userService.getUserInfoByUsername(username));
     }
     
@@ -73,7 +73,7 @@ public class UserController {
     @PutMapping("/me")
     public ResponseEntity<?> updateUserInfo(@RequestHeader(value = "Authorization") String token, @RequestBody UserUpdateRequest request) {
         // TODO: 实现更新用户信息逻辑
-        String username = jwtUtil.getUsernameFromToken(token.substring(7));
+        String username = jwtUtil.getUsernameFromToken(token);
         try {
             userService.updateByUsername(username, request);
             return ResponseEntity.ok(userService.getUserInfoByUsername(username));

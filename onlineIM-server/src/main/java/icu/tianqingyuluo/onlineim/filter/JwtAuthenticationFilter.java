@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.filter;
 
+import icu.tianqingyuluo.onlineim.service.JwtService;
 import icu.tianqingyuluo.onlineim.service.impl.UserDetailsServiceImpl;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
 import jakarta.servlet.FilterChain;
@@ -27,10 +28,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final UserDetailsServiceImpl userDetailsService;
 
     private final JwtUtil jwtUtil;
+    private final JwtService jwtService;
 
-    public JwtAuthenticationFilter(UserDetailsServiceImpl userDetailsService, JwtUtil jwtUtil) {
+    public JwtAuthenticationFilter(UserDetailsServiceImpl userDetailsService, JwtUtil jwtUtil, JwtService jwtService) {
         this.userDetailsService = userDetailsService;
         this.jwtUtil = jwtUtil;
+        this.jwtService = jwtService;
     }
 
     @Override
@@ -45,9 +48,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         // 检查请求头中是否包含Bearer令牌
         if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
             jwt = authorizationHeader.substring(7);
+
+            // 检查黑名单
+            if (jwtService.isBlockedToken(authorizationHeader)) {
+                log.warn("拦截黑名单中的token：{}", jwt);
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "token已经失效");
+                return; // 中止请求
+            }
+
             try {
-                username = jwtUtil.getUsernameFromToken(jwt);
-            } catch (Exception ignored) {}
+                username = jwtUtil.getUsernameFromToken(authorizationHeader);
+            } catch (Exception e) {
+                log.warn("收到无效token：{}", jwt);
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "无效Token");
+                return;
+            }
         }
 
         // 如果找到了用户名且当前没有认证信息
@@ -56,7 +71,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
 
             // 如果令牌有效，则设置Spring Security认证信息
-            if (jwtUtil.validateToken(jwt, userDetails)) {
+            if (jwtUtil.validateToken(authorizationHeader, userDetails)) {
                 UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(
                         userDetails, null, userDetails.getAuthorities());
                 authenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
