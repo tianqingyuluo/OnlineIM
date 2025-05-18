@@ -2,6 +2,7 @@
 import api from './api.service';
 import { useUserStore } from '@/stores/user';
 import { toast } from 'vue-sonner';
+import router from "@/router";
 
 export const LoginService = {
     validationRules: {
@@ -23,14 +24,8 @@ export const LoginService = {
         }
     },
 
-    /**
-     * 登录方法（集成完整错误处理）
-     * @param credentials 登录凭证
-     * @param router
-     */
     async login(
-        credentials: { username: string; password: string },
-        router
+        credentials: { username: string; password: string }
     ) {
         const userStore = useUserStore();
 
@@ -62,7 +57,6 @@ export const LoginService = {
             }
             return response;
         } catch (error: any) {
-            const errorMsg = error.message;
         }
     }
 };

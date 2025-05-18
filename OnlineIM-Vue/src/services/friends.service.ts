@@ -6,16 +6,10 @@ import {type FriendRequestsResponse, type FriendsResponse} from "@/type/Friends.
 
 export const friendsService = {
   async getFriends(
-    params?: {
-      limit?: number;
-      offset?: number;
-    },
     formContext?: FormContext
   ): Promise<FriendsResponse> {
     try {
-      const response = await api.get<FriendsResponse>('/friends', {
-        params
-      });
+      const response = await api.get<FriendsResponse>('/friends');
       const listStore = useListStore();
       listStore.friends = response.data.friends;
       listStore.friendTotal = response.data.total;
@@ -49,6 +43,19 @@ export const friendsService = {
     }
   },
 
+  // 更新好友分组
+  async setFriendGroup(friendId: string, friendGroupId: string): Promise<{friendship_id: string, friendship_group_id: string}> {
+    try {
+      const response = await api.put(`/api/v1/friends/${friendId}/group`, {
+        friend_group_id: friendGroupId
+      });
+      return response.data;
+    } catch (error) {
+      console.error('更新好友分组失败:', error);
+      throw error;
+    }
+  },
+
 
   // 获取收到的好友请求列表
   async getReceivedFriendRequests(params?: {
@@ -59,6 +66,17 @@ export const friendsService = {
       return response.data;
     } catch (error) {
       console.error('获取好友请求列表失败:', error);
+      throw error;
+    }
+  },
+  async sendFriendRequest(
+      data:{receiver_id: string, message?: string}) {
+
+    try {
+      const response = await api.post(`/api/v1/friends/request/send`, data);
+      return response.data;
+    } catch (error) {
+      console.error('添加好友请求发出失败:', error);
       throw error;
     }
   },

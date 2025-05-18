@@ -105,6 +105,7 @@ onUnmounted(() => {
 .request-info {
   display: flex;
   flex-direction: column;
+  width: 70%;
 }
 .nickname {
   font-weight: bold;
@@ -120,7 +121,8 @@ onUnmounted(() => {
 }
 .action-buttons {
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  gap: 10px;
   margin-left: auto;
 }
 .reject-btn {

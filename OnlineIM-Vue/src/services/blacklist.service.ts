@@ -9,7 +9,7 @@ export interface BlacklistUser {
 }
 
 export interface BlacklistResponse {
-  blacklist: BlacklistUser[];
+  blasklist: BlacklistUser[];
   total: number;
 }
 
@@ -20,9 +20,7 @@ export const blacklistService = {
     formContext?: FormContext
   ): Promise<void> {
     try {
-      await api.post('/blacklist', {
-        target_user_id: targetUserId
-      });
+      await api.put(`friends/${targetUserId}/block`);
     } catch (error: any) {
       if (formContext && error.response?.data?.errors) {
         formContext.setErrors(error.response.data.errors);
@@ -37,7 +35,7 @@ export const blacklistService = {
     formContext?: FormContext
   ): Promise<void> {
     try {
-      await api.delete(`/blacklist/${targetUserId}`);
+      await api.delete(`friends/${targetUserId}/block`);
     } catch (error: any) {
       if (formContext && error.response?.data?.errors) {
         formContext.setErrors(error.response.data.errors);
@@ -55,7 +53,7 @@ export const blacklistService = {
     formContext?: FormContext
   ): Promise<BlacklistResponse> {
     try {
-      const response = await api.get<BlacklistResponse>('/blacklist', {
+      const response = await api.get<BlacklistResponse>('friends/blacklist', {
         params
       });
       return response.data;

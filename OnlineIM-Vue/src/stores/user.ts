@@ -42,6 +42,7 @@ export const useUserStore = defineStore('user', {
       listStore.friendTotal = 0
       listStore.groups = [] as GroupResponse[]
       listStore.groupTotal = 0
+      listStore.groupedFriends=[]
       await authService.logout()
       TokenService.clear()
     },

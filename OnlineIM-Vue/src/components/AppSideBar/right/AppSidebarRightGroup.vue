@@ -40,9 +40,9 @@ function handleCreateGroup() {
       </div>
       <Button
           @click="handleCreateGroup"
-          class="p-2 text-sm bg-gray-100 text-gray-800 rounded-md hover:bg-gray-100 transition-colors flex items-center justify-center border border-gray-200 ml-auto"
+          class="p-2 text-sm bg-white text-gray-800 rounded-md hover:bg-gray-100 transition-colors flex items-center justify-center border border-gray-200 ml-auto"
       >
-        <span class="text-xl">+</span>
+        <span class="text-2xl">+</span>
       </Button>
     </sidebarGroupLabel>
     <SidebarGroupLabel style="padding: 30px 0; display: flex; justify-content: center; align-items: center;">

@@ -36,7 +36,7 @@ onMounted(() => {
   const vw = window.innerWidth
   const vh = window.innerHeight
   modalRef.value.style.top = `${vh * 0.1}px`
-  modalRef.value.style.left = `${vw * 0.3}px`
+  modalRef.value.style.left = `${vw * 0.35}px`
 })
 
 // 生命周期
