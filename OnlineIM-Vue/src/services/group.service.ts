@@ -1,6 +1,6 @@
 import api from './api.service';
 import type { FormContext } from 'vee-validate';
-import {type GroupSearchResponse, type JoinedGroupsResponse}from'@/type/group.ts'
+import {type GroupResponse, type GroupSearchResponse, type JoinedGroupsResponse}from'@/type/group.ts'
 import { useListStore } from '@/stores/list';
 export const groupService = {
   // 创建群组
@@ -53,9 +53,9 @@ export const groupService = {
         }
     },
   // 获取群组信息
-  async getGroupInfo(groupId: string) {
+  async getGroupInfo(groupId: string): Promise<GroupResponse> {
     try {
-      const response = await api.get(`/groups/${groupId}`);
+      const response = await api.get<GroupResponse>(`/groups/${groupId}`);
       return response.data;
     } catch (error) {
       console.error('获取群组信息失败:', error);
@@ -94,4 +94,5 @@ export const groupService = {
       throw error;
     }
   },
+
 };

@@ -4,12 +4,12 @@ export type FriendInfo = {
     nickname: string;
     avatar_url?: string;
     remark?: string;
-    friend_group_id?: `fgrp_${string}`;
+    friend_group_id?: string;
     online_status?: 'online' | 'offline';
 };
 
 export type Friend = {
-    friendship_id: `rel_${string}`;
+    friendship_id: string;
     friend_info: FriendInfo;
     created_at: string;
 };

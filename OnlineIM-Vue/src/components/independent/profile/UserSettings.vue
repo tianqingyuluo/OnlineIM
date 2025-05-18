@@ -65,11 +65,7 @@ const tempSettings = computed(() => ({
 }));
 const { handleSubmit, errors, defineField } = useForm({
   validationSchema: formSchema,
-  initialValues: tempSettings.value,
-  validateOnBlur: false,  // 禁用blur验证
-  validateOnChange: false, // 禁用change验证
-  validateOnInput: false,  // 禁用input验证
-  validateOnModelUpdate: false // 禁用model更新验证
+  initialValues: tempSettings.value
 })
 // 为每个字段添加绑定
 const [nickname] = defineField('nickname');
@@ -85,7 +81,7 @@ const saveSettings = handleSubmit(async (values) => {
       nickname: values.nickname || undefined,
       email: values.email || undefined,
       region: values.region || undefined,
-      gender: values.gender || 0, // 0表示未设置，1表示男，2表示女
+      gender: (values.gender as 0 | 1 | 2 | undefined) || 0, // 0表示未设置，1表示男，2表示女
       phone: values.phone || undefined,
       signature: values.signature || undefined,
       avatar_url: tempSettings.value.avatar_url || undefined

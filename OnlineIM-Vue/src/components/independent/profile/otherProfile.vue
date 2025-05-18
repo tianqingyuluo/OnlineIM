@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue';
 import { Button } from "@/components/ui/button";
 import { userService } from "@/services/user.service.ts";
 import DraggableHeader from "@/components/common/DraggableHeader.vue";
+import SendFriendRequest from "@/components/independent/friends/SendFriendRequest.vue";
 
 const props = defineProps({
   userId: {
@@ -18,12 +19,15 @@ const userInfo = ref({
   region: '未设置',
   gender: '未设置',
   signature: '未设置',
-  avatar_url: '/images/help.png'
+  avatar_url: '/images/help.png',
+  username :"未设置"
 });
 
 // 好友状态管理
-const friendStatus = ref('apply'); // 'apply'|'applied'|'added'
+type FriendStatus = 'apply'|'applied'|'added';
+const friendStatus = ref<FriendStatus>('apply');
 const modalRef = ref<HTMLElement | null>(null)
+const showFriendRequest = ref(false)
 
 const handleDrag = ({ deltaX, deltaY }: { deltaX: number; deltaY: number }) => {
   if (!modalRef.value) return
@@ -34,15 +38,11 @@ const handleDrag = ({ deltaX, deltaY }: { deltaX: number; deltaY: number }) => {
 
 onMounted(() => {
   if (!modalRef.value) return
-  const vw = window.innerWidth
-  const vh = window.innerHeight
-  modalRef.value.style.top = `${vh * 0.1}px`
-  modalRef.value.style.left = `${vw * 0.3}px`
+  // 移除手动定位，由flex布局处理居中
 })
 // 处理好友申请
 function handleFriendApply() {
-  friendStatus.value = 'applied';
-  // 这里可以添加实际调用API申请好友的逻辑
+  showFriendRequest.value = true;
 }
 
 // 生命周期
@@ -56,7 +56,8 @@ onMounted(async () => {
       region: userData.region || "未设置",
       gender: userData.gender!==0 ? (userData.gender === 1 ? '男' : '女') : '未设置',
       signature: userData.signature || "未设置",
-      avatar_url: userData.avatar_url || '/images/help.png'
+      avatar_url: userData.avatar_url || '/images/help.png',
+      username: userData.username
     };
   } catch (error) {
     console.error('加载用户信息失败:', error);
@@ -120,7 +121,7 @@ onMounted(async () => {
             @click="handleFriendApply"
             class="px-4 py-2 bg-black text-white hover:bg-gray-700 rounded-md transition-colors"
           >
-            添加好友
+            加好友
           </Button>
         </template>
         <template v-else-if="friendStatus === 'applied'">
@@ -137,6 +138,22 @@ onMounted(async () => {
       </div>
     </div>
   </div>
+  
+  <SendFriendRequest 
+    v-if="showFriendRequest"
+    class="z-999"
+    :user="{
+      user_id: props.userId,
+      username:userInfo.username,
+      nickname: userInfo.nickname,
+      avatar_url: userInfo.avatar_url
+    }"
+    @close="showFriendRequest = false"
+    @success="() => {
+      showFriendRequest = false;
+      friendStatus = 'applied';
+    }"
+  />
 </template>
 
 <style scoped>
