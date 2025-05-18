@@ -36,6 +36,7 @@ export interface GroupResponse {
     member_count: number;
     my_role: GroupRole;
     created_at: ISO8601DateTime;
+    // 其他群组设置，如加群验证方式等
 }
 
 export interface JoinedGroupsResponse {
