@@ -22,15 +22,15 @@
 
     <!-- 获取用户加入的群组列表 -->
     <select id="getUserJoinedGroups" resultMap="GroupResultMap">
-        SELECT g.* FROM groups g 
+        SELECT g.* FROM `groups` g
         JOIN group_members m ON g.id = m.group_id 
         WHERE m.user_id = #{userId} AND m.status = 1 AND g.status = 1 
-        ORDER BY g.updated_at DESC LIMIT #{limit} OFFSET #{offset}
+        ORDER BY g.updated_at DESC
     </select>
 
     <!-- 获取用户加入的群组数量 -->
     <select id="countUserJoinedGroups" resultType="int">
-        SELECT COUNT(*) FROM groups g 
+        SELECT COUNT(*) FROM `groups` g
         JOIN group_members m ON g.id = m.group_id 
         WHERE m.user_id = #{userId} AND m.status = 1 AND g.status = 1
     </select>
@@ -38,7 +38,7 @@
     <!-- 查询群组以及成员数量 -->
     <select id="getGroupsWithMemberCount" resultType="java.util.Map">
         SELECT g.*, COUNT(gm.id) as member_count
-        FROM groups g
+        FROM `groups` g
         LEFT JOIN group_members gm ON g.id = gm.group_id AND gm.status = 1
         WHERE g.id IN 
         <foreach collection="groupIds" item="groupId" open="(" separator="," close=")">
@@ -46,4 +46,17 @@
         </foreach>
         GROUP BY g.id
     </select>
+
+    <!-- 插入群组成员 -->
+    <insert id="insertGroupMember">
+        INSERT INTO group_members (id, group_id, user_id)
+        VALUES
+        <foreach collection="memberIDs" item="userid" separator=",">
+            (
+            CONCAT('mem_', ${@cn.hutool.core.util.IdUtil@getSnowflakeNextIdStr()}),
+            #{gid},
+            #{userid},
+            )
+        </foreach>
+    </insert>
 </mapper> 

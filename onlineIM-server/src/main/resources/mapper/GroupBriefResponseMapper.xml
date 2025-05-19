@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="icu.tianqingyuluo.onlineim.mapper.GroupBriefResponseMapper">
+    <!-- 群组结果映射 -->
+    <resultMap id="GroupBriefResponseMap" type="icu.tianqingyuluo.onlineim.pojo.dto.response.GroupBriefResponse">
+        <id property="groupID" column="id"/>
+        <result property="ownerID" column="owner_id"/>
+        <result property="maxMembers" column="max_members"/>
+        <result property="currentMembers" column="current_members"/>
+        <result property="joinType" column="join_type"/>
+    </resultMap>
+    <!-- 模糊搜索群组 -->
+    <select id="searchGroups" resultMap="GroupBriefResponseMap">
+        SELECT id, name, avatar, description, owner_id, join_type
+        FROM `groups`
+        WHERE (id LIKE CONCAT('%', #{keyword}, '%') OR
+               name LIKE CONCAT('%', #{keyword}, '%'))
+    </select>
+</mapper>

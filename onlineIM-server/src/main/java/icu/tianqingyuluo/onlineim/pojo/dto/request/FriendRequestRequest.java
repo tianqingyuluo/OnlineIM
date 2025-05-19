@@ -1,6 +1,7 @@
 package icu.tianqingyuluo.onlineim.pojo.dto.request;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -8,6 +9,7 @@ import lombok.NoArgsConstructor;
  * 好友请求请求体
  */
 @Data
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class FriendRequestRequest {

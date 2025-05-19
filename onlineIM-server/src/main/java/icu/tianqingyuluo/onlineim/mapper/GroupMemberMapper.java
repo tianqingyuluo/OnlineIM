@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.mapper;
 
+import icu.tianqingyuluo.onlineim.pojo.dto.response.GroupMemberResponse;
 import icu.tianqingyuluo.onlineim.pojo.entity.GroupMember;
 import org.apache.ibatis.annotations.*;
 
@@ -27,9 +28,9 @@ public interface GroupMemberMapper {
     GroupMember getByGroupIdAndUserId(@Param("groupId") String groupId, @Param("userId") String userId);
     
     /**
-     * 获取群组的所有成员（XML实现带排序和分页）
+     * 获取群组的所有成员
      */
-    List<GroupMember> getByGroupId(@Param("groupId") String groupId, @Param("offset") int offset, @Param("limit") int limit);
+    List<GroupMemberResponse> getGroupMembersByGroupID(String groupId);
     
     /**
      * 统计群组的成员数量
@@ -49,7 +50,13 @@ public interface GroupMemberMapper {
     @Insert("INSERT INTO group_members(id, group_id, user_id, nickname, role, mute_end_time, join_time, status, created_at, updated_at) " +
            "VALUES(#{id}, #{groupId}, #{userId}, #{nickname}, #{role}, #{muteEndTime}, #{joinTime}, #{status}, #{createdAt}, #{updatedAt})")
     int insert(GroupMember member);
-    
+
+    /**
+     * 新增群成员
+     */
+    @Insert("INSERT INTO group_members(id,group_id, user_id) " +
+            "VALUES(#{id}, #{groupId},#{userid})")
+    int insertById(@Param("id") String id,@Param("groupId") String groupId,@Param("userid") String userid);
     /**
      * 更新群成员昵称
      */
@@ -61,7 +68,9 @@ public interface GroupMemberMapper {
      */
     @Update("UPDATE group_members SET role = #{role}, updated_at = #{updatedAt} WHERE id = #{id}")
     int updateRole(@Param("id") String id, @Param("role") int role, @Param("updatedAt") String updatedAt);
-    
+
+    @Update("UPDATE group_members SET role = 2 WHERE user_id=#{userid}")
+    void initGroupOwner(String userid);
     /**
      * 更新群成员禁言时间
      */
@@ -77,7 +86,7 @@ public interface GroupMemberMapper {
     /**
      * 删除群成员
      */
-    @Delete("DELETE FROM group_members WHERE id = #{id}")
+    @Delete("DELETE FROM group_members WHERE user_id = #{id}")
     int delete(String id);
     
     /**

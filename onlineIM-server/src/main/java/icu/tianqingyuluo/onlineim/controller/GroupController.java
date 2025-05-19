@@ -48,7 +48,7 @@
 //    public ResponseEntity<?> createGroup(@RequestBody GroupCreateRequest request, @RequestHeader("Authorization") String token) {
 //        // TODO: 实现创建群组逻辑
 //        String username = jwtUtil.getUsernameFromToken(token);
-//        String userID = userService.getUserInfoByUsername(username).getUserId();
+//        String userID = jwtUtil.getUserIDFromToken(token);
 //
 //        if (request.getMaxMembers() > 2000) {
 //            // 设置最大人数不大于500
@@ -56,7 +56,7 @@
 //        }
 //        try {
 //            String groupID = groupService.createGroup(request, userID);
-//            return ResponseEntity.ok(groupService.getGroupbyID(groupID));
+//            return ResponseEntity.ok(groupService.getGroupByID(groupID));
 //        }
 //        catch (PersistenceException e) {
 //            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ErrorCodeUtil.getErrorOutput("500", "服务器内部错误"));
@@ -93,14 +93,13 @@
 //    @PutMapping("/{groupId}")
 //    public ResponseEntity<?> updateGroup(@RequestHeader("Authorization") String token, @PathVariable String groupId, @RequestBody GroupUpdateRequest request) {
 //        String username = jwtUtil.getUsernameFromToken(token);
-//        String userID = userService.getUserInfoByUsername(username).getUserId();
+//        String userID = jwtUtil.getUserIDFromToken(token);
 //        // 检查用户是否有权限更新群组信息 (例如, 是否为群主或管理员)
-//        // boolean isAdminOrOwner = groupService.isUserAdminOrOwner(groupId, userID);
-//        // if (!isAdminOrOwner) {
-//        //     return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorCodeUtil.getErrorOutput("403", "无权限操作"));
-//        // }
+//         boolean isAdminOrOwner = groupService.isUserAdminOrOwner(groupId, userID);
+//         if (!isAdminOrOwner) {
+//             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorCodeUtil.getErrorOutput("403", "无权限操作"));
+//         }
 //        try {
-//            // GroupService.updateGroupByID(String groupId, GroupUpdateRequest request, String operatorId)
 //            // 该方法应负责更新群组信息，并返回更新后的群组信息 GroupResponse。
 //            // operatorId 用于权限校验和记录操作日志。
 //            GroupResponse response = groupService.updateGroupByID(groupId, request, userID);
@@ -123,9 +122,9 @@
 //    @DeleteMapping("/{groupId}")
 //    public ResponseEntity<?> disbandGroup(@RequestHeader("Authorization") String token, @PathVariable String groupId) {
 //        String username = jwtUtil.getUsernameFromToken(token);
-//        String userID = userService.getUserInfoByUsername(username).getUserId();
+//        String userID = jwtUtil.getUserIDFromToken(token);
 //        try {
-//            // GroupService.disbandGroupByID(String groupId, String operatorId)
+////            groupService.disbandGroupByID(groupId,operatorId);
 //            // 该方法应负责校验操作者是否为群主，然后解散群组（例如更新群组状态为已解散）。
 //            // 成功则返回成功信息，失败则抛出异常或返回错误信息。
 //            boolean success = groupService.disbandGroupByID(groupId, userID);
@@ -147,9 +146,9 @@
 //    @GetMapping("/joined")
 //    public ResponseEntity<?> getJoinedGroups(@RequestHeader("Authorization") String token) {
 //        String username = jwtUtil.getUsernameFromToken(token);
-//        String userID = userService.getUserInfoByUsername(username).getUserId();
+//        String userID = jwtUtil.getUserIDFromToken(token);
 //        try {
-//            // GroupService.getJoinedGroupsByUserID(String userId)
+////            groupService.getJoinedGroupsByUserID(userId);
 //            // 该方法应负责查询指定用户加入的所有群组列表，并返回 List<GroupResponse>。
 //            List<GroupResponse> groups = groupService.getJoinedGroupsByUserID(userID);
 //            return ResponseEntity.ok(groups);
@@ -169,7 +168,7 @@
 //    @PostMapping("/{groupId}/avatar")
 //    public ResponseEntity<?> uploadGroupAvatar(@RequestHeader("Authorization") String token, @PathVariable String groupId, @RequestParam("file") MultipartFile avatar) {
 //        String username = jwtUtil.getUsernameFromToken(token);
-//        String userID = userService.getUserInfoByUsername(username).getUserId();
+//        String userID = jwtUtil.getUserIDFromToken(token);
 //        // 检查用户是否有权限修改群头像 (例如, 是否为群主或管理员)
 //         boolean isAdminOrOwner = groupService.isUserAdminOrOwner(groupId, userID);
 //         if (!isAdminOrOwner) {
@@ -197,14 +196,14 @@
 //    @GetMapping("/{groupId}/members")
 //    public ResponseEntity<?> getGroupMembers(@PathVariable String groupId, @RequestHeader("Authorization") String token) {
 //        String username = jwtUtil.getUsernameFromToken(token);
-//        String userID = userService.getUserInfoByUsername(username).getUserId();
+//        String userID = jwtUtil.getUserIDFromToken(token);
 //        // 检查用户是否是群成员，有权限查看成员列表
-//        // boolean isMember = groupService.isUserMember(groupId, userID);
-//        // if (!isMember) {
-//        //     return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorCodeUtil.getErrorOutput("403", "您不是该群成员，无权限查看"));
-//        // }
+//         boolean isMember = groupService.isUserMember(groupId, userID);
+//         if (!isMember) {
+//             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorCodeUtil.getErrorOutput("403", "您不是该群成员，无权限查看"));
+//         }
 //        try {
-//            // GroupService.getGroupMembersByGroupID(String groupId)
+//            groupService.getGroupMembersByGroupID(groupId);
 //            // 该方法应负责查询指定群组的所有成员列表，并返回 List<GroupMemberResponse>。
 //            List<GroupMemberResponse> members = groupService.getGroupMembersByGroupID(groupId);
 //            return ResponseEntity.ok(members);
@@ -224,27 +223,27 @@
 //    @PostMapping("/{groupId}/invite")
 //    public ResponseEntity<?> inviteToGroup(@RequestHeader("Authorization") String token, @PathVariable String groupId, @RequestBody Map<String, List<String>> request) {
 //        String username = jwtUtil.getUsernameFromToken(token);
-//        String inviterId = userService.getUserInfoByUsername(username).getUserId();
+//        String inviterId = jwtUtil.getUserIDFromToken(token);
 //        List<String> userIdsToInvite = request.get("user_ids");
 //
 //        if (userIdsToInvite == null || userIdsToInvite.isEmpty()) {
 //            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "被邀请用户列表不能为空"));
 //        }
 //
-//        // 检查邀请人是否有权限邀请 (例如, 是否为群成员，且群设置允许成员邀请，或者邀请人是管理员/群主)
-//        // boolean canInvite = groupService.canUserInvite(groupId, inviterId);
-//        // if (!canInvite) {
-//        //     return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorCodeUtil.getErrorOutput("403", "无权限邀请用户"));
-//        // }
+////         检查邀请人是否有权限邀请 (例如, 是否为群成员，且群设置允许成员邀请，或者邀请人是管理员/群主)
+//         boolean canInvite = groupService.canUserInvite(groupId, inviterId);
+//         if (!canInvite) {
+//             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorCodeUtil.getErrorOutput("403", "无权限邀请用户"));
+//         }
 //
 //        try {
-//            // GroupService.inviteUsersToGroup(String groupId, List<String> userIdsToInvite, String inviterId)
-//            // 该方法应负责处理邀请逻辑：
-//            // 1. 校验邀请人权限。
-//            // 2. 校验群组是否存在，是否允许邀请。
-//            // 3. 校验被邀请用户是否存在，是否已经是成员，是否已在请求列表。
-//            // 4. 根据群组的 join_type，可能直接添加成员()或创建邀请记录/入群申请。
-//            // 返回成功或部分成功的信息，或错误信息。
+//            groupService.inviteUsersToGroup(groupId, userIdsToInvite,inviterId);
+////             该方法应负责处理邀请逻辑：
+////             1. 校验邀请人权限。
+////             2. 校验群组是否存在，是否允许邀请。
+////             3. 校验被邀请用户是否存在，是否已经是成员，是否已在请求列表。
+////             4. 根据群组的 join_type，可能直接添加成员()或创建邀请记录/入群申请。
+////             返回成功或部分成功的信息，或错误信息。
 //            boolean success = groupService.inviteUsersToGroup(groupId, userIdsToInvite, inviterId);
 //            if (success) {
 //                return ResponseEntity.ok(Map.of("message", "邀请已发送"));
@@ -266,11 +265,11 @@
 //    @PostMapping("/{groupId}/join")
 //    public ResponseEntity<?> joinGroup(@RequestHeader("Authorization") String token, @PathVariable String groupId, @RequestBody(required = false) GroupJoinRequest request) {
 //        String username = jwtUtil.getUsernameFromToken(token);
-//        String applicantId = userService.getUserInfoByUsername(username).getUserId();
+//        String applicantId = jwtUtil.getUserIDFromToken(token);
 //        String message = (request != null) ? request.getMessage() : null;
 //
 //        try {
-//            // GroupService.requestToJoinGroup(String groupId, String applicantId, String message)
+//            groupService.requestToJoinGroup(groupId,applicantId,message);
 //            // 该方法应负责处理用户加群申请：
 //            // 1. 校验群组是否存在，加群方式（join_type）。
 //            // 2. 校验用户是否已是成员或已在申请中。
@@ -302,10 +301,10 @@
 //    @PostMapping("/{groupId}/quit")
 //    public ResponseEntity<?> quitGroup(@RequestHeader("Authorization") String token, @PathVariable String groupId) {
 //        String username = jwtUtil.getUsernameFromToken(token);
-//        String userId = userService.getUserInfoByUsername(username).getUserId();
+//        String userId = jwtUtil.getUserIDFromToken(token);
 //
 //        try {
-//            // GroupService.quitGroup(String groupId, String userId)
+//            groupService.quitGroup(groupId,userId);
 //            // 该方法应负责处理用户退群：
 //            // 1. 校验用户是否是群成员。
 //            // 2. 如果是群主，需要先转让群主或解散群组（根据业务逻辑）。
@@ -338,7 +337,7 @@
 //            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "搜索关键词不能为空"));
 //        }
 //        try {
-//            // GroupService.searchGroups(String keyword)
+//            groupService.searchGroups(keyword);
 //            // 该方法应负责根据关键词搜索群组（如按群名、群ID模糊匹配），并返回 List<GroupResponse>。
 //            List<GroupResponse> groups = groupService.searchGroups(keyword.trim());
 //            return ResponseEntity.ok(groups);
@@ -357,16 +356,16 @@
 //    @GetMapping("/{groupId}/join-requests")
 //    public ResponseEntity<?> getGroupJoinRequests(@RequestHeader("Authorization") String token, @PathVariable String groupId) {
 //        String username = jwtUtil.getUsernameFromToken(token);
-//        String operatorId = userService.getUserInfoByUsername(username).getUserId();
+//        String operatorId = jwtUtil.getUserIDFromToken(token);
 //
 //        // 检查操作者是否有权限查看加入请求 (例如, 是否为群主或管理员)
-//        // boolean isAdminOrOwner = groupService.isUserAdminOrOwner(groupId, operatorId);
-//        // if (!isAdminOrOwner) {
-//        //     return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorCodeUtil.getErrorOutput("403", "无权限查看加群请求"));
-//        // }
+//         boolean isAdminOrOwner = groupService.isUserAdminOrOwner(groupId, operatorId);
+//         if (!isAdminOrOwner) {
+//             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorCodeUtil.getErrorOutput("403", "无权限查看加群请求"));
+//         }
 //
 //        try {
-//            // GroupService.getGroupJoinRequests(String groupId, String operatorId)
+//            groupService.getGroupJoinRequests(groupId,operatorId);
 //            // 该方法应负责查询指定群组的待处理加入请求列表，并返回 List<GroupJoinRequestResponse>。
 //            // operatorId 用于权限校验。
 //            List<GroupJoinRequestResponse> requests = groupService.getGroupJoinRequests(groupId, operatorId);
@@ -392,20 +391,20 @@
 //            @PathVariable String requestId,
 //            @RequestParam String action) {
 //        String username = jwtUtil.getUsernameFromToken(token);
-//        String operatorId = userService.getUserInfoByUsername(username).getUserId();
+//        String operatorId = jwtUtil.getUserIDFromToken(token);
 //
 //        if (!"accept".equalsIgnoreCase(action) && !"reject".equalsIgnoreCase(action)) {
 //            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "无效的操作参数，请使用 'accept' 或 'reject'"));
 //        }
 //
-//        // 检查操作者是否有权限处理加入请求 (例如, 是否为群主或管理员)
-//        // boolean isAdminOrOwner = groupService.isUserAdminOrOwner(groupId, operatorId);
-//        // if (!isAdminOrOwner) {
-//        //     return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorCodeUtil.getErrorOutput("403", "无权限处理加群请求"));
-//        // }
+////         检查操作者是否有权限处理加入请求 (例如, 是否为群主或管理员)
+//         boolean isAdminOrOwner = groupService.isUserAdminOrOwner(groupId, operatorId);
+//         if (!isAdminOrOwner) {
+//             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorCodeUtil.getErrorOutput("403", "无权限处理加群请求"));
+//         }
 //
 //        try {
-//            // GroupService.handleJoinRequest(String groupId, String requestId, String action, String operatorId)
+//            groupService.handleJoinRequest(groupId, requestId, action, operatorId);
 //            // 该方法应负责处理加群请求：
 //            // 1. 校验操作者权限。
 //            // 2. 校验请求是否存在且状态为待处理。

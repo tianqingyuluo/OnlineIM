@@ -71,9 +71,10 @@
             <if test="userUpdateRequest.gender != null">
             gender =
                 <choose>
-                    <when test="userUpdateRequest.gender == 'male'">1</when>
-                    <when test="userUpdateRequest.gender == 'female'">2</when>
-                </choose>,
+                    <when test="userUpdateRequest.gender == 1">1,</when>
+                    <when test="userUpdateRequest.gender == 2">2,</when>
+                    <otherwise>0,</otherwise>
+                </choose>
             </if>
             <if test="userUpdateRequest.email != null">email = #{userUpdateRequest.email},</if>
             <if test="userUpdateRequest.phone != null">phone = #{userUpdateRequest.phone},</if>
