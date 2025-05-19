@@ -19,16 +19,28 @@ import GroupAvatarWithMenu from "@/components/MainPart/GroupAvatarWithMenu.vue";
 // 添加菜单元素的引用
 const menuRef = ref<HTMLElement | null>(null)//右上角群info
 const menuButtonRef = ref<HTMLElement | null>(null)
+const contextMenuRoot = ref<HTMLElement | null>(null)
 
 // 点击区域外关闭菜单
-onClickOutside(menuRef, (event) => {
-  // 检查点击是否来自菜单按钮，如果是则不关闭
-  if (menuButtonRef.value && menuButtonRef.value.contains(event.target as Node)) {
-    return
-  }
-  showMenu.value = false
-}, {
-  ignore: [menuButtonRef] // 忽略菜单按钮的点击
+const setupClickOutside = () => {
+  if (!menuRef.value || !menuButtonRef.value || !contextMenuRoot.value) return
+  
+  onClickOutside(menuRef, (event) => {
+    // 检查点击是否来自菜单按钮或右键菜单，如果是则不关闭
+    if (
+      menuButtonRef.value?.contains(event.target as Node) || 
+      contextMenuRoot.value?.contains(event.target as Node)
+    ) {
+      return
+    }
+    showMenu.value = false
+  }, {
+    ignore: [menuButtonRef, contextMenuRoot] // 忽略菜单按钮和右键菜单的点击
+  })
+}
+
+onMounted(() => {
+  setupClickOutside()
 })
 
 const route = useRoute()
@@ -273,7 +285,13 @@ function toggleMenu() {
             ref="menuRef"
             class="absolute right-0 top-full w-80 bg-white shadow-lg z-50 h-[calc(100vh-60px)]"
         >
-          <GroupInfoCard :group="currentGroup" :group-settings="currentGroupSettings" :myRole="currentGroup.my_role" class="h-full overflow-y-auto" />
+          <GroupInfoCard 
+  ref="groupInfoCardRef"
+  :group="currentGroup" 
+  :group-settings="currentGroupSettings" 
+  :myRole="currentGroup.my_role" 
+  class="h-full overflow-y-auto" 
+/>
         </div>
       </Transition>
     </div>

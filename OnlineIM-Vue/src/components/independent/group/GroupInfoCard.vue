@@ -20,6 +20,7 @@ const roleTranslations = {
 }
 
 const showMembersList = ref(false)
+const groupMembersListRef = ref<InstanceType<typeof GroupMembersList> | null>(null)
 
 const handleViewMembers = () => {
   showMembersList.value = true
@@ -212,6 +213,7 @@ onMounted(() => {
           key="members"
           :groupId="group.group_id"
           @back="showMembersList = false"
+          ref="groupMembersListRef"
       />
     </Transition>
   </div>
