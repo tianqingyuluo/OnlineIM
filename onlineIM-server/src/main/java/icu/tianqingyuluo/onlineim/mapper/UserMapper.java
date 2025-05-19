@@ -23,7 +23,9 @@ public interface UserMapper {
      */
     @Select("SELECT id, username, nickname, avatar, email, phone, signature, gender, status, last_login_time, last_login_ip, created_at, updated_at FROM users WHERE id = #{id}")
     User getById(String id);
-    
+
+    @Select("SELECT username FROM users WHERE id = #{id}")
+    String getUsernameById(String id);
     /**
      * 根据用户名查询用户
      */
@@ -34,6 +36,12 @@ public interface UserMapper {
      */
     @Select("SELECT EXISTS(SELECT 1 FROM users WHERE username = #{username})")
     boolean existsByUsername(String username);
+
+    /**
+     * 查询用户id是否存在
+     */
+    @Select("SELECT EXISTS(SELECT 1 FROM users WHERE id = #{userid})")
+    boolean existsByUserid(String userid);
     /**
      * 根据用户名查询密码
      */

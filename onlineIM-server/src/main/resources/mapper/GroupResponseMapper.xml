@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="icu.tianqingyuluo.onlineim.mapper.GroupResponseMapper">
+    <!-- 群组结果映射 -->
+    <resultMap id="GroupResponseMap" type="icu.tianqingyuluo.onlineim.pojo.dto.response.GroupResponse">
+        <id property="groupID" column="id"/>
+        <result property="avatarUrl" column="avatar"/>
+        <result property="ownerID" column="owner_id"/>
+        <result property="memberCount" column="current_members"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <!-- 获取用户加入的群组详细信息 -->
+    <select id="getGroupDetailByID" resultMap="GroupResponseMap">
+        SELECT
+            g.id,
+            g.name,
+            g.avatar,
+            g.owner_id,
+            g.description,
+            g.current_members,
+            g.created_at,
+            gn.content AS announcement,
+            gm.role AS myRole
+        FROM
+            `groups` g
+                LEFT JOIN (
+                SELECT
+                    group_id,
+                    content,
+                    ROW_NUMBER() OVER (PARTITION BY group_id ORDER BY created_at DESC) AS rn
+                FROM
+                    group_announcements
+            ) gn ON g.id = gn.group_id AND gn.rn = 1  -- 精确关联最新公告
+                LEFT JOIN group_members gm ON g.id = gm.group_id AND gm.user_id = #{userid}
+        WHERE
+            g.id = #{groupId}
+    </select>
+    <!-- 获取用户加入的群组列表 -->
+    <select id="getJoinedGroupsByUserID" resultMap="GroupResponseMap">
+        SELECT
+            g.id,
+            g.name,
+            g.avatar,
+            g.owner_id,
+            g.description,
+            g.current_members,
+            g.created_at,
+            gn.content AS announcement,
+            gm.role AS myRole
+        FROM
+            `groups` g
+                LEFT JOIN (
+                SELECT
+                    group_id,
+                    content,
+                    ROW_NUMBER() OVER (PARTITION BY group_id ORDER BY created_at DESC) AS rn
+                FROM
+                    group_announcements
+            ) gn ON g.id = gn.group_id AND gn.rn = 1  -- 精确关联最新公告
+                LEFT JOIN group_members gm ON g.id = gm.group_id AND gm.user_id = #{userid}
+        WHERE
+            gm.user_id=#{userid}
+        AND
+            gm.group_id=g.id
+    </select>
+    <!-- 获取群成员列表 -->
+    <select id="getGroupMembersByGroupID" resultMap="GroupResponseMap">
+        SELECT
+            g.id,
+            g.name,
+            g.avatar,
+            g.owner_id,
+            g.description,
+            g.current_members,
+            g.created_at,
+            gn.content AS announcement,
+            gm.role AS myRole
+        FROM
+            `groups` g
+                LEFT JOIN (
+                SELECT
+                    group_id,
+                    content,
+                    ROW_NUMBER() OVER (PARTITION BY group_id ORDER BY created_at DESC) AS rn
+                FROM
+                    group_announcements
+            ) gn ON g.id = gn.group_id AND gn.rn = 1  -- 精确关联最新公告
+                LEFT JOIN group_members gm ON g.id = gm.group_id
+        WHERE
+            g.id = #{groupId}
+    </select>
+    <!-- 模糊搜索群组 -->
+    <select id="searchGroups" resultMap="GroupResponseMap">
+        SELECT id, username, nickname, avatar, email, phone, signature, gender, status, last_login_time, last_login_ip, created_at, updated_at
+        FROM users
+        WHERE (username LIKE CONCAT('%', #{keyword}, '%') OR
+               nickname LIKE CONCAT('%', #{keyword}, '%') OR
+               email LIKE CONCAT('%', #{keyword}, '%') OR
+               phone LIKE CONCAT('%', #{keyword}, '%'))
+          AND status = 1
+        ORDER BY created_at DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+</mapper>
