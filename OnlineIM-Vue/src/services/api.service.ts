@@ -1,6 +1,6 @@
 // src/services/api.service.ts
 import axios from 'axios';
-import { API_BASE_URL } from '@/config';
+import { API_BASE_URL } from '../../shared/config.ts';
 import { useUserStore } from '@/stores/user';
 import { toast } from 'vue-sonner';
 import router from '@/router';

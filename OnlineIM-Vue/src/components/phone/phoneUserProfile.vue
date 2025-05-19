@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import {ref,  onMounted,  watch} from 'vue';
 import { useUserStore } from "@/stores/user.ts";
-import UserSettings from "./UserSettings.vue";
+import UserSettings from "@/components/independent/profile/UserSettings.vue";
 import DraggableHeader from "@/components/common/DraggableHeader.vue";
+import PhoneUserSettings from "@/components/phone/phoneUserSettings.vue";
 
 // 用户数据逻辑
 const isLoading = ref(false);
@@ -78,7 +79,7 @@ const editProfile = () => {
 
 <template>
   <!-- 外层容器添加拖动功能 -->
-  <div ref="modalRef" class="fixed z-50 top-[10%] left-[30%] w-[40%]">
+  <div ref="modalRef" class="fixed z-50 top-[5%] left-[30%] w-[40%]  overflow-auto">
     <transition name="fade-slide" mode="out-in">
       <div v-if="!showSettings" class="bg-white rounded-lg shadow-lg w-full max-w-md">
         <!-- 新增统一顶栏 -->
@@ -144,7 +145,9 @@ const editProfile = () => {
 
     <!-- 设置组件 -->
     <transition name="fade-slide" mode="out-in">
-      <UserSettings v-if="showSettings" @close="showSettings = false" />
+      <phoneUserSettings v-if="showSettings" @close="showSettings = false"
+                    class="fixed z-50 w-[90%] max-w-md max-h-[90vh]"
+                    style="left: 5%"/>
     </transition>
   </div>
 </template>

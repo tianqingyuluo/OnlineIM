@@ -2,6 +2,12 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { groupService } from '@/services/group.service'
 import type { GroupMember } from '@/type/group'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu'
 
 const props = defineProps<{
   groupId: string
@@ -11,6 +17,18 @@ const members = ref<GroupMember[]>([])
 const offset = ref(0)
 const loading = ref(false)
 const hasMore = ref(true)
+
+function handleKick(member: GroupMember) {
+  console.log('踢出群聊:', member.user_id)
+}
+
+function handleSetAdmin(member: GroupMember) {
+  console.log('设为管理员:', member.user_id)
+}
+
+function handleViewProfile(member: GroupMember) {
+  console.log('查看资料:', member.user_id)
+}
 
 async function loadMembers() {
   if (loading.value || !hasMore.value) return
@@ -66,20 +84,37 @@ onUnmounted(() => {
       </button>
       <h3>群聊成员</h3>
     </div>
-
     <div v-if="members.length === 0 && !loading" class="empty-message">
       暂无群成员
     </div>
     <div v-else>
-      <div v-for="member in members" :key="member.user_id" class="member-item">
-        <img
-            :src="member.avatar_url || '/images/default-avatar.png'"
-            class="avatar"
-        >
-        <div class="member-info">
-          <span class="nickname">{{ member.username }}</span>
-          <span class="role">{{ member.role }}</span>
-        </div>
+      <!-- 将上下文菜单移到循环内部 -->
+      <div v-for="member in members" :key="member.user_id">
+        <ContextMenu>
+          <ContextMenuTrigger>
+            <div class="member-item">
+              <img
+                  :src="member.avatar_url || '/images/default-avatar.png'"
+                  class="avatar"
+              >
+              <div class="member-info">
+                <span class="nickname">{{ member.username }}</span>
+                <span class="role">{{ member.role }}</span>
+              </div>
+            </div>
+          </ContextMenuTrigger>
+          <ContextMenuContent>
+            <ContextMenuItem @click="handleKick(member)">
+              踢出群聊
+            </ContextMenuItem>
+            <ContextMenuItem @click="handleSetAdmin(member)">
+              设为管理员
+            </ContextMenuItem>
+            <ContextMenuItem @click="handleViewProfile(member)">
+              查看资料
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
       </div>
       <div v-if="loading" class="loading">加载中...</div>
       <div v-if="!hasMore && members.length > 0" class="no-more">没有更多成员了</div>
@@ -118,6 +153,13 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   padding: 8px 0;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.member-item:hover {
+  background-color: #f5f5f5;
+  border-radius: 6px;
 }
 
 .avatar {

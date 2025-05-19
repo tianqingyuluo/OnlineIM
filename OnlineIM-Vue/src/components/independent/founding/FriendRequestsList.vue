@@ -82,64 +82,105 @@ onUnmounted(() => {
 
 <style scoped>
 .request-list-container {
-  height: 95%;
-  overflow-y: auto;
-  padding: 10px;
+  height: 100%;          /* 填充父容器 */
+  max-height: 80vh;      /* 限制最大高度 */
+  overflow-y: auto;      /* 允许垂直滚动 */
+  padding: 0.75rem;      /* 使用 rem 单位 */
 }
+
 .empty-message {
   text-align: center;
-  padding: 20px;
-  color: #999;
+  padding: 1.25rem;
+  color: hsl(0, 0%, 60%); /* 使用 hsl 颜色 */
 }
+
 .request-item {
   display: flex;
   align-items: center;
-  padding: 10px;
-  border-bottom: 1px solid #eee;
+  gap: 0.75rem;          /* 替代 margin-right */
+  padding: 0.75rem;
+  border-bottom: 1px solid hsl(0, 0%, 90%);
 }
+
 .avatar {
-  width: 40px;
-  height: 40px;
+  width: 2.5rem;         /* 使用 rem 单位 */
+  height: 2.5rem;
+  min-width: 2.5rem;     /* 防止被压缩 */
   border-radius: 50%;
-  margin-right: 10px;
+  object-fit: cover;     /* 确保图片比例正确 */
 }
+
 .request-info {
+  flex: 1;               /* 自动填充剩余空间 */
+  min-width: 0;          /* 防止文本溢出 */
   display: flex;
   flex-direction: column;
-  width: 70%;
+  gap: 0.25rem;
 }
+
 .nickname {
   font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+
 .message {
-  color: #666;
-  font-size: 0.9em;
+  color: hsl(0, 0%, 40%);
+  font-size: 0.875rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.loading, .no-more {
+
+.loading,
+.no-more {
   text-align: center;
-  padding: 10px;
-  color: #999;
+  padding: 0.75rem;
+  color: hsl(0, 0%, 60%);
 }
+
 .action-buttons {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0.5rem;
   margin-left: auto;
 }
+
 .reject-btn {
-  padding: 5px 10px;
+  padding: 0.375em 0.75em; /* 使用 em 单位 */
   background: white;
   color: black;
-  border: 1px solid #ccc;
-  border-radius: 4px;
+  border: 1px solid hsl(0, 0%, 80%);
+  border-radius: 0.375rem;
   cursor: pointer;
+  min-width: 4rem;       /* 确保按钮最小宽度 */
 }
+
 .accept-btn {
-  padding: 5px 10px;
+  padding: 0.375em 0.75em;
   background: black;
   color: white;
   border: 1px solid black;
-  border-radius: 4px;
+  border-radius: 0.375rem;
   cursor: pointer;
+  min-width: 4rem;
+}
+
+/* 移动端适配 */
+@media (max-width: 640px) {
+  .request-item {
+    padding: 0.5rem;
+  }
+  
+  .avatar {
+    width: 2rem;
+    height: 2rem;
+    min-width: 2rem;
+  }
+  
+  .action-buttons {
+    flex-direction: row; /* 水平排列按钮 */
+  }
 }
 </style>

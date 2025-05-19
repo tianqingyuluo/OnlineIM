@@ -1,7 +1,7 @@
 <template>
   <div class="flex bg-white p-6 rounded-lg shadow-sm max-w-4xl mx-auto">
     <!-- 左侧好友头像侧边栏 -->
-    <div class="w-1/4 pr-4 border-r border-gray-200">
+    <div class="w-2/5 pr-4 border-r border-gray-200">
       <h3 class="text-sm font-medium text-gray-700 mb-3">选择好友</h3>
       <div class="max-h-96 overflow-y-auto space-y-2">
         <div 
@@ -29,7 +29,7 @@
     </div>
 
     <!-- 右侧创建群组表单 -->
-    <div class="w-3/4 pl-6">
+    <div class="w-3/5 pl-6">
       <!-- 标题区域 -->
       <div class="flex justify-between items-center mb-6">
         <h2 class="text-xl font-medium text-gray-800">创建新群组</h2>

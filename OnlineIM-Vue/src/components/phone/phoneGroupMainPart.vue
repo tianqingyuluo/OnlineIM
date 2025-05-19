@@ -14,7 +14,6 @@ import { onClickOutside } from '@vueuse/core'
 import {MessageService} from "@/services/message.service.ts";
 import { useUserStore } from '@/stores/user.ts';
 import { GroupSettingService } from "@/services/groupsetting.service";
-import GroupAvatarWithMenu from "@/components/MainPart/GroupAvatarWithMenu.vue";
 
 // 添加菜单元素的引用
 const menuRef = ref<HTMLElement | null>(null)//右上角群info
@@ -54,7 +53,7 @@ onMounted(async () => {
     currentGroup.value = groupInfo
     currentGroupSettings.value = groupSettings
     console.log("设置后的群组信息:", currentGroup.value) // 检查响应式数据
-    
+
     // 确保加载群组信息后立即加载消息
     await loadMessages()
   } catch (error) {
@@ -70,12 +69,12 @@ const noMoreInfo = ref(false)
 
 async function loadMessages() {
   if (isLoading.value || !hasMore.value) return
-  
+
   isLoading.value = true
   try {
-    const timestamp = groupMessages.value.length > 0 
-      ? groupMessages.value[0].created_at 
-      : undefined
+    const timestamp = groupMessages.value.length > 0
+        ? groupMessages.value[0].created_at
+        : undefined
     const messageHistory = await MessageService.getMessageHistory(groupId.value, timestamp)
     console.log('获取到的消息历史:', messageHistory)
     if (messageHistory) {
@@ -85,13 +84,13 @@ async function loadMessages() {
         hasMore.value = false
         noMoreInfo.value = true
       }
-      
+
       if (!timestamp) {
         groupMessages.value = newMessages
       } else {
         groupMessages.value = [...newMessages, ...groupMessages.value]
       }
-      
+
       console.log('获取到的消息历史:', newMessages)
     }
   } catch (error) {
@@ -104,7 +103,7 @@ async function loadMessages() {
 function handleScroll(e: Event) {
   const target = e.target as HTMLElement
   const scrollThreshold = 100 // 设置滚动阈值
-  
+
   // 当滚动到接近顶部(阈值范围内)且还有更多消息可加载时
   if (target.scrollTop <= scrollThreshold && hasMore.value && !isLoading.value) {
     page.value += 1
@@ -118,7 +117,7 @@ onMounted(() => {
   if (chatContainer) {
     chatContainer.addEventListener('scroll', handleScroll)
   }
-  
+
   // 添加键盘事件监听
   const textarea = document.getElementById('message-2')
   if (textarea) {
@@ -131,7 +130,7 @@ onBeforeUnmount(() => {
   if (chatContainer) {
     chatContainer.removeEventListener('scroll', handleScroll)
   }
-  
+
   // 移除键盘事件监听
   const textarea = document.getElementById('message-2')
   if (textarea) {
@@ -181,9 +180,9 @@ function handleEmojiSelect(emoji: string) {
 
     // 在光标位置插入表情
     const newValue =
-      currentValue.substring(0, cursorPos) +
-      emoji +
-      currentValue.substring(cursorPos)
+        currentValue.substring(0, cursorPos) +
+        emoji +
+        currentValue.substring(cursorPos)
 
     // 更新文本框值
     textareaEl.value = newValue
@@ -207,10 +206,10 @@ function handleKeyDown(e: KeyboardEvent) {
     // Ctrl+Enter换行
     const cursorPos = textareaEl.selectionStart || 0
     const currentValue = textareaEl.value || ''
-    textareaEl.value = 
-      currentValue.substring(0, cursorPos) + 
-      '\n' + 
-      currentValue.substring(cursorPos)
+    textareaEl.value =
+        currentValue.substring(0, cursorPos) +
+        '\n' +
+        currentValue.substring(cursorPos)
     textareaEl.selectionStart = cursorPos + 1
     textareaEl.selectionEnd = cursorPos + 1
   }
@@ -221,16 +220,16 @@ async function handleSendClick() {
   if (textareaEl && textareaEl.value.trim()) {
     try {
       const response = await MessageService.putMessage(
-        groupId.value,
-        0, // 文本消息
-        textareaEl.value
+          groupId.value,
+          0, // 文本消息
+          textareaEl.value
       )
-            // 添加到消息列表
+      // 添加到消息列表
       groupMessages.value.push(response)
-      
+
       // 清空输入框
       textareaEl.value = ''
-      
+
       // 滚动到底部
       nextTick(() => {
         const chatContainer = document.querySelector('.overflow-y-auto')
@@ -271,7 +270,7 @@ function toggleMenu() {
         <div
             v-if="showMenu"
             ref="menuRef"
-            class="absolute right-0 top-full w-80 bg-white shadow-lg z-50 h-[calc(100vh-60px)]"
+            class="absolute right-0 top-full w-80 bg-white shadow-lg z-50 h-[calc(100vh-60px-50px)]"
         >
           <GroupInfoCard :group="currentGroup" :group-settings="currentGroupSettings" :myRole="currentGroup.my_role" class="h-full overflow-y-auto" />
         </div>
@@ -297,10 +296,10 @@ function toggleMenu() {
             <!-- 对方消息 -->
             <template v-if="msg.sender_id !== currentUser.user_id">
               <div class="flex items-start max-w-[80%]">
-                <GroupAvatarWithMenu :avatar-url="currentGroup.avatar_url || '/images/group.png'" :alt-text="msg.sender_id" />
+                <img :src="currentGroup.avatar_url || '/images/group.png'" :alt="msg.sender_id" class="w-10 h-10 rounded-full mr-2" />
                 <UserTextArea
-                  :message="msg.content"
-                  :isSelf="false"
+                    :message="msg.content"
+                    :isSelf="false"
                 />
               </div>
             </template>
@@ -309,8 +308,8 @@ function toggleMenu() {
             <template v-else>
               <div class="flex items-start">
                 <UserTextArea
-                  :message="msg.content"
-                  :isSelf="true"
+                    :message="msg.content"
+                    :isSelf="true"
                 />
                 <img :src="currentUser.avatar_url" :alt="currentUser.username" class="w-10 h-10 rounded-full ml-2" />
               </div>
@@ -332,8 +331,8 @@ function toggleMenu() {
           style="outline: none;box-shadow: none; font-size: 24px"
       />
       <Button
-        class="absolute bottom-4 right-4 transition-all duration-200 active:scale-95 hover:bg-primary/90 hover:scale-125"
-        @click="handleSendClick"
+          class="absolute bottom-4 right-4 transition-all duration-200 active:scale-95 hover:bg-primary/90 hover:scale-125"
+          @click="handleSendClick"
       >
         发送
       </Button>

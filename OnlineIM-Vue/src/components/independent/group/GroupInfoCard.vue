@@ -5,7 +5,7 @@ import GroupMembersList from '@/components/independent/group/GroupMembersList.vu
 import type { GroupSetting } from '@/type/groupsetting';
 import { groupService } from '@/services/group.service';
 import {Switch} from "@/components/ui/switch";
-import {GroupSettingService, groupsettingService} from '@/services/groupsetting.service';
+import {GroupSettingService} from '@/services/groupsetting.service';
 const props = defineProps<{
   group: GroupResponse
   myRole?: string

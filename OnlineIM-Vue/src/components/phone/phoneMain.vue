@@ -4,15 +4,13 @@ import { useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user.ts'
 import { useListStore } from '@/stores/list.ts'
 import { SidebarProvider } from "@/components/ui/sidebar"
-import AppSidebarRightTalks from "@/components/AppSideBar/right/AppSidebarRightTalks.vue"
-import AppSidebarRightFriends from "@/components/AppSideBar/right/AppSidebarRightFriends.vue"
-import AppSidebarRightGroup from "@/components/AppSideBar/right/AppSidebarRightGroup.vue"
-import UserMainPart from "@/components/MainPart/UserMainPart.vue"
-import GroupMainPart from "@/components/MainPart/GroupMainPart.vue"
-import UserPart from '@/views/userPart.vue'
 import { MessageCircleMore,Users,UserRoundPlus,User } from "lucide-vue-next"
-import UserThings from "@/components/AppSideBar/left/userThings.vue";
 import UserFounding from "@/components/independent/founding/userFounding.vue";
+import PhoneUserThings from "@/components/phone/phoneUserThings.vue";
+import PhoneSidebarGroup from "@/components/phone/PhoneSidebarGroup.vue";
+import PhoneSidebarFriends from "@/components/phone/PhoneSidebarFriends.vue";
+import PhoneSidebarTalks from "@/components/phone/PhoneSidebarTalks.vue";
+import PhoneUserFounding from "@/components/phone/phoneUserFounding.vue";
 const route = useRoute()
 const userStore = useUserStore()
 const listStore = useListStore()
@@ -57,16 +55,6 @@ onBeforeUnmount(() => {
   document.removeEventListener('click', closeOnOutsideClick)
 })
 
-const showUserProfile = computed(() => route.path.startsWith('/main/friends/'))
-const chatType = computed(() => {
-  if (route.path.includes('/group/')) return 'group'
-  if (route.path.includes('/private/')) return 'private'
-  return ''
-})
-const chatId = computed(() => {
-  const id = route.params.id
-  return Array.isArray(id) ? id[0] : id
-})
 
 onMounted(async () => {
   try {
@@ -88,36 +76,20 @@ const navItems = [
   <div class="phone-layout flex ">
     <!-- 主内容区域 -->
     <div class="content-area">
-      <SidebarProvider class="sidebar-provider">
-        <AppSidebarRightTalks
+      <SidebarProvider class="w-full">
+        <PhoneSidebarTalks
             v-if="route.path.startsWith('/main/chat')"
             class="w-full h-full"
         />
-        <AppSidebarRightFriends
+        <PhoneSidebarFriends
             v-else-if="route.path.startsWith('/main/friends')"
             class="w-full h-full"
         />
-        <AppSidebarRightGroup
+        <PhoneSidebarGroup
             v-else-if="route.path.startsWith('/main/groups')"
             class="w-full h-full"
         />
       </SidebarProvider>
-
-      <UserMainPart
-          v-if="chatType === 'private'"
-          :key="`private-${chatId}`"
-          class="chat-content"
-      />
-      <GroupMainPart
-          v-else-if="chatType === 'group'"
-          :key="`group-${chatId}`"
-          class="chat-content"
-      />
-      <UserPart
-          v-if="showUserProfile"
-          :key="`user-${route.params.userId}`"
-          class="chat-content"
-      />
     </div>
 
     <!-- 底部导航栏 - 只显示图标并垂直居中 -->
@@ -161,17 +133,17 @@ const navItems = [
       }"
       @click.stop
     >
-    <UserThings />
+    <phoneUserThings />
     </div>
   </Transition>
 </Teleport>
 
-<Transition name="fade-slide" mode="out-in">
-  <div v-if="showUserFounding" class="fixed inset-0 flex z-50">
+<Transition name="fade-slide" mode="out-in" >
+  <div v-if="showUserFounding" class="fixed inset-0 flex z-50 ">
     <div class="fixed inset-0 bg-black/80 transition-opacity" @click="showUserFounding = false"></div>
-    <UserFounding
+    <phoneUserFounding
         class="fixed z-50 w-[90%] max-w-md top-1/2"
-        style="left: 5%"
+        style="left: 5% ;"
         @close="showUserFounding = false"
     />
   </div>
@@ -194,6 +166,9 @@ const navItems = [
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
 }
 
 .chat-content {
@@ -205,8 +180,11 @@ const navItems = [
   flex: 1;
   display: flex;
   flex-direction: column;
+  /* 新增以下两行实现水平居中 */
+  align-items: center;
+  justify-content: center;
+  width: 100%;
 }
-
 .chat-content {
   flex: 1;
 }

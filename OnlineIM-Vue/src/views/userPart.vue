@@ -174,8 +174,8 @@ async function handleGroupChange(newGroupId: string) {
 <style scoped>
 .user-profile {
   padding: 20px;
-  width: 400px;
-  height: 600px;
+  max-width: 400px;
+  max-height: 600px;
   overflow: auto;
 }
 .user-header {

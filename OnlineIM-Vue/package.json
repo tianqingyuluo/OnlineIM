@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "proxy": "node proxy-server.js",
+    "dev-all": "concurrently \"npm run dev\" \"npm run proxy\""
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.1",
@@ -15,6 +17,9 @@
     "axios": "^1.9.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "concurrently": "^9.1.2",
+    "express": "^5.1.0",
+    "http-proxy-middleware": "^3.0.5",
     "lucide-vue-next": "^0.487.0",
     "pinia": "^3.0.2",
     "pinia-plugin-persistedstate": "^4.2.0",

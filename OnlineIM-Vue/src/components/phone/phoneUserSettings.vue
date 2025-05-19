@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {computed, onMounted, ref} from 'vue';
+import {computed,  ref} from 'vue';
 import {useUserStore} from "@/stores/user.ts";
 import {meService} from "@/services/me.service.ts";
 import {toTypedSchema} from '@vee-validate/zod';
@@ -9,45 +9,45 @@ import DraggableHeader from "@/components/common/DraggableHeader.vue";
 
 // 表单验证规则
 const formSchema = toTypedSchema(
-  z.object({
-    nickname: z.union([
-      z.string()
-        .min(2, "昵称至少需要2个字符")
-        .max(20, "昵称最多20个字符"),
-      z.null()
-    ]).transform(val => val || ''),
-    email: z.union([
-      z.string()
-        .max(50, "邮箱最多50个字符")
-        .refine(
-          (val) => !val || z.string().email().safeParse(val).success,
-          "请输入有效的邮箱地址"
-        ),
-      z.null()
-    ]),
-    phone: z.union([
-      z.string()
-        .refine(
-          (val) => !val || /^1[3-9]\d{9}$/.test(val),
-          "请输入有效的手机号"
-        ),
-      z.null()
-    ]),
-    region: z.union([
-      z.string()
-        .max(20, "地区最多20个字符"),
-      z.null()
-    ]).transform(val => val || ''),
-    signature: z.union([
-      z.string()
-        .max(100, "个性签名最多100个字符"),
-      z.null()
-    ]).transform(val => val || ''),
-    gender: z.union([
-      z.number().min(0).max(2),
-      z.null()
-    ]).transform(val => val === null ? 0 : val).default(0)
-  })
+    z.object({
+      nickname: z.union([
+        z.string()
+            .min(2, "昵称至少需要2个字符")
+            .max(20, "昵称最多20个字符"),
+        z.null()
+      ]).transform(val => val || ''),
+      email: z.union([
+        z.string()
+            .max(50, "邮箱最多50个字符")
+            .refine(
+                (val) => !val || z.string().email().safeParse(val).success,
+                "请输入有效的邮箱地址"
+            ),
+        z.null()
+      ]),
+      phone: z.union([
+        z.string()
+            .refine(
+                (val) => !val || /^1[3-9]\d{9}$/.test(val),
+                "请输入有效的手机号"
+            ),
+        z.null()
+      ]),
+      region: z.union([
+        z.string()
+            .max(20, "地区最多20个字符"),
+        z.null()
+      ]).transform(val => val || ''),
+      signature: z.union([
+        z.string()
+            .max(100, "个性签名最多100个字符"),
+        z.null()
+      ]).transform(val => val || ''),
+      gender: z.union([
+        z.number().min(0).max(2),
+        z.null()
+      ]).transform(val => val === null ? 0 : val).default(0)
+    })
 )
 
 
@@ -100,7 +100,7 @@ const changeAvatar = () => {
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = 'image/png, image/jpeg';
-  
+
   input.onchange = async (e) => {
     const file = (e.target as HTMLInputElement).files?.[0];
     if (!file) return;
@@ -109,7 +109,7 @@ const changeAvatar = () => {
       alert('请选择PNG或JPG格式的图片');
       return;
     }
-    
+
     try {
       // 使用uploadAvatar方法上传文件并获取URL
       tempSettings.value.avatar_url = await meService.uploadAvatar(file);
@@ -118,7 +118,7 @@ const changeAvatar = () => {
       alert('头像上传失败，请重试');
     }
   };
-  
+
   input.click();
 };
 // 关闭模态框
@@ -139,7 +139,7 @@ const handleDrag = ({ deltaX, deltaY }: { deltaX: number; deltaY: number }) => {
 
 </script>
 <template>
-  <div ref="modalRef" class="fixed z-50 top-[10%] left-[30%] w-[40%] rounded-md">
+  <div ref="modalRef" class="fixed z-50 top-[2.5%] left-[30%] w-[40%] rounded-md overflow-y-auto">
     <DraggableHeader @drag="handleDrag">
       <h2 class="text-lg font-medium text-gray-800">用户设置</h2>
     </DraggableHeader>
@@ -163,7 +163,7 @@ const handleDrag = ({ deltaX, deltaY }: { deltaX: number; deltaY: number }) => {
       </div>
 
       <!-- 表单字段 -->
-      <div class="space-y-5">
+      <div class="space-y-1.5">
         <!-- 昵称字段 -->
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-2">昵称</label>
