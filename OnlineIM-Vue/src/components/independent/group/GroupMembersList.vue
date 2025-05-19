@@ -13,6 +13,10 @@ const props = defineProps<{
   groupId: string
 }>()
 
+const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
+
+defineExpose({ contextMenuRef })
+
 const members = ref<GroupMember[]>([])
 const offset = ref(0)
 const loading = ref(false)
@@ -90,7 +94,7 @@ onUnmounted(() => {
     <div v-else>
       <!-- 将上下文菜单移到循环内部 -->
       <div v-for="member in members" :key="member.user_id">
-        <ContextMenu>
+        <ContextMenu ref="contextMenuRef">
           <ContextMenuTrigger>
             <div class="member-item">
               <img
