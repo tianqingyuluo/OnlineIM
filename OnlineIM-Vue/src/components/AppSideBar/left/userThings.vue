@@ -61,7 +61,7 @@ const handleProfile = () => {
       </button>
     </div>
     <Transition name="fade-slide">
-    <div v-if="showProfile" class="fixed inset-0 bg-white/80 flex items-center justify-center z-[9999]">
+    <div v-if="showProfile" class="fixed inset-0 bg-white/80 flex items-center justify-center z-[9999]" >
       <UserProfile @close="showProfile = false" />
     </div>
     </Transition>

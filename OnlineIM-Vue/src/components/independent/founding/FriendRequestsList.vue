@@ -66,8 +66,9 @@ onUnmounted(() => {
         </div>
         <div class="action-buttons">
           <template v-if="request.status === 'pending'">
-            <button class="reject-btn">拒绝</button>
             <button class="accept-btn">同意</button>
+            <button class="reject-btn">拒绝</button>
+
           </template>
           <span v-else-if="request.status === 'accepted'" class="status-text">已同意</span>
           <span v-else class="status-text">已拒绝</span>

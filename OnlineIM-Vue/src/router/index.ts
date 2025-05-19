@@ -11,7 +11,7 @@ import UserMainPart from "@/components/MainPart/UserMainPart.vue";
 import GroupMainPart from '@/components/MainPart/GroupMainPart.vue'
 import { useUserStore } from '@/stores/user'
 import { toast } from 'vue-sonner';
-import phoneMain from '@/views/phoneMain.vue'
+import choiceOne from '@/views/choiceOne.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -24,7 +24,7 @@ const router = createRouter({
     {
       path: '/main',
       name: 'Main',
-      component: window.innerWidth < 600 ? phoneMain : Main,
+      component: choiceOne,
       children: [
         {
           path: 'chat',
@@ -62,7 +62,7 @@ const router = createRouter({
           path:'search',
           component:userFounding
         },
-        
+
       ]
     },
     {

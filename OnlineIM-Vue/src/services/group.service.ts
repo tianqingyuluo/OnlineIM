@@ -95,4 +95,21 @@ export const groupService = {
     }
   },
 
+  // 更新群成员昵称
+  async updateMemberNickname(
+    groupId: string,
+    memberId: string,
+    nickname: string
+  ) {
+    try {
+      const response = await api.put(`/groups/${groupId}/members/${memberId}/nickname`, {
+        nickname
+      });
+      return response.data;
+    } catch (error) {
+      console.error('更新群成员昵称失败:', error);
+      throw error;
+    }
+  },
+
 };
