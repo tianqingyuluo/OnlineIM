@@ -24,7 +24,6 @@ import jakarta.annotation.PreDestroy;
  * 负责初始化和启动WebSocket服务
  */
 @Slf4j
-@Component
 public class NettyWebSocketServer {
 
     @Value("${websocket.port:8081}")
@@ -74,6 +73,7 @@ public class NettyWebSocketServer {
                                     new HttpObjectAggregator(65536),
                                     // JWT认证处理器
                                     webSocketAuthHandler,
+                                    // 至此之后完成协议升级，开始websocket连接生命周期
                                     // WebSocket协议处理
                                     new WebSocketServerProtocolHandler(websocketPath, null, true),
                                     // 自定义消息处理器
@@ -85,9 +85,7 @@ public class NettyWebSocketServer {
             // 绑定端口并启动服务器
             channelFuture = bootstrap.bind(port).sync();
             log.info("WebSocket服务器启动成功，监听端口: {}", port);
-            
-            // 等待服务器关闭
-            // channelFuture.channel().closeFuture().sync();
+
         } catch (Exception e) {
             log.error("WebSocket服务器启动失败: {}", e.getMessage(), e);
             throw e;

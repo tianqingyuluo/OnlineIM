@@ -35,11 +35,6 @@ public class UserDetailsServiceImpl implements UserDetailsService {
         
         // 创建Spring Security的UserDetails对象
         // 这里简单处理，所有用户都赋予"USER"角色
-//        return new org.springframework.security.core.userdetails.User(
-//                user.getUsername(),
-//                user.getPassword(),
-//                Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"))
-//        );
         return new UserDetail(
                 user.getUsername(),
                 user.getPassword(),

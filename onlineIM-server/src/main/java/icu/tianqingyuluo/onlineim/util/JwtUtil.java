@@ -121,6 +121,6 @@ public class JwtUtil {
     }
 
     public long getRemainingValidityTime(String token) {
-        return getExpirationDateFromToken(token).getTime() - System.currentTimeMillis();
+        return getExpirationDateFromToken(token).getTime();
     }
 }

@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.config;
 
+import icu.tianqingyuluo.onlineim.service.UserSessionService;
 import icu.tianqingyuluo.onlineim.service.impl.UserDetailsServiceImpl;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
 import icu.tianqingyuluo.onlineim.websocket.NettyWebSocketServer;
@@ -17,10 +18,12 @@ public class WebSocketConfig {
 
     private final UserDetailsServiceImpl userDetailsService;
     private final JwtUtil jwtUtil;
+    private final UserSessionService userSessionService;
 
-    public WebSocketConfig(UserDetailsServiceImpl userDetailsService, JwtUtil jwtUtil) {
+    public WebSocketConfig(UserDetailsServiceImpl userDetailsService, JwtUtil jwtUtil, UserSessionService userSessionService) {
         this.userDetailsService = userDetailsService;
         this.jwtUtil = jwtUtil;
+        this.userSessionService = userSessionService;
     }
 
     /**
@@ -28,7 +31,7 @@ public class WebSocketConfig {
      */
     @Bean
     public WebSocketAuthHandler webSocketAuthHandler() {
-        return new WebSocketAuthHandler(jwtUtil, userDetailsService);
+        return new WebSocketAuthHandler(jwtUtil, userDetailsService, userSessionService);
     }
 
     /**
@@ -36,7 +39,7 @@ public class WebSocketConfig {
      */
     @Bean
     public WebSocketMessageDispatchHandler webSocketMessageHandler() {
-        return new WebSocketMessageDispatchHandler();
+        return new WebSocketMessageDispatchHandler(jwtUtil);
     }
 
     /**

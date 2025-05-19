@@ -4,8 +4,6 @@ import icu.tianqingyuluo.onlineim.util.JwtUtil;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.concurrent.TimeUnit;
-
 @Service
 public class JwtService {
 
@@ -22,12 +20,22 @@ public class JwtService {
     }
 
     public void invalidateJWT(String token) {
-        redisTemplate.opsForSet().add(JWT_BLACKLIST_PREFIX, token);
-        redisTemplate.expire(JWT_BLACKLIST_PREFIX, jwtUtil.getRemainingValidityTime(token), TimeUnit.MILLISECONDS);
+        redisTemplate.opsForZSet().add(JWT_BLACKLIST_PREFIX, token, jwtUtil.getRemainingValidityTime(token));
     }
 
     public boolean isBlockedToken(String token) {
-        return Boolean.TRUE.equals(redisTemplate.opsForSet().isMember(JWT_PREFIX + "blacklist:", token));
+        // 1. 检查token是否存在于ZSET中
+        Double score = redisTemplate.opsForZSet().score(JWT_BLACKLIST_PREFIX, token);
+
+        // 2. 如果不存在或已过期(score <= 当前时间)，返回false
+        if (score == null || score <= System.currentTimeMillis()) {
+            // 可选：清理已过期的token
+            redisTemplate.opsForZSet().remove(JWT_BLACKLIST_PREFIX, token);
+            return false;
+        }
+
+        // 3. 如果存在且未过期，返回true
+        return true;
     }
 
 }

@@ -257,15 +257,15 @@ public class FriendController {
         return ResponseEntity.ok(response);
     }
 
-    @PostMapping("/request/send")
-    public ResponseEntity<?> sendFriendRequest(@RequestHeader("Authorization") String token, @RequestBody FriendRequestRequest friendRequestRequest) {
-        String userid = jwtUtil.getUserIDFromToken(token);
-        try {
-            friendService.sendFriendRequest(userid, friendRequestRequest);
-        }
-        catch (SQLIntegrityConstraintViolationException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "好友申请已存在"));
-        }
-        return ResponseEntity.status(HttpStatus.CREATED).build();
-    }
+//    @PostMapping("/request/send")
+//    public ResponseEntity<?> sendFriendRequest(@RequestHeader("Authorization") String token, @RequestBody FriendRequestRequest friendRequestRequest) {
+//        String userid = jwtUtil.getUserIDFromToken(token);
+//        try {
+//            friendService.sendFriendRequest(userid, friendRequestRequest);
+//        }
+//        catch (SQLIntegrityConstraintViolationException e) {
+//            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "好友申请已存在"));
+//        }
+//        return ResponseEntity.status(HttpStatus.CREATED).build();
+//    }
 }
