@@ -30,15 +30,6 @@ const handleDrag = ({ deltaX, deltaY }: { deltaX: number; deltaY: number }) => {
   modalRef.value.style.left = `${rect.left + deltaX}px`
 }
 
-// 初始化时转换百分比为像素
-onMounted(() => {
-  if (!modalRef.value) return
-  const vw = window.innerWidth
-  const vh = window.innerHeight
-  modalRef.value.style.top = `${vh * 0.1}px`
-  modalRef.value.style.left = `${vw * 0.3}px`
-})
-
 // 生命周期
 onMounted(async () => {
   try {

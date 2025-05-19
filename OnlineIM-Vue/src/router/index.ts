@@ -2,7 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import Login from '@/views/Login.vue'
 import Main from '@/views/Main.vue'
 import Register from '@/views/Register.vue'
-import Test from '@/components/independent/group/GroupInfoCard.vue'
+import Test from '@/components/independent/friends/SendFriendRequest.vue'
 import AppSidebarRightTalks from '@/components/AppSideBar/right/AppSidebarRightTalks.vue'
 import AppSidebarRightFriends from '@/components/AppSideBar/right/AppSidebarRightFriends.vue'
 import AppSidebarRightGroup from '@/components/AppSideBar/right/AppSidebarRightGroup.vue'
@@ -11,10 +11,15 @@ import UserMainPart from "@/components/MainPart/UserMainPart.vue";
 import GroupMainPart from '@/components/MainPart/GroupMainPart.vue'
 import { useUserStore } from '@/stores/user'
 import { toast } from 'vue-sonner';
+import choiceOne from '@/views/choiceOne.vue'
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
+    {
+      path: '/',
+      redirect: '/login'
+    },
     {
       path: '/login',
       name: 'Login',
@@ -23,7 +28,7 @@ const router = createRouter({
     {
       path: '/main',
       name: 'Main',
-      component: Main,
+      component: choiceOne,
       children: [
         {
           path: 'chat',
@@ -61,7 +66,7 @@ const router = createRouter({
           path:'search',
           component:userFounding
         },
-        
+
       ]
     },
     {

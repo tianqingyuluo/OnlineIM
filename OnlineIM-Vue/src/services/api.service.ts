@@ -1,6 +1,6 @@
 // src/services/api.service.ts
 import axios from 'axios';
-import { API_BASE_URL } from '@/config';
+import { API_BASE_URL } from '../../shared/config.ts';
 import { useUserStore } from '@/stores/user';
 import { toast } from 'vue-sonner';
 import router from '@/router';
@@ -67,11 +67,6 @@ api.interceptors.response.use(
     if (!error.response) {
       toast.error('网络错误', {
         description: '请检查网络连接后重试'
-      });
-      return Promise.reject({
-        code: 'NETWORK_ERROR',
-        message: '网络连接异常',
-        isNetworkError: true
       });
     }
 

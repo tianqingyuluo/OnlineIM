@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import {ref, computed, onMounted} from 'vue';
-import { useUserStore } from "@/stores/user.ts";
-import { meService } from "@/services/me.service.ts";
-import { toTypedSchema } from '@vee-validate/zod';
-import { useForm } from 'vee-validate';
+import {computed, onMounted, ref} from 'vue';
+import {useUserStore} from "@/stores/user.ts";
+import {meService} from "@/services/me.service.ts";
+import {toTypedSchema} from '@vee-validate/zod';
+import {useForm} from 'vee-validate';
 import * as z from 'zod';
 import DraggableHeader from "@/components/common/DraggableHeader.vue";
 
@@ -65,11 +65,7 @@ const tempSettings = computed(() => ({
 }));
 const { handleSubmit, errors, defineField } = useForm({
   validationSchema: formSchema,
-  initialValues: tempSettings.value,
-  validateOnBlur: false,  // 禁用blur验证
-  validateOnChange: false, // 禁用change验证
-  validateOnInput: false,  // 禁用input验证
-  validateOnModelUpdate: false // 禁用model更新验证
+  initialValues: tempSettings.value
 })
 // 为每个字段添加绑定
 const [nickname] = defineField('nickname');
@@ -85,7 +81,7 @@ const saveSettings = handleSubmit(async (values) => {
       nickname: values.nickname || undefined,
       email: values.email || undefined,
       region: values.region || undefined,
-      gender: values.gender || 0, // 0表示未设置，1表示男，2表示女
+      gender: (values.gender as 0 | 1 | 2 | undefined) || 0, // 0表示未设置，1表示男，2表示女
       phone: values.phone || undefined,
       signature: values.signature || undefined,
       avatar_url: tempSettings.value.avatar_url || undefined
@@ -105,24 +101,22 @@ const changeAvatar = () => {
   input.type = 'file';
   input.accept = 'image/png, image/jpeg';
   
-  input.onchange = (e) => {
+  input.onchange = async (e) => {
     const file = (e.target as HTMLInputElement).files?.[0];
     if (!file) return;
-    
     // 验证文件类型
     if (!['image/png', 'image/jpeg'].includes(file.type)) {
       alert('请选择PNG或JPG格式的图片');
       return;
     }
     
-    // 创建临时URL并更新avatar_url
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      if (event.target?.result) {
-        tempSettings.value.avatar_url = event.target.result as string;
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      // 使用uploadAvatar方法上传文件并获取URL
+      tempSettings.value.avatar_url = await meService.uploadAvatar(file);
+    } catch (error) {
+      console.error('头像上传失败:', error);
+      alert('头像上传失败，请重试');
+    }
   };
   
   input.click();
@@ -143,21 +137,13 @@ const handleDrag = ({ deltaX, deltaY }: { deltaX: number; deltaY: number }) => {
   modalRef.value.style.left = `${rect.left + deltaX}px`
 }
 
-// 初始化时转换百分比为像素
-onMounted(() => {
-  if (!modalRef.value) return
-  const vw = window.innerWidth
-  const vh = window.innerHeight
-  modalRef.value.style.top = `${vh * 0.1}px`
-  modalRef.value.style.left = `${vw * 0.3}px`
-})
 </script>
 <template>
-  <div ref="modalRef" class="fixed z-50 top-[10%] left-[30%] w-[40%]">
+  <div ref="modalRef" class="fixed z-50 top-[10%] left-[30%] w-[40%] rounded-md">
     <DraggableHeader @drag="handleDrag">
       <h2 class="text-lg font-medium text-gray-800">用户设置</h2>
     </DraggableHeader>
-    <div class="bg-white rounded-lg p-6 w-full shadow-md border border-gray-200">
+    <div class="bg-white  p-6 w-full shadow-md border border-gray-200">
 
       <!-- 头像区域 - 居中显示并整合更换功能 -->
       <div class="mb-5 flex flex-col items-center">

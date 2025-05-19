@@ -8,6 +8,14 @@ import type { Friend } from '@/type/Friends'
 import { Input } from "@/components/ui/input";
 import { friendsService } from '@/services/friends.service'
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const route = useRoute()
 const listStore = useListStore()
@@ -23,18 +31,28 @@ onMounted(async () => {
   try {
     // 获取用户基本信息
     user.value = await userService.getUserById(userId.value)
-    
+
     // 从好友列表中查找备注和分组信息
-    const friend = listStore.friends.find(
-      f => f.friend_info.user_id === userId.value
-    )
-    if (friend) {
+    let foundFriend: Friend | null = null
+
+    // 遍历所有分组中的好友
+    for (const group of listStore.groupedFriends) {
+      const friend = group.friends.find(
+          f => f.friend_info.user_id === userId.value
+      )
+      if (friend) {
+        foundFriend = friend
+        break
+      }
+    }
+
+    if (foundFriend) {
       friendInfo.value = {
-        ...friend,
+        ...foundFriend,
         friend_info: {
-          ...friend.friend_info,
-          friend_group_id: friend.friend_info.friend_group_id || undefined,
-          remark: friend.friend_info.remark || undefined
+          ...foundFriend.friend_info,
+          friend_group_id: foundFriend.friend_info.friend_group_id || undefined,
+          remark: foundFriend.friend_info.remark || undefined
         }
       }
     }
@@ -69,6 +87,23 @@ async function saveRemark() {
   }
   editingRemark.value = false;
 }
+
+async function handleGroupChange(newGroupId: string) {
+  if (friendInfo.value) {
+    try {
+      const response = await friendsService.setFriendGroup(
+        friendInfo.value.friendship_id,
+        newGroupId
+      );
+      friendInfo.value.friend_info.friend_group_id = response.friendship_group_id;
+
+      // 调用store的updateFriendGroup方法同步更新friends和groupedFriends数组
+      listStore.updateFriendGroup(friendInfo.value.friendship_id, response.friendship_group_id);
+    } catch (error) {
+      console.error('修改分组失败:', error);
+    }
+  }
+}
 </script>
 
 <template>
@@ -85,8 +120,8 @@ async function saveRemark() {
     </div>
 
     <!-- 好友专属信息 -->
-    <div v-if="friendInfo" class="friend-info mt-6">
-      <div class="info-item">
+    <div v-if="friendInfo" class="friend-info mt-8">
+      <div class="info-item mb-6 flex items-center justify-between">
         <span class="label">备注名:</span>
         <template v-if="editingRemark">
           <Input 
@@ -94,6 +129,7 @@ async function saveRemark() {
             @blur="saveRemark"
             @keyup.enter="saveRemark"
             autofocus
+            class="w-[180px]"
           />
         </template>
         <span 
@@ -104,12 +140,31 @@ async function saveRemark() {
           {{ friendInfo.friend_info.remark || '未设置备注名' }}
         </span>
       </div>
-      <div class="info-item mt-4">
+      <div class="info-item mb-6 flex items-center justify-between">
         <span class="label">分组:</span>
-        <span>{{ friendInfo.friend_info.friend_group_id ||"我的好友"}}</span>
+        <Select 
+          v-model="friendInfo.friend_info.friend_group_id"
+          @update:modelValue="handleGroupChange"
+          class="w-[180px]"
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="选择分组" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem 
+                v-for="group in listStore.userGroups"
+                :key="group.id"
+                :value="group.id"
+              >
+                {{ group.name }}
+              </SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
       </div>
     </div>
-    <Button class="flex flex-col items-center justify-center w-full p-4 hover:scale-105 transition-transform duration-200">发消息</Button>
+    <Button class="flex flex-col items-center justify-center w-full p-4 mt-8 hover:scale-105 transition-transform duration-200">发消息</Button>
   </div>
   <div v-else class="loading">
     加载中...
@@ -119,22 +174,24 @@ async function saveRemark() {
 <style scoped>
 .user-profile {
   padding: 20px;
-  width: 400px;
-  height: 600px;
+  max-width: 400px;
+  max-height: 600px;
   overflow: auto;
 }
 .user-header {
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   margin-bottom: 20px;
 }
 .avatar {
   width: 100px;
   height: 100px;
-  border-radius: 50%;
-  object-fit: cover;
+  border-radius: 50%;  /* 这行代码确保头像显示为圆形 */
+  margin-bottom: 10px;
 }
 .info-item {
-  margin: 10px 0;
+  margin: 16px 0;
 }
 .label {
   font-weight: bold;

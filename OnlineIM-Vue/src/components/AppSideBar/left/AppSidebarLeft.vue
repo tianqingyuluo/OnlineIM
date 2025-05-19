@@ -112,7 +112,7 @@ const activeItem = ref('聊天')
                 </a>
               </SidebarMenuButton>
             </SidebarMenuItem>
-            <!-- 单独渲染的添加按钮 -->
+            <!-- 单独渲染的添加好友按钮 -->
             <SidebarMenuItem>
               <SidebarMenuButton 
                 as-child
@@ -165,7 +165,7 @@ const activeItem = ref('聊天')
     <div
         v-if="showUserThings"
         ref="userThingsRef"
-        class="fixed z-[9999] bg-white border shadow-lg rounded-2xl"
+        class="fixed z-[9999] bg-white border shadow-lg rounded-xl"
         style="width: 200px;"
         :style="{
           bottom: '0',

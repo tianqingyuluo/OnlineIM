@@ -75,8 +75,8 @@ const handleClose = () => {
 </script>
 
 <template>
-  <div ref="modalRef" class="fixed z-50 top-[10%] left-[30%] w-[80%] max-w-2xl">
-    <div class="bg-white rounded-lg shadow-lg w-full">
+  <div ref="modalRef" class="fixed z-50 top-[10%] left-[30%] w-[80%] max-w-2xl ">
+    <div class="bg-white shadow-lg w-full rounded-lg">
       <!-- 顶部栏 -->
       <div
         class="flex items-center justify-between h-12 w-full bg-gray-100 rounded-t-lg px-6 cursor-move pr-0"
@@ -124,7 +124,7 @@ const handleClose = () => {
       </div>
 
       <!-- 内容区域 -->
-      <div class="p-6 bg-white h-[600px] overflow-auto">
+      <div class="p-6 bg-white h-full overflow-auto min-h-[600px] rounded-b-lg">
         <template v-if="activeTab === '好友'">
           <usersSelectResult :keyword="searchQuery" class="h-full"/>
         </template>
