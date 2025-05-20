@@ -1,5 +1,7 @@
 package icu.tianqingyuluo.onlineim.mapper;
 
+import icu.tianqingyuluo.onlineim.pojo.dto.request.GroupSettingUpdateRequest;
+import icu.tianqingyuluo.onlineim.pojo.dto.response.GroupSettingResponse;
 import icu.tianqingyuluo.onlineim.pojo.entity.GroupSetting;
 import org.apache.ibatis.annotations.*;
 
@@ -11,9 +13,8 @@ public interface GroupSettingMapper {
 
     @Select("SELECT * FROM group_settings WHERE id = #{id}")
     GroupSetting getById(String id);
-    
-    @Select("SELECT * FROM group_settings WHERE group_id = #{groupId}")
-    GroupSetting getByGroupId(String groupId);
+
+    GroupSettingResponse getByGroupId(String groupId);
 
     @Select("SELECT IF(allow_member_invite = 1, true, false) FROM group_settings WHERE group_id=#{groupId}")
     boolean isAllowMemberInvite(String groupId);
@@ -27,13 +28,12 @@ public interface GroupSettingMapper {
     @Insert("INSERT INTO group_settings(id, group_id) " +
             "VALUES(#{id}, #{groupId})")
     int initSettings(@Param("id") String id,@Param("groupId") String groupId);
-    
-    @Update("UPDATE group_settings SET allow_member_invite = #{allowMemberInvite}, " +
-            "allow_member_modify_name = #{allowMemberModifyName}, allow_member_upload_file = #{allowMemberUploadFile}, " +
-            "allow_member_at_all = #{allowMemberAtAll}, allow_view_history_message = #{allowViewHistoryMessage}, " +
-            "updated_at = #{updatedAt} WHERE id = #{id}")
-    int update(GroupSetting groupSetting);
-    
+
+    int update(@Param("groupId") String groupId,@Param("request") GroupSettingUpdateRequest request);
+
+    @Update("UPDATE group_settings SET mute_type= #{muteType} WHERE group_id = #{groupId}")
+    int updateMuteType(@Param("groupId") String groupId,@Param("muteType") int muteType);
+
     @Delete("DELETE FROM group_settings WHERE id = #{id}")
     int delete(String id);
 } 
