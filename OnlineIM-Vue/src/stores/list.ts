@@ -23,21 +23,12 @@ export const useListStore = defineStore('list', {
   }),
   actions: {
     async fetchUserData() {
-      if (this.userGroups.length === 0) {
-        this.userGroups = await friendGroupsService.getFriendGroups()
-      }
-      if (this.conversations.length === 0) {
-        await conversationService.getConversations()
-      }
-      if (this.friends.length === 0) {
-        await friendsService.getFriends()
-      }
-      if (this.groupedFriends.length === 0) {
-        this.groupedFriends = await groupAndSortFriends(this.friends, this.userGroups)
-      }
-      if (this.groups.length === 0) {
-        await groupService.getJoinedGroups()
-      }
+      this.userGroups=await friendGroupsService.getFriendGroups()
+      await conversationService.getConversations()
+      await friendsService.getFriends()
+      this.groupedFriends =await groupAndSortFriends(this.friends, this.userGroups)
+      await groupService.getJoinedGroups()
+      
     },
     
     async deleteFriendGroup(groupId: string) {

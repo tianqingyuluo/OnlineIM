@@ -51,9 +51,7 @@ export const useUserStore = defineStore('user', {
       return !!this.token
     },
     async fetchUserData() {
-      if (!this.loggedInUser.user_id) {
-        await meService.me();
-      }
+      await meService.me();
     },
     async updateToken() {
       TokenService.init(this.token)

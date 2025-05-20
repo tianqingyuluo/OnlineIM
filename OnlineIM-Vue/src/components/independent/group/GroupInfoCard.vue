@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import type { GroupMember, GroupResponse } from '@/type/group.ts'
-import { onMounted, ref } from 'vue';
+import type { GroupMemberAll, GroupResponse} from '@/type/group.ts'
+import {nextTick, onMounted, ref, watch} from 'vue';
 import GroupMembersList from '@/components/independent/group/GroupMembersList.vue'
 import type { GroupSetting } from '@/type/groupsetting';
 import { groupService } from '@/services/group.service';
 import {Switch} from "@/components/ui/switch";
 import {GroupSettingService} from '@/services/groupsetting.service';
+import { shallowRef } from 'vue'
 const props = defineProps<{
   group: GroupResponse
   myRole?: string
@@ -13,16 +14,29 @@ const props = defineProps<{
   currentUser: any
 }>()
 
+const groupMembersListRef = shallowRef<{
+  membersListContainer?: HTMLElement
+} | null>(null)
+const showMembersList = ref(false)
+// 添加监听确保子组件加载
+watch(() => showMembersList.value, (newVal) => {
+  if (newVal) {
+    nextTick(() => {
+      console.log('子组件引用:', groupMembersListRef.value?.membersListContainer)
+    })
+  }
+})
 const roleTranslations = {
   owner: '群主',
   admin: '管理员',
   member: '成员'
 }
 
-const showMembersList = ref(false)
-const groupMembersListRef = ref<InstanceType<typeof GroupMembersList> | null>(null)
 
+defineExpose({  groupMembersListRef})
 const handleViewMembers = () => {
+  console.log('handleViewMembers被触发，showMembersList:', showMembersList.value)
+  console.log('groupMembersListRef:', groupMembersListRef.value)
   showMembersList.value = true
 }
 
@@ -50,23 +64,22 @@ const handleSettingChange = async (key: keyof GroupSetting, value: any) => {
   }
 }
 
-const nicknameTemp = ref('')
+// const nicknameTemp = ref('')
+// async function saveNickname() {
+//   if (props.group) {
+//     try {
+//       await groupService.updateMemberNickname(
+//         props.group.group_id,
+//         nicknameTemp.value
+//       )
+//       props.group.name = nicknameTemp.value
+//     } catch (error) {
+//       console.error('更新自己的群昵称失败:', error)
+//     }
+//   }
+// }
 
-async function saveNickname() {
-  if (props.group) {
-    try {
-      await groupService.updateMemberNickname(
-        props.group.group_id,
-        nicknameTemp.value
-      )
-      props.group.name = nicknameTemp.value
-    } catch (error) {
-      console.error('更新群昵称失败:', error)
-    }
-  }
-}
-
-const members = ref<GroupMember[]>([])
+const members = ref<GroupMemberAll[]>([])
 const loading = ref(false)
 const error = ref<Error | null>(null)
 
@@ -107,14 +120,7 @@ onMounted(() => {
               alt="群头像"
           >
           <div>
-  <Input 
-    v-model="nicknameTemp" 
-    @blur="saveNickname"
-    @keyup.enter="saveNickname"
-    :default-value="group.name"
-    class="w-[180px]"
-  />
-  <p class="text-gray-500 text-sm">群昵称: {{ }}</p>
+          <p class="text-gray-500 text-sm">群昵称: {{group.name }}</p>
 </div>
         </div>
 
@@ -126,7 +132,7 @@ onMounted(() => {
           </div>
           <div>
             <span class="text-gray-500">我的角色:</span>
-            <span class="ml-2">{{ roleTranslations[myRole || group.my_role] }}</span>
+            <span class="ml-2">{{ roleTranslations[group.my_role] }}</span>
           </div>
           <div v-if="group.description">
             <span class="text-gray-500">群描述:</span>
@@ -147,15 +153,15 @@ onMounted(() => {
             <div class="grid grid-cols-4 gap-4">
               <div 
                 v-for="member in members" 
-                :key="member.user_id"
+                :key="member.user_info.user_id"
                 class="flex flex-col items-center hover:bg-gray-100"
               >
                 <img
-                  :src="member.avatar_url || '/images/default-avatar.png'"
+                  :src="member.user_info.avatar_url || '/images/default-avatar.png'"
                   class="w-10 h-10 rounded-full"
-                  :alt="member.username"
+                  :alt="member.user_info.username"
                 >
-                <span class="text-xs mt-2 truncate w-full text-center">{{ member.username }}</span>
+                <span class="text-xs mt-2 truncate w-full text-center">{{ member.user_info.nickname||member.user_info.username }}</span>
               </div>
               <!-- 邀请成员按钮 -->
               <div class="flex flex-col items-center cursor-pointer hover:bg-gray-100">
@@ -215,6 +221,7 @@ onMounted(() => {
           :myRole="group.my_role"
           @back="showMembersList = false"
           ref="groupMembersListRef"
+          @click.stop
       />
     </Transition>
   </div>

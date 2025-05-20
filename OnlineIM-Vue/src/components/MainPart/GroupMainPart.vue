@@ -15,28 +15,30 @@ import {MessageService} from "@/services/message.service.ts";
 import { useUserStore } from '@/stores/user.ts';
 import { GroupSettingService } from "@/services/groupsetting.service";
 import GroupAvatarWithMenu from "@/components/MainPart/GroupAvatarWithMenu.vue";
+import type {MessageResponse} from "@/type/message.ts";
+import {useOtherStore} from "@/stores/otherStore.ts";
 
-// 添加菜单元素的引用
+
 const menuRef = ref<HTMLElement | null>(null)//右上角群info
 const menuButtonRef = ref<HTMLElement | null>(null)
-const contextMenuRoot = ref<HTMLElement | null>(null)
 
-// 点击区域外关闭菜单
 const setupClickOutside = () => {
-  if (!menuRef.value || !menuButtonRef.value || !contextMenuRoot.value) return
-  
-  onClickOutside(menuRef, (event) => {
-    // 检查点击是否来自菜单按钮或右键菜单，如果是则不关闭
-    if (
-      menuButtonRef.value?.contains(event.target as Node) || 
-      contextMenuRoot.value?.contains(event.target as Node)
-    ) {
-      return
-    }
-    showMenu.value = false
-  }, {
-    ignore: [menuButtonRef, contextMenuRoot] // 忽略菜单按钮和右键菜单的点击
-  })
+  onClickOutside(
+      menuRef,
+      () => {
+        const otherStore = useOtherStore()
+        if (!otherStore.isContextMenuOpen) {
+          showMenu.value = false
+          console.log('菜单状态已设置为关闭')
+        }
+      },
+      {
+        ignore: [
+        menuButtonRef,
+
+        ]
+      }
+  )
 }
 
 onMounted(() => {
@@ -73,11 +75,9 @@ onMounted(async () => {
     console.error('获取群组信息失败:', error)
   }
 })
-const groupMessages = ref<any[]>([])
+const groupMessages = ref<MessageResponse[]>([])
 const isLoading = ref(false)
 const hasMore = ref(true)
-const page = ref(1)
-const pageSize = 20
 const noMoreInfo = ref(false)
 
 async function loadMessages() {
@@ -85,26 +85,30 @@ async function loadMessages() {
   
   isLoading.value = true
   try {
-    const timestamp = groupMessages.value.length > 0 
-      ? groupMessages.value[0].created_at 
+    const before_message_id = groupMessages.value.length > 0 
+      ? groupMessages.value[0].seq_id
       : undefined
-    const messageHistory = await MessageService.getMessageHistory(groupId.value, timestamp)
-    console.log('获取到的消息历史:', messageHistory)
-    if (messageHistory) {
-      const newMessages = messageHistory.messages
-      const total=messageHistory.total
-      if (total < pageSize) {
-        hasMore.value = false
-        noMoreInfo.value = true
-      }
+
+    const response  = await MessageService.getMessageHistory(
+      groupId.value, 
+      before_message_id
+    )
+    const messages=response.messages
+    const has_more_before = response.has_more_before
+    const has_more_after = response.has_more_after
+    
+    console.log('获取到的消息历史:', messages)
+    
+    if (messages.length > 0) { 
+       const sortedMessages = messages.sort((a, b) => a.seq_id - b.seq_id);
+       if (!before_message_id) { 
+         groupMessages.value = sortedMessages 
+       } else { 
+         groupMessages.value = [...sortedMessages, ...groupMessages.value]
+       }
       
-      if (!timestamp) {
-        groupMessages.value = newMessages
-      } else {
-        groupMessages.value = [...newMessages, ...groupMessages.value]
-      }
-      
-      console.log('获取到的消息历史:', newMessages)
+      hasMore.value = has_more_before
+      noMoreInfo.value = !has_more_before
     }
   } catch (error) {
     console.error('获取消息历史失败:', error)
@@ -119,7 +123,6 @@ function handleScroll(e: Event) {
   
   // 当滚动到接近顶部(阈值范围内)且还有更多消息可加载时
   if (target.scrollTop <= scrollThreshold && hasMore.value && !isLoading.value) {
-    page.value += 1
     loadMessages()
   }
 }
@@ -244,7 +247,7 @@ async function handleSendClick() {
       textareaEl.value = ''
       
       // 滚动到底部
-      nextTick(() => {
+      await nextTick(() => {
         const chatContainer = document.querySelector('.overflow-y-auto')
         if (chatContainer) {
           chatContainer.scrollTop = chatContainer.scrollHeight
@@ -285,12 +288,12 @@ function toggleMenu() {
             ref="menuRef"
             class="absolute right-0 top-full w-80 bg-white shadow-lg z-50 h-[calc(100vh-60px)]"
         >
-          <GroupInfoCard 
-  ref="groupInfoCardRef"
+          <GroupInfoCard
   :group="currentGroup" 
   :group-settings="currentGroupSettings" 
   :myRole="currentGroup.my_role" 
-  class="h-full overflow-y-auto" 
+  class="h-full overflow-y-auto"
+  @click.stop
 />
         </div>
       </Transition>
@@ -306,16 +309,16 @@ function toggleMenu() {
           <!-- 时间显示 -->
           <div v-if="shouldShowTime(index, groupMessages)" class="flex justify-center">
             <span class="text-[13px] text-gray-500 truncate">
-              {{ new Date(msg.created_at).toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-') }}
+              {{ new Date(msg.timestamp).toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-') }}
             </span>
           </div>
 
           <!-- 消息内容 -->
-          <div :class="['flex', msg.sender_id === currentUser.user_id ? 'justify-end' : 'justify-start']">
+          <div :class="['flex', msg.sender_info.user_id === currentUser.user_id ? 'justify-end' : 'justify-start']">
             <!-- 对方消息 -->
-            <template v-if="msg.sender_id !== currentUser.user_id">
+            <template v-if="msg.sender_info.user_id !== currentUser.user_id">
               <div class="flex items-start max-w-[80%]">
-                <GroupAvatarWithMenu :avatar-url="currentGroup.avatar_url || '/images/group.png'" :alt-text="msg.sender_id" />
+                <GroupAvatarWithMenu :avatar-url="currentGroup.avatar_url || '/images/group.png'" :alt-text="msg.sender_info.user_id" />
                 <UserTextArea
                   :message="msg.content"
                   :isSelf="false"
@@ -330,7 +333,7 @@ function toggleMenu() {
                   :message="msg.content"
                   :isSelf="true"
                 />
-                <img :src="currentUser.avatar_url" :alt="currentUser.username" class="w-10 h-10 rounded-full ml-2" />
+                <img :src="currentUser.avatar_url" :alt="currentUser.username" class="w-10 h-10 rounded-full ml-2 object-cover" />
               </div>
             </template>
           </div>
