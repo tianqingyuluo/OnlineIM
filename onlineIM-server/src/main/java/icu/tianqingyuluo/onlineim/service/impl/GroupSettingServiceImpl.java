@@ -10,13 +10,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class GroupSettingServiceImpl implements GroupSettingService {
     private final GroupMapper groupMapper;
-    private final GroupResponseMapper groupResponseMapper;
     private final GroupMemberMapper groupMemberMapper;
     private final GroupSettingMapper groupSettingMapper;
 
-    public GroupSettingServiceImpl(GroupMapper groupMapper, GroupResponseMapper groupResponseMapper, GroupMemberMapper groupMemberMapper, GroupSettingMapper groupSettingMapper) {
+    public GroupSettingServiceImpl(GroupMapper groupMapper, GroupMemberMapper groupMemberMapper, GroupSettingMapper groupSettingMapper) {
         this.groupMapper = groupMapper;
-        this.groupResponseMapper = groupResponseMapper;
         this.groupMemberMapper = groupMemberMapper;
         this.groupSettingMapper = groupSettingMapper;
     }
