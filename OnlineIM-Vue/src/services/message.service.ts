@@ -1,22 +1,21 @@
 import api from './api.service';
-import type {MessageResponse, MessageWithTotal} from "@/type/message.ts";
+import type {MessageResponse} from "@/type/message.ts";
 
 export const MessageService = {
     async getMessageHistory(
-        groupId: string,
-        timestamp?: number,  // 新增可选的时间戳参数
-    ): Promise<MessageWithTotal> {
+        conversation_id: string,
+        before_message_id?: string,
+        after_message_id?: string,
+    ): Promise<{messages: MessageResponse[], has_more_before: boolean, has_more_after: boolean}> {
         try {
-            // 构造查询参数
             const params = {
-                timestamp: timestamp?.toString(),
+                before_message_id,
+                after_message_id,
             };
-
-            const response = await api.get<MessageWithTotal>(
-                `/messages/group/${groupId}`,
-                { params }  // 将参数附加到请求
+            const response = await api.get(
+                `/messages/history/${conversation_id}`,
+                { params }
             );
-
             return response.data;
         } catch (error: any) {
             throw error;

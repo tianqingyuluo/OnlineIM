@@ -1,13 +1,22 @@
-export interface MessageResponse{
-    "message_id": "string",
-    "sender_id": "string",
-    "receiver_id": "string",
-    "content_type": "integer",
-    "content": "string",
-    "created_at": "string ",//(date-time)
-    "status": "integer"//(e.g., 0 for sent, 1 for delivered, 2 for read)
+export interface MessageResponse {
+    message_id: string;
+    conversation_id: string;
+    sender_info: {
+        user_id: string;
+        nickname: string;
+        avatar_url?: string;
+    };
+    message_type: string;
+    seq_id: "string",
+    content: any;
+    mentioned_user_ids?: string[];
+    status: "delivered" | "read" | "recalled";
+    timestamp: string;
+    is_recalled: boolean;
 }
-export interface MessageWithTotal {
+
+export interface MessageHistoryResponse {
     messages: MessageResponse[];
-    total: number;
+    has_more_before: boolean;
+    has_more_after: boolean;
 }

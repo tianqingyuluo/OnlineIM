@@ -1,6 +1,11 @@
 import api from './api.service';
 import type { FormContext } from 'vee-validate';
-import {type GroupResponse, type GroupSearchResponse, type JoinedGroupsResponse}from'@/type/group.ts'
+import {
+    type GroupMembersResponse,
+    type GroupResponse,
+    type GroupSearchResponse,
+    type JoinedGroupsResponse
+} from '@/type/group.ts'
 import { useListStore } from '@/stores/list';
 export const groupService = {
   // 创建群组
@@ -73,7 +78,7 @@ export const groupService = {
   )
    {
     try {
-      const response = await api.get(`/groups/${groupId}/members`, {
+      const response = await api.get<GroupMembersResponse>(`/groups/${groupId}/members`, {
         params
       });
       return response.data;

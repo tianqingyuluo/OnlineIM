@@ -42,3 +42,20 @@ export interface JoinedGroupsResponse {
     groups: GroupResponse[];
     total: number;
 }
+
+export interface GroupMemberAll {
+    "user_info": {
+        "user_id": "usr_+UUID",
+        "username": "string",
+        "nickname": "string",
+        "avatar_url": "string (optional)"
+    }
+    "role": "owner" | "admin" | "member",
+    "is_muted" : "boolean",
+    "mute_end_time": "muteEndTime",
+    "joined_at": "string (ISO 8601)"
+}
+export interface GroupMembersResponse {
+    members: GroupMemberAll[];
+    total: number;
+}

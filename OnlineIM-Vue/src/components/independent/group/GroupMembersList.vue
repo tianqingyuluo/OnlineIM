@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import {ref, onMounted, onUnmounted, onBeforeUnmount} from 'vue'
 import { groupService } from '@/services/group.service'
-import type { GroupMember } from '@/type/group'
+import type { GroupMemberAll } from '@/type/group'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -10,34 +10,39 @@ import {
 } from '@/components/ui/context-menu'
 import { useUserStore } from '@/stores/user';
 import { groupMembersService } from '@/services/groupmembers.service';
+import {useOtherStore} from "@/stores/otherStore.ts";
 
 const props = defineProps<{
   groupId: string
   myRole: string
 }>()
 
-const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
 
-defineExpose({ contextMenuRef })
-
-const members = ref<GroupMember[]>([])
+const members = ref<GroupMemberAll[]>([])
 const offset = ref(0)
 const loading = ref(false)
 const hasMore = ref(true)
 const userStore=useUserStore()
-async function handleKick(member: GroupMember) {
+const otherStore = useOtherStore()
+
+
+function onContextMenuOpenChange(value: boolean) {
+  otherStore.setContextMenuOpen(value)
+}
+
+async function handleKick(member: GroupMemberAll) {
   try {
-    await groupMembersService.removeMember(props.groupId, member.user_id)
-    members.value = members.value.filter(m => m.user_id !== member.user_id)
+    await groupMembersService.removeMember(props.groupId, member.user_info.user_id)
+    members.value = members.value.filter(m => m.user_info.user_id !== member.user_info.user_id)
   } catch (error) {
     console.error('踢出群聊失败:', error)
   }
 }
 
-async function handleSetAdmin(member: GroupMember) {
+async function handleSetAdmin(member: GroupMemberAll) {
   try {
-    await groupMembersService.setAdmin(props.groupId, member.user_id)
-    const index = members.value.findIndex(m => m.user_id === member.user_id)
+    await groupMembersService.setAdmin(props.groupId, member.user_info.user_id)
+    const index = members.value.findIndex(m => m.user_info.user_id === member.user_info.user_id)
     if (index !== -1) {
       members.value[index].role = 'admin'
     }
@@ -46,10 +51,10 @@ async function handleSetAdmin(member: GroupMember) {
   }
 }
 
-async function handleRemoveAdmin(member: GroupMember) {
+async function handleRemoveAdmin(member: GroupMemberAll) { // 参数类型已修改
   try {
-    await groupMembersService.removeAdmin(props.groupId, member.user_id)
-    const index = members.value.findIndex(m => m.user_id === member.user_id)
+    await groupMembersService.removeAdmin(props.groupId, member.user_info.user_id) // 调整属性访问
+    const index = members.value.findIndex(m => m.user_info.user_id === member.user_info.user_id)
     if (index !== -1) {
       members.value[index].role = 'member'
     }
@@ -58,33 +63,33 @@ async function handleRemoveAdmin(member: GroupMember) {
   }
 }
 
-async function handleMute(member: GroupMember) {
+async function handleMute(member: GroupMemberAll) { // 参数类型已修改
   try {
-    await groupMembersService.muteMember(props.groupId, member.user_id, 3600)
+    await groupMembersService.muteMember(props.groupId, member.user_info.user_id, 3600) // 调整属性访问
   } catch (error) {
     console.error('禁言失败:', error)
   }
 }
 
-async function handleUnmute(member: GroupMember) {
+async function handleUnmute(member: GroupMemberAll) { // 参数类型已修改
   try {
-    await groupMembersService.unmuteMember(props.groupId, member.user_id)
-    const index = members.value.findIndex(m => m.user_id === member.user_id)
+    await groupMembersService.unmuteMember(props.groupId, member.user_info.user_id) // 调整属性访问
+    const index = members.value.findIndex(m => m.user_info.user_id === member.user_info.user_id)
     if (index !== -1) {
-      members.value[index].role = 'member'
+      members.value[index].is_muted = false // 根据 GroupMemberAll 结构调整
     }
   } catch (error) {
     console.error('取消禁言失败:', error)
   }
 }
 
-async function handleTransferOwner(member: GroupMember) {
+async function handleTransferOwner(member: GroupMemberAll) { // 参数类型已修改
   try {
-    await groupMembersService.transferOwnership(props.groupId, member.user_id)
-    const index = members.value.findIndex(m => m.user_id === member.user_id)
+    await groupMembersService.transferOwnership(props.groupId, member.user_info.user_id) // 调整属性访问
+    const index = members.value.findIndex(m => m.user_info.user_id === member.user_info.user_id)
     if (index !== -1) {
       members.value[index].role = 'owner'
-      const myIndex = members.value.findIndex(m => m.user_id === userStore.loggedInUser.user_id)
+      const myIndex = members.value.findIndex(m => m.user_info.user_id === userStore.loggedInUser.user_id)
       if (myIndex !== -1) {
         members.value[myIndex].role = 'admin'
       }
@@ -94,21 +99,20 @@ async function handleTransferOwner(member: GroupMember) {
   }
 }
 
-async function handleUpdateNickname(member: GroupMember) {
-  const newNickname = prompt('请输入新的昵称', member.username)
-  if (newNickname && newNickname !== member.username) {
+async function handleUpdateNickname(member: GroupMemberAll) {
+  const newNickname = prompt('请输入新的昵称', member.user_info.nickname) // 调整属性访问
+  if (newNickname && newNickname !== member.user_info.nickname) {
     try {
-      await groupMembersService.updateNickname(props.groupId, member.user_id, newNickname)
-      const index = members.value.findIndex(m => m.user_id === member.user_id)
+      await groupMembersService.updateNickname(props.groupId, member.user_info.user_id, newNickname)
+      const index = members.value.findIndex(m => m.user_info.user_id === member.user_info.user_id)
       if (index !== -1) {
-        members.value[index].username = newNickname
+        members.value[index].user_info.nickname = newNickname // 更新 nickname 字段
       }
     } catch (error) {
       console.error('更新昵称失败:', error)
     }
   }
 }
-
 
 async function loadMembers() {
   if (loading.value || !hasMore.value) return
@@ -119,8 +123,8 @@ async function loadMembers() {
       offset: offset.value
     })
     members.value = [...members.value, ...response.members]
-    hasMore.value = response.members.length === 8
-    offset.value += 8
+    hasMore.value = response.members.length >= 20
+    offset.value += 20
   } catch (error) {
     console.error('加载群成员失败:', error)
   } finally {
@@ -152,7 +156,8 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="members-list-container">
+
+  <div class="members-list-container " @click.stop>
     <div class="list-header flex items-center">
       <button
           class="mr-2 p-1 rounded-full hover:bg-gray-100 transition-colors"
@@ -169,16 +174,16 @@ onUnmounted(() => {
     </div>
     <div v-else>
       <!-- 将上下文菜单移到循环内部 -->
-      <div v-for="member in members" :key="member.user_id">
-        <ContextMenu ref="contextMenuRef">
+      <div v-for="member in members" :key="member.user_info.user_id">
+        <ContextMenu v-model:open="contextMenuOpen" @update:open="onContextMenuOpenChange">
           <ContextMenuTrigger>
             <div class="member-item">
               <img
-                  :src="member.avatar_url || '/images/default-avatar.png'"
+                  :src="member.user_info.avatar_url || '/images/default-avatar.png'"
                   class="avatar"
               >
               <div class="member-info">
-                <span class="nickname">{{ member.username }}</span>
+                <span class="nickname">{{ member.user_info.username }}</span>
                 <span class="role">{{ member.role }}</span>
               </div>
             </div>
@@ -194,13 +199,13 @@ onUnmounted(() => {
               <ContextMenuItem @click="handleRemoveAdmin(member)" v-if="member.role === 'admin'">
                 取消管理员
               </ContextMenuItem>
-              <!-- <ContextMenuItem @click="handleMute(member)" v-if="member.role !== 'muted'">
+              <ContextMenuItem @click="handleMute(member)" v-if="!member.is_muted">
                 禁言
               </ContextMenuItem>
-              <ContextMenuItem @click="handleUnmute(member)" v-if="member.role === 'muted'">
+              <ContextMenuItem @click="handleUnmute(member)" v-if="member.is_muted">
                 取消禁言
-              </ContextMenuItem> -->
-              <ContextMenuItem @click="handleTransferOwner(member)" v-if="member.user_id !== userStore.loggedInUser.user_id">
+              </ContextMenuItem>
+              <ContextMenuItem @click="handleTransferOwner(member)" v-if="member.user_info.user_id !== userStore.loggedInUser.user_id">
                 转让群主
               </ContextMenuItem>
               <ContextMenuItem @click="handleUpdateNickname(member)">
