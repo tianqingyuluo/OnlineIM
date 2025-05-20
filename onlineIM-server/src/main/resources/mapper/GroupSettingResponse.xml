@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="icu.tianqingyuluo.onlineim.mapper.GroupSettingMapper">
+    <!-- 群组设置映射 -->
+    <resultMap id="groupSettingResponseMap" type="icu.tianqingyuluo.onlineim.pojo.dto.response.GroupSettingResponse">
+        <result property="groupId" column="group_id" />
+        <result property="allowMemberInvite" column="allow_member_invite" />
+        <result property="allowMemberModifyName" column="allow_member_modify_name" />
+        <result property="allowMemberUploadFile" column="allow_member_upload_file" />
+        <result property="allowMemberAtAll" column="allow_member_at_all" />
+        <result property="allowViewHistoryMessage" column="allow_view_history_message" />
+        <result property="muteType" column="mute_type"/>
+        <result property="updatedAt" column="updated_at" />
+    </resultMap>
+
+    <select id="getByGroupId" resultMap="groupSettingResponseMap">
+        SELECT * FROM group_settings WHERE group_id = #{groupId}
+    </select>
+
+    <update id="update">
+        UPDATE group_settings
+        <set>
+            <if test="request.allowMemberInvite != null">allow_member_invite = #{request.allowMemberInvite},</if>
+            <if test="request.allowMemberModifyName != null">allow_member_modify_name = #{request.allowMemberModifyName},</if>
+            <if test="request.allowMemberUploadFile != null">allow_member_upload_file = #{request.allowMemberUploadFile},</if>
+            <if test="request.allowMemberAtAll != null">allow_member_at_all = #{request.allowMemberAtAll},</if>
+            <if test="request.allowViewHistoryMessage != null">allow_view_history_message = #{request.allowViewHistoryMessage}</if>
+        </set>
+        WHERE group_id = #{groupId}
+    </update>
+</mapper>
