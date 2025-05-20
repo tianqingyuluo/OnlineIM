@@ -9,10 +9,12 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.stream.ObjectRecord;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+import org.springframework.data.redis.stream.StreamMessageListenerContainer;
 
 import java.time.Duration;
 import java.util.Arrays;
@@ -78,4 +80,15 @@ public class RedisConfig implements CachingConfigurer {
         template.afterPropertiesSet();
         return template;
     }
+
+//    @Bean
+//    public StreamMessageListenerContainer<String, ObjectRecord<String, String>> streamContainer(
+//            RedisConnectionFactory factory) {
+//        StreamMessageListenerContainer.StreamMessageListenerContainerOptions<String, ObjectRecord<String, String>> options =
+//                StreamMessageListenerContainer.StreamMessageListenerContainerOptions
+//                        .builder()
+//                        .pollTimeout(Duration.ofSeconds(1))
+//                        .build();
+//        return StreamMessageListenerContainer.create(factory, options);
+//    }
 }

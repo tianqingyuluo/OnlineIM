@@ -31,7 +31,9 @@ public class LocalChannelRegistry {
     // 移除channel
     public static void remove(String channelID) {
         String connectionID = CONNECTION_ID_MAP.get(channelID);
-        CHANNEL_MAP.remove(connectionID);
-        CONNECTION_ID_MAP.remove(channelID);
+        if (connectionID != null) {
+            CHANNEL_MAP.remove(connectionID);
+            CONNECTION_ID_MAP.remove(channelID);
+        }
     }
 }

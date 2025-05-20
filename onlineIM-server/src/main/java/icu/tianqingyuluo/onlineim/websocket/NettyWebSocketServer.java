@@ -64,21 +64,21 @@ public class NettyWebSocketServer {
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         @Override
                         protected void initChannel(SocketChannel ch) {
-                            ch.pipeline().addLast(
+                            ch.pipeline()
+                                    .addLast(
                                     // HTTP编解码器
-                                    new HttpServerCodec(),
+                                    new HttpServerCodec())
                                     // 支持大数据流
-                                    new ChunkedWriteHandler(),
+                                    .addLast(new ChunkedWriteHandler())
                                     // 聚合HTTP消息
-                                    new HttpObjectAggregator(65536),
+                                    .addLast(new HttpObjectAggregator(65536))
                                     // JWT认证处理器
-                                    webSocketAuthHandler,
-                                    // 至此之后完成协议升级，开始websocket连接生命周期
+                                    .addLast(webSocketAuthHandler)
                                     // WebSocket协议处理
-                                    new WebSocketServerProtocolHandler(websocketPath, null, true),
+                                    .addLast(new WebSocketServerProtocolHandler(websocketPath, null, true))
+                                    // 至此之后完成协议升级，开始websocket连接生命周期
                                     // 自定义消息处理器
-                                    webSocketMessageDispatchHandler
-                            );
+                                    .addLast(webSocketMessageDispatchHandler);
                         }
                     });
 

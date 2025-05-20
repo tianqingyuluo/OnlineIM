@@ -6,26 +6,28 @@ import icu.tianqingyuluo.onlineim.service.UserSessionService;
 import icu.tianqingyuluo.onlineim.service.impl.UserDetailsServiceImpl;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
 import icu.tianqingyuluo.onlineim.util.LocalChannelRegistry;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.handler.codec.http.FullHttpRequest;
-import io.netty.handler.codec.http.HttpHeaderNames;
-import io.netty.handler.codec.http.HttpHeaders;
-import io.netty.handler.codec.http.HttpResponseStatus;
-import io.netty.handler.codec.http.DefaultFullHttpResponse;
-import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http.websocketx.WebSocketServerHandshaker;
+import io.netty.handler.codec.http.websocketx.WebSocketServerHandshakerFactory;
 import io.netty.util.AttributeKey;
+import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
 import java.util.concurrent.TimeUnit;
 
+import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
+
 /**
  * WebSocket认证处理器
  * 负责验证WebSocket连接请求中的JWT令牌
  */
 @Slf4j
+@ChannelHandler.Sharable
 public class WebSocketAuthHandler extends ChannelInboundHandlerAdapter {
 
     private final JwtUtil jwtUtil;
@@ -45,24 +47,33 @@ public class WebSocketAuthHandler extends ChannelInboundHandlerAdapter {
         // 处理HTTP握手请求
         if (msg instanceof FullHttpRequest) {
             FullHttpRequest request = (FullHttpRequest) msg;
-            
-            // 获取请求头中的Authorization
-            HttpHeaders headers = request.headers();
-            String authHeader = headers.get(HttpHeaderNames.AUTHORIZATION);
+
+            QueryStringDecoder queryDecoder = new QueryStringDecoder(request.uri());
+
+            // 优先从 URL 参数中获取 token（例如 ws://host/ws?token=xxx）
+            String token = queryDecoder.parameters().get("token").stream().findFirst().orElse(null);
             
             // 如果请求头中包含有效的JWT令牌，则立即验证
-            if (authHeader != null && authHeader.startsWith("Bearer ")) {
-                String token = authHeader.substring(7);
+            if (token != null && token.startsWith("Bearer ")) {
                 if (authenticateToken(token, ctx)) {
-                    // 认证成功，继续处理请求
-                    ctx.fireChannelRead(msg);
+                    FullHttpRequest cleanRequest = new DefaultFullHttpRequest(
+                            request.protocolVersion(),
+                            request.method(),
+                            request.uri().substring(0, request.uri().indexOf('?')), // 使用干净的路径
+                            request.content().copy(),
+                            request.headers(),
+                            request.trailingHeaders()
+                    );
+
+                    // 认证成功后传递干净的请求
+                    ctx.fireChannelRead(cleanRequest);
                     return;
                 }
             } else {
                 // 如果请求头中没有令牌，直接返回401。
                 log.info("WebSocket没有携带JWT请求头");
                 DefaultFullHttpResponse response = new DefaultFullHttpResponse(
-                        HttpVersion.HTTP_1_1, HttpResponseStatus.UNAUTHORIZED);
+                        HTTP_1_1, HttpResponseStatus.UNAUTHORIZED);
                 ctx.writeAndFlush(response);
                 ctx.close();
                 return;
@@ -118,13 +129,14 @@ public class WebSocketAuthHandler extends ChannelInboundHandlerAdapter {
         // 连接关闭时，移除用户信息
         String channelId = ctx.channel().id().asLongText();
         String token = ctx.channel().attr(AttributeKey.valueOf("jwt_token")).get().toString();
-        String userID = jwtUtil.getUserIDFromToken(token);
-        String deviceID = jwtUtil.getDeviceIDFromToken(token);
-        // 删除该device在redis中的连接记录以及删除本地表中的channel对象
-        userSessionService.removeDeviceSession(userID, deviceID, channelId);
-        if (userID != null) {
+        if (token != null) {
+            String userID = jwtUtil.getUserIDFromToken(token);
+            String deviceID = jwtUtil.getDeviceIDFromToken(token);
+            // 删除该device在redis中的连接记录以及删除本地表中的channel对象
+            userSessionService.removeDeviceSession(userID, deviceID, channelId);
             log.info("WebSocket连接关闭，用户: {}", userID);
         }
+
         super.channelInactive(ctx);
     }
 

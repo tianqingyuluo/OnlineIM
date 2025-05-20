@@ -6,6 +6,7 @@ import icu.tianqingyuluo.onlineim.util.JwtUtil;
 import icu.tianqingyuluo.onlineim.websocket.NettyWebSocketServer;
 import icu.tianqingyuluo.onlineim.websocket.WebSocketAuthHandler;
 import icu.tianqingyuluo.onlineim.websocket.WebSocketMessageDispatchHandler;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -19,11 +20,15 @@ public class WebSocketConfig {
     private final UserDetailsServiceImpl userDetailsService;
     private final JwtUtil jwtUtil;
     private final UserSessionService userSessionService;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
-    public WebSocketConfig(UserDetailsServiceImpl userDetailsService, JwtUtil jwtUtil, UserSessionService userSessionService) {
+    public WebSocketConfig(UserDetailsServiceImpl userDetailsService,
+                           JwtUtil jwtUtil, UserSessionService userSessionService,
+                           ApplicationEventPublisher applicationEventPublisher) {
         this.userDetailsService = userDetailsService;
         this.jwtUtil = jwtUtil;
         this.userSessionService = userSessionService;
+        this.applicationEventPublisher = applicationEventPublisher;
     }
 
     /**
@@ -39,7 +44,7 @@ public class WebSocketConfig {
      */
     @Bean
     public WebSocketMessageDispatchHandler webSocketMessageHandler() {
-        return new WebSocketMessageDispatchHandler(jwtUtil);
+        return new WebSocketMessageDispatchHandler(jwtUtil, applicationEventPublisher);
     }
 
     /**

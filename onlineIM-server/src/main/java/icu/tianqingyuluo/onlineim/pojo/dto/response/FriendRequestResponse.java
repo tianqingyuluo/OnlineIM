@@ -40,6 +40,6 @@ public class FriendRequestResponse {
     /**
      * 创建时间
      */
-    @JsonProperty("sender_info")
+    @JsonProperty("create_at")
     private String createdAt;
 } 

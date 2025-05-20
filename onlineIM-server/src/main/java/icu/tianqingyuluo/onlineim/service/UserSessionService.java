@@ -29,10 +29,11 @@ public class UserSessionService {
         String key = SESSION_PREFIX + userID + ":" + deviceID;
 
         redisTemplate.opsForValue().set(key,
-                RedisConnectionMeta.builder()
-                        .connectionID(connectionID)
-                        .currentNodeIP(ip)
-                        .activeTime(System.currentTimeMillis())
+                new RedisConnectionMeta(
+                        connectionID,
+                        ip,
+                        System.currentTimeMillis()
+                )
         );
         // 更新当前节点的连接数
         redisTemplate.opsForHash().increment(NODE_PREFIX, ip,1);
