@@ -24,7 +24,7 @@ import type { Friend } from '@/type/Friends.ts'
 import { groupAndSortFriends } from '@/utils/friendGroupUtils'
 import AddGroupDialog from "@/components/AddGroupDialog.vue";
 import EditGroupDialog from "@/components/EditGroupDialog.vue";
-
+import BlacklistSidebar from "@/components/BlacklistSidebar.vue";
 const router = useRouter()
 const activeItem = ref<string | null>(null);
 const expandedGroups = ref<Record<string, boolean>>({});
@@ -139,8 +139,8 @@ function handleUserClick(user: Friend) {
                     <SidebarGroupLabel
                         ref="groupLabelRef"
                         @click="toggleGroup(group.group.id)"
-                        class="cursor-pointer flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors font-bold"
-                        :class="[isGroupMenuOpen && currentGroupId === group.group.id ? 'bg-gray-100' : '']"
+                        class="cursor-pointer flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors font-bold "
+                        :class="[isGroupMenuOpen && currentGroupId === group.group.id ? 'bg-gray-100' : ''] "
                         style="font-size: 15px"
                     >
                       {{ group.group.name }} ({{ group.friends.length }})
@@ -205,9 +205,11 @@ function handleUserClick(user: Friend) {
               </div>
             </template>
           </SidebarMenu>
+          <BlacklistSidebar />
         </SidebarGroupContent>
       </SidebarGroup>
     </SidebarContent>
+
   </Sidebar>
   <AddGroupDialog 
     :show="showAddGroupDialog"

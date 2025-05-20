@@ -8,9 +8,12 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu'
+import { useUserStore } from '@/stores/user';
+import { groupMembersService } from '@/services/groupmembers.service';
 
 const props = defineProps<{
   groupId: string
+  myRole: string
 }>()
 
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
@@ -21,18 +24,91 @@ const members = ref<GroupMember[]>([])
 const offset = ref(0)
 const loading = ref(false)
 const hasMore = ref(true)
-
-function handleKick(member: GroupMember) {
-  console.log('踢出群聊:', member.user_id)
+const userStore=useUserStore()
+async function handleKick(member: GroupMember) {
+  try {
+    await groupMembersService.removeMember(props.groupId, member.user_id)
+    members.value = members.value.filter(m => m.user_id !== member.user_id)
+  } catch (error) {
+    console.error('踢出群聊失败:', error)
+  }
 }
 
-function handleSetAdmin(member: GroupMember) {
-  console.log('设为管理员:', member.user_id)
+async function handleSetAdmin(member: GroupMember) {
+  try {
+    await groupMembersService.setAdmin(props.groupId, member.user_id)
+    const index = members.value.findIndex(m => m.user_id === member.user_id)
+    if (index !== -1) {
+      members.value[index].role = 'admin'
+    }
+  } catch (error) {
+    console.error('设为管理员失败:', error)
+  }
 }
 
-function handleViewProfile(member: GroupMember) {
-  console.log('查看资料:', member.user_id)
+async function handleRemoveAdmin(member: GroupMember) {
+  try {
+    await groupMembersService.removeAdmin(props.groupId, member.user_id)
+    const index = members.value.findIndex(m => m.user_id === member.user_id)
+    if (index !== -1) {
+      members.value[index].role = 'member'
+    }
+  } catch (error) {
+    console.error('取消管理员失败:', error)
+  }
 }
+
+async function handleMute(member: GroupMember) {
+  try {
+    await groupMembersService.muteMember(props.groupId, member.user_id, 3600)
+  } catch (error) {
+    console.error('禁言失败:', error)
+  }
+}
+
+async function handleUnmute(member: GroupMember) {
+  try {
+    await groupMembersService.unmuteMember(props.groupId, member.user_id)
+    const index = members.value.findIndex(m => m.user_id === member.user_id)
+    if (index !== -1) {
+      members.value[index].role = 'member'
+    }
+  } catch (error) {
+    console.error('取消禁言失败:', error)
+  }
+}
+
+async function handleTransferOwner(member: GroupMember) {
+  try {
+    await groupMembersService.transferOwnership(props.groupId, member.user_id)
+    const index = members.value.findIndex(m => m.user_id === member.user_id)
+    if (index !== -1) {
+      members.value[index].role = 'owner'
+      const myIndex = members.value.findIndex(m => m.user_id === userStore.loggedInUser.user_id)
+      if (myIndex !== -1) {
+        members.value[myIndex].role = 'admin'
+      }
+    }
+  } catch (error) {
+    console.error('转让群主失败:', error)
+  }
+}
+
+async function handleUpdateNickname(member: GroupMember) {
+  const newNickname = prompt('请输入新的昵称', member.username)
+  if (newNickname && newNickname !== member.username) {
+    try {
+      await groupMembersService.updateNickname(props.groupId, member.user_id, newNickname)
+      const index = members.value.findIndex(m => m.user_id === member.user_id)
+      if (index !== -1) {
+        members.value[index].username = newNickname
+      }
+    } catch (error) {
+      console.error('更新昵称失败:', error)
+    }
+  }
+}
+
 
 async function loadMembers() {
   if (loading.value || !hasMore.value) return
@@ -108,15 +184,40 @@ onUnmounted(() => {
             </div>
           </ContextMenuTrigger>
           <ContextMenuContent>
-            <ContextMenuItem @click="handleKick(member)">
-              踢出群聊
-            </ContextMenuItem>
-            <ContextMenuItem @click="handleSetAdmin(member)">
-              设为管理员
-            </ContextMenuItem>
-            <ContextMenuItem @click="handleViewProfile(member)">
-              查看资料
-            </ContextMenuItem>
+            <template v-if="myRole === 'owner'">
+              <ContextMenuItem @click="handleKick(member)">
+                踢出群聊
+              </ContextMenuItem>
+              <ContextMenuItem @click="handleSetAdmin(member)" v-if="member.role !== 'admin'">
+                设为管理员
+              </ContextMenuItem>
+              <ContextMenuItem @click="handleRemoveAdmin(member)" v-if="member.role === 'admin'">
+                取消管理员
+              </ContextMenuItem>
+              <!-- <ContextMenuItem @click="handleMute(member)" v-if="member.role !== 'muted'">
+                禁言
+              </ContextMenuItem>
+              <ContextMenuItem @click="handleUnmute(member)" v-if="member.role === 'muted'">
+                取消禁言
+              </ContextMenuItem> -->
+              <ContextMenuItem @click="handleTransferOwner(member)" v-if="member.user_id !== userStore.loggedInUser.user_id">
+                转让群主
+              </ContextMenuItem>
+              <ContextMenuItem @click="handleUpdateNickname(member)">
+                更新昵称
+              </ContextMenuItem>
+            </template>
+            <template v-else-if="myRole === 'admin'">
+              <ContextMenuItem @click="handleKick(member)" v-if="member.role === 'member'">
+                踢出群聊
+              </ContextMenuItem>
+              <!-- <ContextMenuItem @click="handleMute(member)" v-if="member.role !== 'muted'">
+                禁言
+              </ContextMenuItem>
+              <ContextMenuItem @click="handleUnmute(member)" v-if="member.role === 'muted'">
+                取消禁言
+              </ContextMenuItem> -->
+            </template>
           </ContextMenuContent>
         </ContextMenu>
       </div>

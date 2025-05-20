@@ -212,6 +212,7 @@ onMounted(() => {
           v-else
           key="members"
           :groupId="group.group_id"
+          :myRole="group.my_role"
           @back="showMembersList = false"
           ref="groupMembersListRef"
       />

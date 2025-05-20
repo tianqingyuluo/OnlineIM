@@ -78,7 +78,7 @@ const editProfile = () => {
 
 <template>
   <!-- 外层容器添加拖动功能 -->
-  <div ref="modalRef" class="fixed z-50 top-[10%] left-[30%] w-[40%]">
+  <div ref="modalRef" class="fixed z-50 top-[10%] w-1/3">
     <transition name="fade-slide" mode="out-in">
       <div v-if="!showSettings" class="bg-white rounded-lg shadow-lg w-full max-w-md">
         <!-- 新增统一顶栏 -->

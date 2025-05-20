@@ -43,6 +43,7 @@ export const useUserStore = defineStore('user', {
       listStore.groups = [] as GroupResponse[]
       listStore.groupTotal = 0
       listStore.groupedFriends=[]
+      listStore.userGroups=[]
       await authService.logout()
       TokenService.clear()
     },
@@ -50,7 +51,9 @@ export const useUserStore = defineStore('user', {
       return !!this.token
     },
     async fetchUserData() {
-      await meService.me();
+      if (!this.loggedInUser.user_id) {
+        await meService.me();
+      }
     },
     async updateToken() {
       TokenService.init(this.token)
