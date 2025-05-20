@@ -53,6 +53,7 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
+
     const userStore = useUserStore();
     
     // 如果请求被取消
@@ -83,50 +84,52 @@ api.interceptors.response.use(
       ...data // 保留原始错误数据
     };
 
-    switch (status) {
-      case 400:
-        // 不需要toast，由调用方处理字段级错误
-        break;
-        
-      case 401:
-        if (userStore.isAuthenticated()) {
-          userStore.clearUser(); // 使用store的统一logout方法
-          toast.error('会话已过期', {
-            description: '请重新登录',
-            duration: 5000
-          });
-          router.push({ name: 'login', query: { redirect: router.currentRoute.value.fullPath } });
-        }
-        break;
 
-      case 403:
-        toast.error('权限不足', {
-          description: '您没有执行此操作的权限'
-        });
-        break;
+    switch (status) {
+      // case 400:
+      //   // 不需要toast，由调用方处理字段级错误
+      //   break;
+      //
+      // case 401:
+      //   if (userStore.isAuthenticated()) {
+      //     userStore.clearUser(); // 使用store的统一logout方法
+      //     toast.error('会话已过期', {
+      //       description: '请重新登录',
+      //       duration: 5000
+      //     });
+      //     router.push({ name: 'login', query: { redirect: router.currentRoute.value.fullPath } });
+      //   }
+      //   break;
+      //
+      // case 403:
+      //   toast.error('权限不足', {
+      //     description: '您没有执行此操作的权限'
+      //   });
+      //   break;
 
       case 404:
-        // 由调用方决定如何处理404
+        toast.error( data.message ||"我们的服务出了点问题，网页错误代码：404");
         break;
 
-      case 429:
-        toast.error('请求过于频繁', {
-          description: '请稍后再试'
-        });
-        break;
-
-      case 500:
-        toast.error('服务器错误', {
-          description: '我们的服务暂时遇到问题，请稍后再试'
-        });
-        break;
-
+      // case 429:
+      //   toast.error('请求过于频繁', {
+      //     description: '请稍后再试'
+      //   });
+      //   break;
+      //
+      // case 500:
+      //   toast.error('服务器错误', {
+      //     description: '我们的服务暂时遇到问题，请稍后再试'
+      //   });
+      //   break;
+      //
+      // default:
+      //   if (status >= 500) {
+      //     toast.error(`服务器错误 (${status})`);
+      //   }
       default:
-        if (status >= 500) {
-          toast.error(`服务器错误 (${status})`);
-        }
+        toast.error(  data.message ||"我们的服务出了点问题");
     }
-
     return Promise.reject(normalizedError);
   }
 );

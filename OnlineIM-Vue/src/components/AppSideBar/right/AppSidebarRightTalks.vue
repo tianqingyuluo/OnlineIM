@@ -14,6 +14,7 @@ import {Input} from "@/components/ui/input";
 import {Search} from "lucide-vue-next";
 import {useListStore} from '@/stores/list.ts'
 import {type Conversation} from "@/type/Conversation.ts";
+import router from "@/router";
 
 
 const activeId = ref<string | null>(null);
@@ -24,6 +25,10 @@ const conversations = computed(() => listStore.conversations)
 function handleChatClick(conversation: Conversation) {
   activeId.value = conversation.conversation_id
   emits('chatSelected', conversation)
+  if (conversation.type=='private')
+    router.push(`/main/chat/private/${conversation.conversation_id}`)
+  else
+    router.push(`/main/chat/group/${conversation.conversation_id}`)
 }
 </script>
 
