@@ -7,14 +7,14 @@
     <!-- 群成员结果映射 -->
     <resultMap id="GroupMemberResultMap" type="icu.tianqingyuluo.onlineim.pojo.dto.response.GroupMemberResponse">
         <result property="role" column="role"/>
-        <result property="groupNickname" column="nickname"/>
+        <result property="groupNickname" column="group_nickname"/>
         <result property="isMuted" column="is_muted"/>
         <result property="muteEndTime" column="mute_end_time"/>
         <result property="joinedAt" column="join_time"/>
         <association property="userInfo" javaType="icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse">
             <id property="userId" column="user_id"/>
             <result property="username" column="username"/>
-            <result property="nickname" column="nickname"/>
+            <result property="nickname" column="user_nickname"/>
             <result property="avatarUrl" column="avatar"/>
         </association>
     </resultMap>
@@ -22,8 +22,9 @@
     <!-- 获取群组的所有成员 -->
     <select id="getGroupMembersByGroupID" resultMap="GroupMemberResultMap">
         SELECT
-            gm.*,
+            gm.*,gm.nickname as group_nickname,
             u.username,
+            u.nickname as user_nickname,
             u.avatar,
             CASE
                 WHEN gm.mute_end_time IS NULL AND gs.mute_type != 1 THEN false
@@ -40,6 +41,30 @@
             group_settings gs ON g.id = gs.group_id
         WHERE
             gm.group_id = #{groupId}
+    </select>
+
+    <!-- 获取群组成员 -->
+    <select id="getGroupMemberByMemberID" resultMap="GroupMemberResultMap">
+        SELECT
+            gm.*,gm.nickname as group_nickname,
+            u.username,
+            u.nickname as user_nickname,
+            u.avatar,
+            CASE
+                WHEN gm.mute_end_time IS NULL AND gs.mute_type != 1 THEN false
+                WHEN gm.mute_end_time > NOW() OR gs.mute_type = 1 THEN true
+                ELSE false
+                END AS is_muted
+        FROM
+            group_members gm
+                JOIN
+            `groups` g ON gm.group_id = g.id
+                JOIN
+            `users` u ON gm.user_id = u.id
+                JOIN
+            group_settings gs ON g.id = gs.group_id
+        WHERE
+            gm.id = #{id}
     </select>
 
     <!-- 获取用户加入的所有群组的成员信息 -->
