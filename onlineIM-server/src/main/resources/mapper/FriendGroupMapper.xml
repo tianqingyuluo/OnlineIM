@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="icu.tianqingyuluo.onlineim.mapper.FriendGroupMapper">
+    <resultMap id="friendGroupResponseMap" type="icu.tianqingyuluo.onlineim.pojo.dto.response.FriendGroupResponse">
+        <!-- 基本字段映射 -->
+        <id property="groupID" column="friend_group_id"/>
+        <result property="name" column="name"/>
+        <result property="sort" column="sort"/>
+        <result property="createdAt" column="friend_group_created_at"/>
+
+        <!-- 一对多关系，使用 collection -->
+        <collection property="friends" ofType="icu.tianqingyuluo.onlineim.pojo.dto.response.FriendResponse">
+            <id property="friendshipID" column="friendship_id"/>
+            <result property="userID" column="user_id"/>
+            <result property="username" column="username"/>
+            <result property="nickname" column="nickname"/>
+            <result property="avatarUrl" column="avatar"/>
+            <result property="remark" column="remark"/>
+            <result property="friendGroupID" column="friend_group_id"/>
+            <result property="createdAt" column="friend_created_at"/>
+        </collection>
+    </resultMap>
+
+    <select id="getFriendGroupsByUserId" resultMap="friendGroupResponseMap">
+        SELECT
+            fgrp.id as friend_group_id,
+            fgrp.name,
+            fgrp.sort,
+            fgrp.created_at as friend_group_created_at,
+            uf.id as friendship_id,
+            u.id as user_id,
+            u.username,
+            u.nickname,
+            u.avatar,
+            uf.remark,
+            uf.group_id as friend_group_id,
+            uf.created_at as friend_created_at
+        FROM
+            friend_groups fgrp
+                INNER JOIN
+            user_friends uf ON fgrp.id = uf.group_id
+                INNER JOIN
+            users u ON uf.friend_id = u.id
+        WHERE
+            fgrp.user_id = #{userid}
+        ORDER BY fgrp.sort
+    </select>
+
+    <select id="getFriendGroupByGroupId" resultMap="friendGroupResponseMap">
+        SELECT
+            fgrp.id as friend_group_id,
+            fgrp.name,
+            fgrp.sort,
+            fgrp.created_at as friend_group_created_at,
+            uf.id as friendship_id,
+            u.id as user_id,
+            u.username,
+            u.nickname,
+            u.avatar,
+            uf.remark,
+            uf.group_id as friend_group_id,
+            uf.created_at as friend_created_at
+        FROM
+            friend_groups fgrp
+                LEFT JOIN
+            user_friends uf ON fgrp.id = uf.group_id
+                LEFT JOIN
+            users u ON uf.friend_id = u.id
+        WHERE
+            fgrp.id = #{id}
+    </select>
+</mapper>
