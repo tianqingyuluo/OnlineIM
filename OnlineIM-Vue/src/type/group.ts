@@ -59,3 +59,27 @@ export interface GroupMembersResponse {
     members: GroupMemberAll[];
     total: number;
 }
+export interface GroupJoinRequestResponse {
+    
+    requestID:string
+    groupID:string
+    groupName:string
+    userInfo:
+        {
+            username:string
+            nickname:string
+            avatarUrl:string
+            userID:string
+        }
+    inviterInfo:
+        {
+        username:string
+        nickname:string
+        avatarUrl:string
+        userID:string
+        }
+    message:string
+    status:string
+    createdAt:string
+    
+} 

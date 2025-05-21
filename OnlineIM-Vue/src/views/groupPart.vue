@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import {ref, onMounted, computed, watch} from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { groupService } from '@/services/group.service'
 import type { GroupResponse } from '@/type/group'
 import {Button} from "@/components/ui/button";
@@ -26,7 +26,7 @@ const fetchGroupInfo = async () => {
 // 初始加载
 onMounted(fetchGroupInfo)
 
-
+const router = useRouter()
 </script>
 
 <template>
@@ -65,7 +65,12 @@ onMounted(fetchGroupInfo)
         <span>{{ group.created_at }}</span>
       </div>
     </div>
-    <Button class="flex flex-col items-center justify-center w-full p-4 mt-8 hover:scale-105 transition-transform duration-200">发消息</Button>
+    <Button 
+  class="flex flex-col items-center justify-center w-full p-4 mt-8 hover:scale-105 transition-transform duration-200"
+  @click="router.push(`/main/chat/group/${groupId}`)"
+>
+  发消息
+</Button>
   </div>
   <div v-else class="loading">
     加载中...

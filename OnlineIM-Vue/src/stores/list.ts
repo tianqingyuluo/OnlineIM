@@ -3,7 +3,7 @@ import {  friendsService} from '@/services/friends.service';
 import { conversationService} from '@/services/conversation.service';
 import {type Conversation}from'@/type/Conversation.ts'
 import { groupService } from '@/services/group.service';
-import type {GroupResponse} from "@/type/group.ts";
+import type {GroupJoinRequestResponse, GroupResponse} from "@/type/group.ts";
 import type {UserGroupInfo} from "@/type/userGroup.ts";
 import {friendGroupsService} from "@/services/friendGroups.servise.ts";
 import {type GroupedFriends, groupAndSortFriends } from '@/utils/friendGroupUtils';
@@ -19,7 +19,8 @@ export const useListStore = defineStore('list', {
     friendTotal: 0,
     groups: [] as GroupResponse[],//全群组列表
     groupTotal: 0,
-    groupedFriends: [] as GroupedFriends[]
+    groupedFriends: [] as GroupedFriends[],
+    groupJoinRequestList:[] as GroupJoinRequestResponse[],
   }),
   actions: {
     async fetchUserData() {
@@ -38,7 +39,9 @@ export const useListStore = defineStore('list', {
       if (this.groups.length === 0) {
         await groupService.getJoinedGroups()
       }
-
+      if (this.groupJoinRequestList.length === 0) {
+        await this.getGroupJoinRequestList()
+      }
       
     },
     
@@ -113,6 +116,42 @@ export const useListStore = defineStore('list', {
         groupAndSortFriends(this.friends, this.userGroups, true);
       }
     },
+    // 在 useListStore 的 actions 中添加这个方法
+async getGroupJoinRequestList() {
+  try {
+    // 临时存储所有请求，避免重复添加
+    const allRequests: GroupJoinRequestResponse[] = [];
+    
+    // 遍历用户的所有群组
+    for (const group of this.groups) {
+      // 只处理角色不是 'member' 的群组（管理员或群主）
+      if (group.my_role && group.my_role !== 'member') {
+        try {
+          // 获取该群组的加群请求
+          const requests = await groupService.getGroupJoinRequests(group.group_id);
+          
+          // 如果返回的是数组，直接合并
+          if (Array.isArray(requests)) {
+            allRequests.push(...requests);
+          } 
+          // 如果返回的是单个对象，包装成数组
+          else if (typeof requests === 'object' && requests !== null) {
+            allRequests.push(requests);
+          }
+        } catch (error) {
+          console.error(`获取群组 ${group.name} 的加群请求失败:`, error);
+          // 继续处理下一个群组，不中断整个流程
+          continue;
+        }
+      }
+    }
+    this.groupJoinRequestList = allRequests;
+    return allRequests;
+  } catch (error) {
+    console.error('获取加群请求列表失败:', error);
+    throw error;
+    }
   },
-  persist: true
-})
+},
+  persist: true,
+});

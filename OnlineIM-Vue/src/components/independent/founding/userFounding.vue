@@ -7,6 +7,7 @@ import {Button} from "@/components/ui/button";
 import usersSelectResult from './usersSelectResoult.vue'
 import FriendRequestsList from "@/components/independent/founding/FriendRequestsList.vue";
 import GroupSelectResult from './GroupSelectResult.vue';
+import GroupJoinRequestsList from "@/components/independent/founding/GroupJoinRequestsList.vue";
 // 拖动逻辑
 const modalRef = ref<HTMLElement | null>(null);
 let isDragging = false;
@@ -44,7 +45,7 @@ const stopDrag = () => {
 
 // 菜单选项
 const activeTab = ref('好友');
-const tabs = ['好友', '群聊', '未处理请求'];
+const tabs = ['好友', '群聊', '好友请求', '群组请求'];
 const searchQuery = ref('');
 
 // 添加对activeTab的监听
@@ -131,8 +132,11 @@ const handleClose = () => {
         <template v-else-if="activeTab ==='群聊'">
           <GroupSelectResult :keyword="searchQuery" class="h-full"/>
         </template>
-        <template v-else-if="activeTab ==='未处理请求'">
+        <template v-else-if="activeTab ==='好友请求'">
           <FriendRequestsList/>
+        </template>
+        <template v-else-if="activeTab ==='群组请求'">
+          <GroupJoinRequestsList/>
         </template>
       </div>
     </div>
@@ -145,4 +149,6 @@ const handleClose = () => {
   cursor: move;
   user-select: none;
 }
+
+
 </style>

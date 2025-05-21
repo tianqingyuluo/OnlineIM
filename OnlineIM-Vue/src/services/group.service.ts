@@ -1,6 +1,7 @@
 import api from './api.service';
 import type { FormContext } from 'vee-validate';
 import {
+  type GroupJoinRequestResponse,
     type GroupMembersResponse,
     type GroupResponse,
     type GroupSearchResponse,
@@ -67,6 +68,15 @@ export const groupService = {
       throw error;
     }
   },
+  async delGroup(groupId: string) {
+      try {
+          const response = await api.delete(`/groups/${groupId}`);
+          return response.data;
+      } catch (error) {
+          console.error('解散群失败:', error);
+          throw error;
+      }
+  },
 
   // 获取群组成员列表
   async getGroupMembers(
@@ -89,7 +99,7 @@ export const groupService = {
   },
   // 获取已加入的群组列表
   async getJoinedGroups(
-      params: {
+      params?: {
           offset?: number;
       }
   ): Promise<JoinedGroupsResponse> {
@@ -121,4 +131,84 @@ export const groupService = {
     }
   },
 
+  // 上传群头像
+  async uploadGroupAvatar(
+    groupId: string,
+    avatar: File,
+  ) {
+    const formData = new FormData();
+    formData.append('avatar', avatar);
+    try {
+      const response = await api.post(`/groups/${groupId}/avatar`,formData);
+      return response.data.avatarUrl;
+    } catch (error) {
+      console.error('上传群头像失败:', error);
+      throw error;
+    }
+  },
+
+  // 邀请用户加入群组
+  async inviteUsersToGroup(
+    groupId: string,
+    userIdsToInvite: string[],
+  ) {
+    try {
+      const response = await api.post(`/groups/${groupId}/invite`, {
+        user_ids: userIdsToInvite,
+      });
+      return response.data.success;
+    } catch (error) {
+      console.error('邀请用户加入群组失败:', error);
+      throw error;
+    }
+  },
+
+  // 处理加群请求
+  async handleJoinRequest(
+    groupId: string,
+    requestId: string,
+    action: string,
+  ) {
+    try {
+      const response = await api.post(`/groups/${groupId}/join-requests/${requestId}`, {
+        action,
+      });
+      return response.data.success;
+    } catch (error) {
+      console.error('处理加群请求失败:', error);
+      throw error;
+    }
+  },
+
+  // 获取群组加群请求列表
+  async getGroupJoinRequests(
+    groupId: string,
+  ) {
+    try {
+      const response = await api.get<GroupJoinRequestResponse>(`/groups/${groupId}/join-requests`);
+      return response.data;
+    } catch (error) {
+      console.error('获取群组加群请求列表失败:', error);
+      throw error;
+    }
+  },
+
+  // 申请加入群组
+  async requestToJoinGroup(
+    groupId: string,
+    message?: string
+  ) {
+    try {
+      const response = await api.post(`/groups/${groupId}/join`, {
+        message
+      });
+      return response.data.message;
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        throw new Error('该群只允许邀请加入');
+      }
+      console.error('申请加入群组失败:', error);
+      throw error;
+    }
+  }
 };

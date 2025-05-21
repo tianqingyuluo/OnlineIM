@@ -70,13 +70,14 @@ onUnmounted(() => {
             <button class="reject-btn">拒绝</button>
 
           </template>
-          <span v-else-if="request.status === 'accepted'" class="status-text">已同意</span>
-          <span v-else class="status-text">已拒绝</span>
+          <span v-else-if="request.status === 'accepted'" class="status-text p-2">已同意</span>
+          <span v-else class="status-text p-2">已拒绝</span>
         </div>
       </div>
       <div v-if="loading" class="loading">加载中...</div>
-      <div v-if="!hasMore && requests.length > 0" class="no-more">没有更多请求了</div>
+      <div v-if="!hasMore && requests.length > 0" class="no-more">没有更多好友请求了</div>
     </div>
+
   </div>
 </template>
 

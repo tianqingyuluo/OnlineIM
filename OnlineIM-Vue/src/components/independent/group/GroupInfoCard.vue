@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import type { GroupMemberAll, GroupResponse} from '@/type/group.ts'
-import {nextTick, onMounted, ref, watch} from 'vue';
+import type {GroupMemberAll, GroupResponse} from '@/type/group.ts'
+import {nextTick, onMounted, ref, shallowRef, watch} from 'vue';
 import GroupMembersList from '@/components/independent/group/GroupMembersList.vue'
-import type { GroupSetting } from '@/type/groupsetting';
-import { groupService } from '@/services/group.service';
+import type {GroupSetting} from '@/type/groupsetting';
+import {groupService} from '@/services/group.service';
 import {Switch} from "@/components/ui/switch";
 import {GroupSettingService} from '@/services/groupsetting.service';
-import { shallowRef } from 'vue'
+import {Button} from "@/components/ui/button";
+import {toast} from 'vue-sonner';
+
 const props = defineProps<{
   group: GroupResponse
   myRole?: string
@@ -64,25 +66,48 @@ const handleSettingChange = async (key: keyof GroupSetting, value: any) => {
   }
 }
 
-// const nicknameTemp = ref('')
-// async function saveNickname() {
-//   if (props.group) {
-//     try {
-//       await groupService.updateMemberNickname(
-//         props.group.group_id,
-//         nicknameTemp.value
-//       )
-//       props.group.name = nicknameTemp.value
-//     } catch (error) {
-//       console.error('更新自己的群昵称失败:', error)
-//     }
-//   }
-// }
 
 const members = ref<GroupMemberAll[]>([])
 const loading = ref(false)
 const error = ref<Error | null>(null)
 
+const handleDissolveGroup = async () => {
+  try {
+    await groupService.delGroup(props.group.group_id)
+    toast.success('群组解散成功')
+    // 这里可以添加解散成功后的跳转逻辑
+  } catch (error) {
+    console.error('解散群组失败:', error)
+    toast.error('解散群组失败')
+  }
+}
+
+const changeAvatar = () => {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/png, image/jpeg';
+  
+  input.onchange = async (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    
+    // 验证文件类型
+    if (!['image/png', 'image/jpeg'].includes(file.type)) {
+      toast.error('请选择PNG或JPG格式的图片');
+      return;
+    }
+    try {
+      // 上传群头像
+      props.group.avatar_url = await groupService.uploadGroupAvatar(props.group.group_id, file);
+      toast.success('群头像更新成功');
+    } catch (error) {
+      console.error('群头像上传失败:', error);
+      toast.error('群头像上传失败，请重试');
+    }
+  };
+  
+  input.click();
+}
 // 获取群成员
 const fetchMembers = async () => {
   try {
@@ -102,6 +127,7 @@ const fetchMembers = async () => {
 onMounted(() => {
   fetchMembers()
 })
+
 </script>
 
 <template>
@@ -114,11 +140,20 @@ onMounted(() => {
       >
         <!-- 群头像和基本信息 -->
         <div class="flex items-center mb-4">
-          <img
-              :src="group.avatar_url || '/images/default-group-avatar.png'"
-              class="w-16 h-16 rounded-full mr-4"
-              alt="群头像"
-          >
+          <div class="relative">
+            <img
+                :src="group.avatar_url || '/images/default-group-avatar.png'"
+                class="w-16 h-16 rounded-full mr-4"
+                alt="群头像"
+            >
+            <div 
+                v-if="myRole === 'owner' || myRole === 'admin'"
+                class="absolute inset-0 flex items-center justify-center w-16 h-16 rounded-full mr-4 bg-black/80 opacity-0 hover:opacity-100 transition-opacity duration-200 cursor-pointer"
+                @click="changeAvatar"
+            >
+                <span class="text-white text-xs">更改头像</span>
+            </div>
+          </div>
           <div>
           <p class="text-gray-500 text-sm">群昵称: {{group.name }}</p>
 </div>
@@ -183,6 +218,7 @@ onMounted(() => {
               {{ group.announcement || '暂无公告' }}>
             </button>
           </div>
+
           
           <!-- 群组设置 -->
           <div v-if="myRole === 'owner' || myRole === 'admin'" class="space-y-2">
@@ -211,8 +247,16 @@ onMounted(() => {
               <Switch v-model="groupSettings.mute_type" @update:modelValue="val => handleSettingChange('mute_type', val)"/>
             </div>
           </div>
+          <Button
+              v-if="group?.my_role === 'owner'"
+              class="flex flex-col items-center justify-center w-full p-4 mt-4 bg-white text-red-500 border border-red-500 hover:bg-red-50 hover:scale-105 transition-transform duration-200"
+              @click="handleDissolveGroup"
+          >
+            解散群组
+          </Button>
         </div>
       </div>
+
 
       <GroupMembersList
           v-else
@@ -225,6 +269,7 @@ onMounted(() => {
       />
     </Transition>
   </div>
+
 </template>
 
 <style scoped>

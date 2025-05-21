@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Login from '@/views/Login.vue'
-import Main from '@/views/Main.vue'
 import Register from '@/views/Register.vue'
 import Test from '@/components/independent/friends/SendFriendRequest.vue'
 import AppSidebarRightTalks from '@/components/AppSideBar/right/AppSidebarRightTalks.vue'
@@ -89,7 +88,7 @@ const router = createRouter({
   ]
 })
 
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, _from, next) => {
   const userStore = useUserStore()
 
   if (to.path !== '/login'&&to.path!=='/register' && !userStore.loggedInUser.user_id) {

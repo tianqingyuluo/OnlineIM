@@ -1,32 +1,67 @@
 <template>
   <div class="flex bg-white p-6 rounded-lg shadow-sm max-w-4xl mx-auto">
     <!-- 左侧好友头像侧边栏 -->
-    <div class="w-2/5 pr-4 border-r border-gray-200">
-      <h3 class="text-sm font-medium text-gray-700 mb-3">选择好友</h3>
-      <div class="max-h-96 overflow-y-auto space-y-2">
-        <div 
-          v-for="friend in listStore.friends" 
-          :key="friend.friendship_id"
-          class="flex items-center p-2 hover:bg-gray-50 rounded cursor-pointer"
-          @click="toggleFriendSelection(friend.friend_info.user_id)"
-        >
-          <img 
-            :src="friend.friend_info.avatar_url || '/images/default-avatar.png'"
-            class="w-10 h-10 rounded-full mr-2"
-            :alt="friend.friend_info.nickname"
-          >
-          <span class="text-sm text-gray-800 mr-2">
-            {{ friend.friend_info.nickname || friend.friend_info.username }}
-          </span>
-          <input 
-            type="checkbox" 
-            v-model="form.initial_members" 
-            :value="friend.friend_info.user_id"
-            class="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-500"
-          >
-        </div>
-      </div>
-    </div>
+    <div class="w-2/5 pr-4 border-r border-gray-200"> 
+       <h3 class="text-sm font-medium text-gray-700 mb-3">选择好友</h3> 
+       <div class="max-h-96 overflow-y-auto space-y-2"> 
+         <template v-if="groupedFriends.length === 0"> 
+           <div class="flex justify-center items-center py-8 text-gray-500"> 
+             没有好友 
+           </div> 
+         </template> 
+         <template v-else v-for="group in groupedFriends" :key="group.group.id"> 
+           <div class="group-container"> 
+             <SidebarGroupLabel 
+               @click="toggleGroup(group.group.id)" 
+               class="cursor-pointer flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors font-bold" 
+               style="font-size: 15px" 
+             > 
+               {{ group.group.name }} ({{ group.friends.length }}) 
+               <ChevronDown 
+                 v-if="isGroupExpanded(group.group.id)" 
+                 class="w-5 h-5 transition-transform duration-200" 
+               /> 
+               <ChevronRight 
+                 v-else 
+                 class="w-5 h-5 transition-transform duration-200" 
+               /> 
+             </SidebarGroupLabel> 
+             
+             <transition 
+               name="slide" 
+               @enter="el => el.style.height = el.scrollHeight + 'px'" 
+               @after-enter="el => el.style.height = null" 
+               @before-leave="el => el.style.height = el.scrollHeight + 'px'" 
+               @leave="el => el.style.height = 0" 
+             > 
+               <div v-show="isGroupExpanded(group.group.id)" class="transition-all duration-300"> 
+                 <div 
+                   v-for="friend in group.friends" 
+                   :key="friend.friendship_id" 
+                   class="flex items-center p-2 hover:bg-gray-50 rounded cursor-pointer" 
+                   @click="toggleFriendSelection(friend.friend_info.user_id)" 
+                 > 
+                   <img 
+                     :src="friend.friend_info.avatar_url || '/images/default-avatar.png'" 
+                     class="w-10 h-10 rounded-full mr-2" 
+                     :alt="friend.friend_info.nickname" 
+                   /> 
+                   <span class="text-sm text-gray-800 mr-2"> 
+                     {{ friend.friend_info.nickname || friend.friend_info.username }} 
+                   </span> 
+                   <input 
+                     type="checkbox" 
+                     v-model="form.initial_members" 
+                     :value="friend.friend_info.user_id" 
+                     class="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-500" 
+                   /> 
+                 </div> 
+               </div> 
+             </transition> 
+           </div> 
+         </template> 
+       </div> 
+     </div>
 
     <!-- 右侧创建群组表单 -->
     <div class="w-3/5 pl-6">
@@ -94,17 +129,39 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import {ref, computed, onMounted} from 'vue'
 import { groupService } from '@/services/group.service'
 import { useRouter } from 'vue-router'
 import { useListStore } from '@/stores/list'
 import { toTypedSchema } from '@vee-validate/zod'
 import { useForm } from 'vee-validate'
 import * as z from 'zod'
+import { ChevronDown, ChevronRight } from 'lucide-vue-next'
+import { SidebarGroupLabel } from '@/components/ui/sidebar'
 
 const router = useRouter()
 const listStore = useListStore()
 const loading = ref(false)
+const expandedGroups = ref<Record<string, boolean>>({})
+
+// 初始化所有分组为展开状态
+onMounted(() => {
+  listStore.userGroups.forEach(group => {
+    expandedGroups.value[group.id] = true
+  })
+})
+
+function toggleGroup(groupId: string) {
+  expandedGroups.value[groupId] = !expandedGroups.value[groupId]
+}
+
+function isGroupExpanded(groupId: string) {
+  return expandedGroups.value[groupId] ?? true
+}
+
+const groupedFriends = computed(() => {
+  return listStore.groupedFriends
+})
 
 // 表单验证规则
 const formSchema = toTypedSchema(
@@ -181,5 +238,23 @@ const toggleFriendSelection = (userId: string) => {
 </script>
 
 <style scoped>
-/* 可根据需要添加自定义样式 */
+.slide-enter-active,
+.slide-leave-active {
+  transition: height 0.3s ease-in-out;
+  overflow: hidden;
+}
+
+.group-container {
+  transition: all 0.3s ease;
+}
+
+.chevron-rotate-enter-active,
+.chevron-rotate-leave-active {
+  transition: transform 0.3s ease;
+}
+
+.chevron-rotate-enter-from,
+.chevron-rotate-leave-to {
+  transform: rotate(-90deg);
+}
 </style>

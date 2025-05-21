@@ -11,17 +11,17 @@ const settings = ref({
 
 <template>
   <div class="p-4 space-y-4 ">
-    <div class="flex items-center justify-between py-2 border-b bg-white border-gray-100 rounded-2xl">
-      <span class="pl-4 text-gray-500">设为置顶</span>
-      <Switch  v-model="settings.isPinned" />
+    <div class="flex items-center justify-between py-2 border-b border-gray-100">
+      <span class="text-gray-500">设为置顶</span>
+      <Switch v-model="settings.isPinned" />
     </div>
-    <div class="flex items-center justify-between py-2 border-b bg-white border-gray-100 rounded-2xl">
-      <span class="pl-4 text-gray-500">消息免打扰</span>
-      <Switch  v-model="settings.isMuted" />
+    <div class="flex items-center justify-between py-2 border-b border-gray-100">
+      <span class="text-gray-500">消息免打扰</span>
+      <Switch v-model="settings.isMuted" />
     </div>
-    <div class="flex items-center justify-between py-2 border-b bg-white border-gray-100 rounded-2xl">
-      <span class="pl-4 text-gray-500">屏蔽此人</span>
-      <Switch  v-model="settings.isBlocked" />
+    <div class="flex items-center justify-between py-2 border-b border-gray-100">
+      <span class="text-gray-500">屏蔽此人</span>
+      <Switch v-model="settings.isBlocked" />
     </div>
     <button 
       class="w-full py-2 mt-4 text-red-500 bg-white border border-red-500 rounded-md hover:bg-red-50"
