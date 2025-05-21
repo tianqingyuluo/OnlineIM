@@ -103,4 +103,9 @@ public class GroupMemberServiceImpl implements GroupMemberService {
         else
             return false;
     }
+
+    @Override
+    public boolean isGroupMember(String groupId, String userid) {
+        return groupMapper.isUserMember(groupId,userid);
+    }
 }

@@ -80,4 +80,6 @@ public interface GroupMemberService {
      * @return 是否成功
      */
     boolean transferOwnership(String groupId, String memberId, String operatorId);
+
+    boolean isGroupMember(String groupId, String userIDFromToken);
 }
