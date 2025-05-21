@@ -11,11 +11,39 @@ import type { User } from '@/type/User'
 import { useListStore } from "@/stores/list";
 import { MessageService } from "@/services/message.service.ts";
 import { useUserStore } from '@/stores/user.ts';
+import { onClickOutside } from '@vueuse/core'
+import FriendSettingsCard from "@/components/independent/friends/FriendSettingsCard.vue";
+
+const menuRef = ref<HTMLElement | null>(null)
+const menuButtonRef = ref<HTMLElement | null>(null)
+
+const setupClickOutside = () => {
+  onClickOutside(
+    menuRef,
+    () => {
+      showMenu.value = false
+    },
+    {
+      ignore: [
+        menuButtonRef
+      ]
+    }
+  )
+}
+
+onMounted(() => {
+  setupClickOutside()
+})
 
 const route = useRoute()
 const currentUser = ref<User | null>(null)
 const userStore = useUserStore()
 const listStore = useListStore()
+const showMenu = ref(false)
+
+function toggleMenu() {
+  showMenu.value = !showMenu.value
+}
 const userId = computed(() => {
   const id = route.params.id
   const conversationId = Array.isArray(id) ? id[0] : id
@@ -35,7 +63,7 @@ async function loadMessages() {
   isLoading.value = true
   try {
     const before_message_id = userMessages.value.length > 0
-        ? userMessages.value[0].message_id
+        ? userMessages.value[0].seq_id
         : undefined
 
     const response = await MessageService.getMessageHistory(
@@ -45,10 +73,11 @@ async function loadMessages() {
     const messages = response.messages
 
     if (messages.length > 0) {
+      const sortedMessages = messages.sort((a, b) => a.seq_id - b.seq_id);
       if (!before_message_id) {
-        userMessages.value = messages
+        userMessages.value = sortedMessages
       } else {
-        userMessages.value = [...messages, ...userMessages.value]
+        userMessages.value = [...sortedMessages, ...userMessages.value]
       }
 
       hasMore.value = response.has_more_before
@@ -184,15 +213,24 @@ const items = [
 <template>
   <div v-if="currentUser" class="flex flex-col h-full">
     <!-- 顶栏 -->
-    <div class="flex items-center justify-between w-full p-4 border-b">
+    <div class="flex items-center justify-between w-full p-4 border-b relative">
       <span class="text-lg font-semibold">{{ currentUser.username }}</span>
-      <div class="flex space-x-4">
-        <button v-for="item in items" :key="item.title">
-          <a :href="item.url" class="flex items-center">
-            <component :is="item.icon" class="w-5 h-5" />
-          </a>
-        </button>
-      </div>
+      <button @click="toggleMenu" ref="menuButtonRef">
+        <a href="#" class="flex items-center">
+          <Ellipsis class="w-5 h-5" />
+        </a>
+      </button>
+
+      <!-- 滑动菜单 -->
+      <Transition name="slide">
+        <div
+          v-if="showMenu"
+          ref="menuRef"
+          class="absolute right-0 top-full w-80 bg-white shadow-lg z-50 h-[calc(100vh-60px)]"
+        >
+          <FriendSettingsCard />
+        </div>
+      </Transition>
     </div>
 
     <!-- 主内容区 -->
@@ -262,5 +300,14 @@ const items = [
 </template>
 
 <style scoped>
-/* 保留原有样式 */
+/* 滑动动画 */
+.slide-enter-active,
+.slide-leave-active {
+  transition: transform 0.3s ease;
+}
+
+.slide-enter-from,
+.slide-leave-to {
+  transform: translateX(100%);
+}
 </style>

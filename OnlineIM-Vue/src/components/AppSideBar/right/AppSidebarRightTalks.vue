@@ -18,9 +18,19 @@ import router from "@/router";
 
 
 const activeId = ref<string | null>(null);
+const searchQuery = ref('');
 const emits = defineEmits(['chatSelected'])
 const listStore = useListStore()
-const conversations = computed(() => listStore.conversations)
+
+const filteredConversations = computed(() => {
+  const query = searchQuery.value.toLowerCase().trim();
+  if (!query) return listStore.conversations;
+  
+  return listStore.conversations.filter(conversation => {
+    const name = (conversation.target_info.name || '').toLowerCase();
+    return name.includes(query);
+  });
+});
 
 function handleChatClick(conversation: Conversation) {
   activeId.value = conversation.conversation_id
@@ -45,6 +55,7 @@ function handleChatClick(conversation: Conversation) {
             id="search"
             type="text"
             placeholder="搜索"
+            v-model="searchQuery"
             class="w-full pl-10 bg-white border-blue-100 focus:border-blue-100 focus:ring-0"
         />
         <Search class="absolute left-3 top-1/2 transform -translate-y-1/2 size-6 text-muted-foreground" />
@@ -54,7 +65,10 @@ function handleChatClick(conversation: Conversation) {
       <SidebarGroup>
         <SidebarGroupContent>
           <SidebarMenu class="w-full">
-            <SidebarMenuItem v-for="conversation in conversations" :key="conversation.conversation_id" class="w-full">
+            <div v-if="filteredConversations.length === 0" class="flex justify-center items-center py-8 text-gray-500">
+              没有找到对应会话
+            </div>
+            <SidebarMenuItem v-else v-for="conversation in filteredConversations" :key="conversation.conversation_id" class="w-full">
               <SidebarMenuButton
                 as-child
                 :isActive="activeId === conversation.conversation_id"

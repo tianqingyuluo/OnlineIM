@@ -60,7 +60,14 @@ const router = createRouter({
         },
         {
           path: 'groups',
-          component: AppSidebarRightGroup
+          component: AppSidebarRightGroup,
+          children:[
+            {
+              path: ':groupId',
+              name: 'group',
+              component: () => import('@/views/groupPart.vue')
+            }
+          ]
         },
         {
           path:'search',

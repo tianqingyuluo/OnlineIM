@@ -88,9 +88,13 @@ export const groupService = {
     }
   },
   // 获取已加入的群组列表
-  async getJoinedGroups(): Promise<JoinedGroupsResponse> {
+  async getJoinedGroups(
+      params: {
+          offset?: number;
+      }
+  ): Promise<JoinedGroupsResponse> {
     try {
-      const response = await api.get<JoinedGroupsResponse>('/groups/joined');
+      const response = await api.get<JoinedGroupsResponse>('/groups/joined',{params});
       useListStore().groups =[...useListStore().groups,...response.data.groups];
       useListStore().groupTotal =useListStore().groupTotal+ response.data.total;
       return response.data;

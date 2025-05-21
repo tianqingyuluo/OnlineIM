@@ -124,7 +124,7 @@ const handleClose = () => {
       </div>
 
       <!-- 内容区域 -->
-      <div class="p-6 bg-white h-full overflow-auto min-h-[600px] rounded-b-lg">
+      <div class="p-6 bg-white  overflow-auto h-[600px] rounded-b-lg">
         <template v-if="activeTab === '好友'">
           <usersSelectResult :keyword="searchQuery" class="h-full"/>
         </template>

@@ -63,7 +63,9 @@ const startResize = (e: MouseEvent) => {
 
 onMounted(async () => {
   try {
+
     await userStore.fetchUserData();
+
     await listStore.fetchUserData();
   } catch (err) {
     console.error('获取用户信息失败:', err);
@@ -118,7 +120,7 @@ onMounted(async () => {
       />
       <GroupPart
           v-if="showGroupProfile"
-          :key="`group-${route.params.id}`"
+          :key="`group-${route.params.groupId}`"
           class="w-full h-full"
       />
       <div v-if="!chatType && !showUserProfile && !showGroupProfile" class="text-gray-500">

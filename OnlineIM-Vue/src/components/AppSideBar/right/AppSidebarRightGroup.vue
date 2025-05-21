@@ -9,20 +9,35 @@ import {
   SidebarMenuItem,
   SidebarGroupLabel
 } from "@/components/ui/sidebar"
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-vue-next";
 import CreateGroup from "@/components/independent/group/CreateGroup.vue";
 import {Button} from "@/components/ui/button";
 import { useListStore } from '@/stores/list'
+import { useRouter } from 'vue-router'
 
 const listStore = useListStore()
 const activeItem = ref<string | null>(null);
+const searchQuery = ref('');
 const emits = defineEmits(['groupSelected'])
+const router = useRouter()
+
+const filteredGroups = computed(() => {
+  const query = searchQuery.value.toLowerCase().trim();
+  if (!query) return listStore.groups;
+  
+  return listStore.groups.filter(group => {
+    const name = (group.name || '').toLowerCase();
+    const description = (group.description || '').toLowerCase();
+    return name.includes(query) || description.includes(query);
+  });
+});
 
 function handleGroupClick(group: any) {
   activeItem.value = group.group_id;
   emits('groupSelected', group);
+  router.push(`/main/groups/${group.group_id}`);
 }
 
 const showCreateGroup = ref(false);
@@ -51,6 +66,7 @@ function handleCreateGroup() {
             id="search"
             type="text"
             placeholder="搜索"
+            v-model="searchQuery"
             class="w-full pl-10 bg-white border-blue-100 focus:border-blue-100 focus:ring-0"
         />
         <Search class="absolute left-3 top-1/2 transform -translate-y-1/2 size-6 text-muted-foreground" />
@@ -60,7 +76,10 @@ function handleCreateGroup() {
       <SidebarGroup>
         <SidebarGroupContent>
           <SidebarMenu>
-            <SidebarMenuItem v-for="group in listStore.groups" :key="group.group_id">
+            <div v-if="filteredGroups.length === 0" class="flex justify-center items-center py-8 text-gray-500">
+              没有找到对应群组
+            </div>
+            <SidebarMenuItem v-else v-for="group in filteredGroups" :key="group.group_id">
               <SidebarMenuButton
                   as-child
                   :isActive="activeItem === group.group_id"
@@ -77,7 +96,7 @@ function handleCreateGroup() {
                   </div>
                   <div class="flex flex-col flex-grow space-y-1">
                     <span class="text-[18px] font-bold">{{ group.name }}</span>
-                    <span class="text-[13px] text-gray-500">{{ group.announcement || '暂无公告' }}</span>
+                    <span class="text-[13px] text-gray-500">{{ group?.description || '暂无群描述' }}</span>
                   </div>
                 </div>
               </SidebarMenuButton>

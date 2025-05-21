@@ -1,25 +1,32 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import {ref, onMounted, computed, watch} from 'vue'
 import { useRoute } from 'vue-router'
 import { groupService } from '@/services/group.service'
 import type { GroupResponse } from '@/type/group'
+import {Button} from "@/components/ui/button";
 
 const route = useRoute()
 const group = ref<GroupResponse | null>(null)
 
+// 使用与路由定义一致的参数名 (groupId)
 const groupId = computed(() => {
-  const id = route.params.id
+  const id = route.params.groupId // 注意这里改为 groupId 与路由定义一致
   return Array.isArray(id) ? id[0] : id
 })
 
-onMounted(async () => {
+// 获取群组信息的函数
+const fetchGroupInfo = async () => {
   try {
-    // 获取群组基本信息
     group.value = await groupService.getGroupInfo(groupId.value)
   } catch (error) {
     console.error('获取群组信息失败:', error)
   }
-})
+}
+
+// 初始加载
+onMounted(fetchGroupInfo)
+
+
 </script>
 
 <template>
@@ -58,6 +65,7 @@ onMounted(async () => {
         <span>{{ group.created_at }}</span>
       </div>
     </div>
+    <Button class="flex flex-col items-center justify-center w-full p-4 mt-8 hover:scale-105 transition-transform duration-200">发消息</Button>
   </div>
   <div v-else class="loading">
     加载中...
@@ -67,9 +75,14 @@ onMounted(async () => {
 <style scoped>
 .group-profile {
   padding: 20px;
+  max-width: 400px;
+  max-height: 600px;
+  overflow: auto;
 }
 .group-header {
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   margin-bottom: 20px;
 }
 .avatar {
@@ -77,9 +90,13 @@ onMounted(async () => {
   height: 100px;
   border-radius: 50%;
   object-fit: cover;
+  margin-bottom: 10px;
 }
 .info-item {
-  margin: 10px 0;
+  margin: 16px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 .label {
   font-weight: bold;

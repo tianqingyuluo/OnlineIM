@@ -18,7 +18,6 @@ export interface Conversation {
     target_info: TargetInfo
     last_message: LastMessage
     unread_count: number
-    is_muted?: boolean
     is_pinned?: boolean
     last_activity_time: string
 }

@@ -33,6 +33,7 @@ const currentGroupId = ref<string | null>(null);
 const groupLabelRef = ref<HTMLDivElement | null>(null);
 const showAddGroupDialog = ref(false);
 const showEditGroupDialog = ref(false);
+const searchQuery = ref('');
 
 // 初始化所有分组为展开状态
 onMounted(() => {
@@ -88,9 +89,21 @@ const emits = defineEmits(['userSelected'])
 const listStore = useListStore()
 
 const groupedFriends = computed(() => {
-  return listStore.groupedFriends.length > 0 
+  const baseGroups = listStore.groupedFriends.length > 0 
     ? listStore.groupedFriends 
-    : groupAndSortFriends(listStore.friends, listStore.userGroups)
+    : groupAndSortFriends(listStore.friends, listStore.userGroups);
+
+  const query = searchQuery.value.toLowerCase().trim();
+  if (!query) return baseGroups;
+
+  return baseGroups.map(group => ({
+    group: group.group,
+    friends: group.friends.filter(friend => {
+      const nickname = (friend.friend_info.nickname || '').toLowerCase();
+      const remark = (friend.friend_info.remark || '').toLowerCase();
+      return nickname.includes(query) || remark.includes(query);
+    })
+  })).filter(group => group.friends.length > 0);
 })
 
 function handleUserClick(user: Friend) {
@@ -122,6 +135,7 @@ function handleUserClick(user: Friend) {
             id="search"
             type="text"
             placeholder="搜索"
+            v-model="searchQuery"
             class="w-full pl-10 bg-white border-blue-100 focus:border-blue-100 focus:ring-0"
         />
         <Search class="absolute left-3 top-1/2 transform -translate-y-1/2 size-6 text-muted-foreground" />
@@ -132,7 +146,10 @@ function handleUserClick(user: Friend) {
       <SidebarGroup>
         <SidebarGroupContent>
           <SidebarMenu>
-            <template v-for="group in groupedFriends" :key="group.group.id">
+            <div v-if="groupedFriends.length === 0" class="flex justify-center items-center py-8 text-gray-500">
+              没有找到对应好友
+            </div>
+            <template v-else v-for="group in groupedFriends" :key="group.group.id">
               <div class="group-container">
                 <ContextMenu class="w-full" v-model:open="isGroupMenuOpen" @update:open="(open) => handleGroupMenuOpenChange(open, group.group.id)">
                   <ContextMenuTrigger class="w-full">
