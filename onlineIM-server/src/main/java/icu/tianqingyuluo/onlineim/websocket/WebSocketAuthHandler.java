@@ -91,6 +91,7 @@ public class WebSocketAuthHandler extends ChannelInboundHandlerAdapter {
         try {
             // 从令牌中获取用户名
             String username = jwtUtil.getUsernameFromToken(token);
+            String userID = jwtUtil.getUserIDFromToken(token);
             
             // 加载用户详情
             UserDetails userDetails = userDetailsService.loadUserByUsername(username);
@@ -102,7 +103,7 @@ public class WebSocketAuthHandler extends ChannelInboundHandlerAdapter {
                 // 生成唯一的连接标识（方便横向扩展）
                 String connectionID = "conn_" + IdUtil.simpleUUID();
                 // 在本地表中构建映射
-                LocalChannelRegistry.add(connectionID, ctx.channel().id().asLongText(), ctx.channel());
+                LocalChannelRegistry.add(connectionID, ctx.channel().id().asLongText(), userID, ctx.channel());
                 // 在redis中存储路由信息
                 userSessionService.storeDeviceSession(
                         token,

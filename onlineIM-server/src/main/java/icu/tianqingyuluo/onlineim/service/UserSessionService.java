@@ -30,6 +30,7 @@ public class UserSessionService {
 
         redisTemplate.opsForValue().set(key,
                 new RedisConnectionMeta(
+                        token,
                         connectionID,
                         ip,
                         System.currentTimeMillis()
@@ -46,7 +47,7 @@ public class UserSessionService {
     public void removeDeviceSession(String userID, String deviceID, String channelID) {
         String key = SESSION_PREFIX + userID + ":" + deviceID;
         redisTemplate.delete(key);
-        LocalChannelRegistry.remove(channelID);
+        LocalChannelRegistry.remove(channelID, userID);
     }
 
 //    // 删除特定设备会话

@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.websocket;
 
+import cn.hutool.core.util.IdUtil;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
@@ -12,12 +13,20 @@ import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
 import io.netty.handler.stream.ChunkedWriteHandler;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
+import java.util.Enumeration;
 
 /**
  * Netty WebSocket 服务器
@@ -39,10 +48,15 @@ public class NettyWebSocketServer {
     private final WebSocketAuthHandler webSocketAuthHandler;
     private final WebSocketMessageDispatchHandler webSocketMessageDispatchHandler;
 
+    private final RedisTemplate<String, Object> redisTemplate;
+    private String serverId;
+
     public NettyWebSocketServer(WebSocketAuthHandler webSocketAuthHandler, 
-                               WebSocketMessageDispatchHandler webSocketMessageDispatchHandler) {
+                               WebSocketMessageDispatchHandler webSocketMessageDispatchHandler,
+                                RedisTemplate<String, Object> redisTemplate) {
         this.webSocketAuthHandler = webSocketAuthHandler;
         this.webSocketMessageDispatchHandler = webSocketMessageDispatchHandler;
+        this.redisTemplate = redisTemplate;
     }
 
     /**
@@ -84,6 +98,14 @@ public class NettyWebSocketServer {
 
             // 绑定端口并启动服务器
             channelFuture = bootstrap.bind(port).sync();
+            // 向redis注册自己
+            try {
+                registerServiceToRedis();
+            }
+            catch (RuntimeException e) {
+                log.error("服务注册失败: {}", e.getMessage());
+            }
+
             log.info("WebSocket服务器启动成功，监听端口: {}", port);
 
         } catch (Exception e) {
@@ -98,6 +120,7 @@ public class NettyWebSocketServer {
     @PreDestroy
     public void stop() {
         log.info("正在关闭WebSocket服务器...");
+        deleteServiceToRedis(serverId);
         if (channelFuture != null) {
             channelFuture.channel().close();
         }
@@ -108,5 +131,37 @@ public class NettyWebSocketServer {
             workerGroup.shutdownGracefully();
         }
         log.info("WebSocket服务器已关闭");
+    }
+
+    @SneakyThrows
+    private void registerServiceToRedis() {
+        serverId = "serverID_" + IdUtil.simpleUUID();
+        redisTemplate.opsForHash().put(
+                "websocket_servers",
+                serverId,
+                "{ip:'"+getLocalIP()+"', port:"+port+", connections:"+0+"}"
+        );
+    }
+
+    private void deleteServiceToRedis(String serverId) {
+        redisTemplate.opsForHash().delete("websocket_servers", serverId);
+    }
+
+    // 得到所有的手
+    public String getLocalIP() throws SocketException {
+        Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+        while (interfaces.hasMoreElements()) {
+            NetworkInterface iface = interfaces.nextElement();
+            if (iface.isLoopback() || !iface.isUp()) continue;
+
+            Enumeration<InetAddress> addresses = iface.getInetAddresses();
+            while(addresses.hasMoreElements()) {
+                InetAddress addr = addresses.nextElement();
+                if (addr instanceof Inet4Address) { // 优先IPv4
+                    return addr.getHostAddress();
+                }
+            }
+        }
+        throw new RuntimeException("No network interface found");
     }
 }

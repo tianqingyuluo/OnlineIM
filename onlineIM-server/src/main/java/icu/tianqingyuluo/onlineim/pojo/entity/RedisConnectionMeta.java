@@ -10,6 +10,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @JsonSerialize
 public class RedisConnectionMeta {
+    String token;
     String connectionID;
     String currentNodeIP;
     long activeTime;

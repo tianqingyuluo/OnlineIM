@@ -9,6 +9,7 @@ import icu.tianqingyuluo.onlineim.websocket.WebSocketMessageDispatchHandler;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.core.RedisTemplate;
 
 /**
  * WebSocket配置类
@@ -52,7 +53,8 @@ public class WebSocketConfig {
      */
     @Bean
     public NettyWebSocketServer nettyWebSocketServer(WebSocketAuthHandler webSocketAuthHandler, 
-                                                    WebSocketMessageDispatchHandler webSocketMessageDispatchHandler) {
-        return new NettyWebSocketServer(webSocketAuthHandler, webSocketMessageDispatchHandler);
+                                                    WebSocketMessageDispatchHandler webSocketMessageDispatchHandler,
+                                                     RedisTemplate<String, Object> redisTemplate) {
+        return new NettyWebSocketServer(webSocketAuthHandler, webSocketMessageDispatchHandler, redisTemplate);
     }
 }
