@@ -5,28 +5,75 @@
 
 <mapper namespace="icu.tianqingyuluo.onlineim.mapper.GroupAnnouncementMapper">
     <!-- 群组公告结果映射 -->
-    <resultMap id="GroupAnnouncementResultMap" type="icu.tianqingyuluo.onlineim.pojo.entity.GroupAnnouncement">
-        <id property="id" column="id"/>
-        <result property="groupId" column="group_id"/>
-        <result property="publisherId" column="publisher_id"/>
-        <result property="title" column="title"/>
-        <result property="content" column="content"/>
-        <result property="status" column="status"/>
-        <result property="pin" column="pin"/>
-        <result property="createdAt" column="created_at"/>
-        <result property="updatedAt" column="updated_at"/>
+    <resultMap id="groupAnnouncementResponseMap" type="icu.tianqingyuluo.onlineim.pojo.dto.response.GroupAnnouncementResponse">
+        <!-- 主键和基础字段 -->
+        <id property="announcementID" column="announcement_id" />
+        <result property="groupID" column="group_id" />
+        <result property="title" column="title" />
+        <result property="content" column="content" />
+        <result property="pinned" column="pin" />
+        <result property="createdAt" column="created_at" />
+        <result property="updatedAt" column="updated_at" />
+        <!-- 嵌套的发布者信息（UserBriefResponse） -->
+        <association property="publisherInfo" javaType="icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse">
+            <id property="userId" column="publisher_id" />
+            <result property="username" column="publisher_username" />
+            <result property="nickname" column="publisher_nickname" />
+            <result property="avatarUrl" column="publisher_avatar_url" />
+        </association>
     </resultMap>
 
-    <!-- 获取群组的公告列表 -->
-    <select id="getByGroupId" resultMap="GroupAnnouncementResultMap">
-        SELECT * FROM group_announcements 
-        WHERE group_id = #{groupId} AND status = 1 
-        ORDER BY pin DESC, created_at DESC 
-        LIMIT #{limit} OFFSET #{offset}
+    <!-- 根据群组id获取群组的公告列表 -->
+    <select id="getAnnouncementsByGroupId" resultMap="groupAnnouncementResponseMap">
+        SELECT
+            a.id as announcement_id,
+            a.group_id,
+            a.title,
+            a.content,
+            a.pin,
+            a.created_at,
+            a.updated_at,
+            u.id AS publisher_id,       -- UserBriefResponse 字段
+            u.username AS publisher_username,
+            u.nickname AS publisher_nickname,
+            u.avatar AS publisher_avatar_url
+        FROM
+            group_announcements a
+                JOIN
+            users u ON a.publisher_id = u.id
+        WHERE
+            a.group_id = #{groupId}
+        ORDER BY
+            a.pin DESC,         -- 置顶优先
+            a.created_at DESC      -- 时间倒序
+    </select>
+
+    <!-- 根据公告id获取群组的公告 -->
+    <select id="getAnnouncementsByAnnouncementId" resultMap="groupAnnouncementResponseMap">
+        SELECT
+            a.id as announcement_id,
+            a.group_id,
+            a.title,
+            a.content,
+            a.pin,
+            a.created_at,
+            a.updated_at,
+            u.id AS publisher_id,       -- UserBriefResponse 字段
+            u.username AS publisher_username,
+            u.nickname AS publisher_nickname,
+            u.avatar AS publisher_avatar_url
+        FROM
+            group_announcements a
+                JOIN
+            users u ON a.publisher_id = u.id
+        WHERE
+            a.id = #{announcementId}
+        AND
+            a.group_id = #{groupId}
     </select>
 
     <!-- 搜索公告 -->
-    <select id="searchAnnouncements" resultMap="GroupAnnouncementResultMap">
+    <select id="searchAnnouncements" resultMap="groupAnnouncementResponseMap">
         SELECT * FROM group_announcements 
         WHERE group_id = #{groupId} 
         AND (title LIKE CONCAT('%', #{keyword}, '%') OR content LIKE CONCAT('%', #{keyword}, '%')) 
@@ -44,7 +91,7 @@
     </select>
 
     <!-- 根据动态条件查询公告 -->
-    <select id="getAnnouncementsWithCondition" resultMap="GroupAnnouncementResultMap">
+    <select id="getAnnouncementsWithCondition" resultMap="groupAnnouncementResponseMap">
         SELECT * FROM group_announcements 
         <where>
             <if test="groupId != null">
