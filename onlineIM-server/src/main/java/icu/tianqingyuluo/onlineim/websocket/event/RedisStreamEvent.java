@@ -1,19 +1,18 @@
 package icu.tianqingyuluo.onlineim.websocket.event;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-import io.netty.channel.ChannelHandlerContext;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Data
-@NoArgsConstructor
 @AllArgsConstructor
-@Builder
-public class WebSocketMessageEvent {
+@NoArgsConstructor
+public class RedisStreamEvent {
     private String type;
     private String senderID;
     private String message;
     private String senderChannelID;
+    private List<String> receiverIDs;
 }
