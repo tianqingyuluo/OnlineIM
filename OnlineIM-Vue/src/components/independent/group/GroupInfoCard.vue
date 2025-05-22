@@ -8,6 +8,9 @@ import {Switch} from "@/components/ui/switch";
 import {GroupSettingService} from '@/services/groupsetting.service';
 import {Button} from "@/components/ui/button";
 import {toast} from 'vue-sonner';
+import AddFriendModal from '@/components/independent/group/AddFriendModal.vue';
+
+const showAddFriendModal = ref(false);
 
 const props = defineProps<{
   group: GroupResponse
@@ -199,7 +202,10 @@ onMounted(() => {
                 <span class="text-xs mt-2 truncate w-full text-center">{{ member.user_info.nickname||member.user_info.username }}</span>
               </div>
               <!-- 邀请成员按钮 -->
-              <div class="flex flex-col items-center cursor-pointer hover:bg-gray-100">
+              <div 
+                class="flex flex-col items-center cursor-pointer hover:bg-gray-100"
+                @click="showAddFriendModal = true"
+              >
                 <div class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
                   <span class="text-4xl">+</span>
                 </div>
@@ -268,6 +274,12 @@ onMounted(() => {
           @click.stop
       />
     </Transition>
+    
+    <AddFriendModal 
+      v-if="showAddFriendModal"
+      @close="showAddFriendModal = false"
+      :group-id="group.group_id"
+    />
   </div>
 
 </template>
