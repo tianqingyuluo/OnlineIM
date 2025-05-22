@@ -40,9 +40,9 @@
             uf.created_at as friend_created_at
         FROM
             friend_groups fgrp
-                INNER JOIN
+                LEFT JOIN
             user_friends uf ON fgrp.id = uf.group_id
-                INNER JOIN
+                LEFT JOIN
             users u ON uf.friend_id = u.id
         WHERE
             fgrp.user_id = #{userid}

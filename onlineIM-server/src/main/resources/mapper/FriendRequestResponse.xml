@@ -58,8 +58,8 @@
             SELECT 1
             FROM user_friends
             WHERE
-                user_id = #{friendId}        -- 替换为目标用户ID
-              AND friend_id = #{userid}      -- 替换为要验证的好友ID
+                id = #{friendId}
+              AND user_id = #{userid}
         ) AS is_friend;
     </select>
 </mapper>
