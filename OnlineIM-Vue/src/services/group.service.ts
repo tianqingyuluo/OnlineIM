@@ -5,7 +5,6 @@ import {
     type GroupMembersResponse,
     type GroupResponse,
     type GroupSearchResponse,
-    type JoinedGroupsResponse
 } from '@/type/group.ts'
 import { useListStore } from '@/stores/list';
 export const groupService = {
@@ -16,11 +15,16 @@ export const groupService = {
       avatar_url?: string;
       description?: string;
       initial_members?: string[];
+      max_members: number
     },
     formContext?: FormContext
   ) {
     try {
-      const response = await api.post('/groups', data);
+        const postData = {
+            ...data,
+            max_members: data.max_members ?? 50, // 设置默认值
+        };
+      const response = await api.post('/groups', postData);
       response.data={
           ...response.data,
           my_role:"owner"
@@ -102,11 +106,10 @@ export const groupService = {
       params?: {
           offset?: number;
       }
-  ): Promise<JoinedGroupsResponse> {
+  ): Promise<GroupResponse[]> {
     try {
-      const response = await api.get<JoinedGroupsResponse>('/groups/joined',{params});
-      useListStore().groups =[...useListStore().groups,...response.data.groups];
-      useListStore().groupTotal =useListStore().groupTotal+ response.data.total;
+      const response = await api.get<GroupResponse[]>('/groups/joined',{params});
+      useListStore().groups =response.data;
       return response.data;
     } catch (error) {
       console.error('获取已加入群组失败:', error);

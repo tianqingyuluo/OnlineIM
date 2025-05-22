@@ -25,6 +25,7 @@ const router = useRouter()
 
 const filteredGroups = computed(() => {
   const query = searchQuery.value.toLowerCase().trim();
+  console.log(listStore.groups)
   if (!query) return listStore.groups;
   
   return listStore.groups.filter(group => {

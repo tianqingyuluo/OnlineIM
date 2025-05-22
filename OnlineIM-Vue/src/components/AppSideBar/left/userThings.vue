@@ -10,7 +10,7 @@ const router = useRouter()
 const showProfile = ref(false)
 
 const handleLogout = () => {
-  userStore.clearUser()
+   userStore.clearUser()
   router.push('/login')
 }
 

@@ -46,7 +46,7 @@ export const friendsService = {
   // 更新好友分组
   async setFriendGroup(friendId: string, friendGroupId: string): Promise<{friendship_id: string, friendship_group_id: string}> {
     try {
-      const response = await api.put(`/api/v1/friends/${friendId}/group`, {
+      const response = await api.put(`/friends/${friendId}/group`, {
         friend_group_id: friendGroupId
       });
       return response.data;
@@ -73,7 +73,7 @@ export const friendsService = {
       data:{receiver_id: string, message?: string}) {
 
     try {
-      const response = await api.post(`/api/v1/friends/request/send`, data);
+      const response = await api.post(`/friends/request/send`, data);
       return response.data;
     } catch (error) {
       console.error('添加好友请求发出失败:', error);

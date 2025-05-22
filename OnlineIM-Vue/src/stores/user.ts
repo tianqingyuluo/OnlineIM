@@ -33,6 +33,12 @@ export const useUserStore = defineStore('user', {
       this.loggedInUser = user
     },
     async clearUser() {
+      try {
+        await authService.logout()
+      }
+      catch (error) {
+
+      }
       this.loggedInUser = JSON.parse(JSON.stringify(DEFAULT_USER))
       this.token = ""
       const listStore = useListStore()
@@ -42,11 +48,12 @@ export const useUserStore = defineStore('user', {
       listStore.friendTotal = 0
       listStore.groups = [] as GroupResponse[]
       listStore.groupTotal = 0
-      listStore.groupedFriends=[]
       listStore.userGroups=[]
       listStore.groupJoinRequestList=[]
-      await authService.logout()
+      listStore.hasInit = false
+      listStore.blacklist=[]
       TokenService.clear()
+
     },
     isAuthenticated(): boolean {//是否拥有token
       return !!this.token

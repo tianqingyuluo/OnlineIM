@@ -77,6 +77,8 @@ import { toTypedSchema } from '@vee-validate/zod'
 import { useForm } from 'vee-validate'
 import * as z from 'zod'
 import FriendSelection from '@/components/independent/group/FriendSelection.vue'
+import { meService } from '@/services/me.service'
+import {useUserStore} from "@/stores/user.ts";
 
 const router = useRouter()
 const listStore = useListStore()
@@ -103,7 +105,8 @@ const { handleSubmit, errors, defineField } = useForm({
 })
 
 const form = ref({
-  initial_members: [] as string[]
+  initial_members: [] as string[],
+  avatar_url: '' as string | undefined
 })
 
 // 绑定表单字段
@@ -113,10 +116,13 @@ const [description] = defineField('description')
 const saveGroup = handleSubmit(async (values) => {
   try {
     loading.value = true
+    form.value.initial_members.push(useUserStore().loggedInUser.user_id)
     const response = await groupService.createGroup({
       name: values.name,
       description: values.description || undefined,
-      initial_members: form.value.initial_members
+      initial_members: form.value.initial_members,
+      avatar_url: form.value.avatar_url,
+      max_members: 50
     })
 
     listStore.groups = [...listStore.groups, response]
@@ -134,8 +140,30 @@ const saveGroup = handleSubmit(async (values) => {
   }
 })
 
-const changeAvatar = () => {
-  console.log('更换头像')
+const changeAvatar = async () => {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'image/*'
+  
+  input.onchange = async (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0]
+    if (!file) return
+    
+    try {
+      loading.value = true
+      const avatarUrl = await meService.uploadAvatar(file)
+      form.value.avatar_url = avatarUrl
+      // 更新显示的预览图
+      const img = document.querySelector('.w-24.h-24 img') as HTMLImageElement
+      if (img) img.src = avatarUrl
+    } catch (error) {
+      console.error('上传头像失败:', error)
+    } finally {
+      loading.value = false
+    }
+  }
+  
+  input.click()
 }
 
 const emit = defineEmits(['close'])

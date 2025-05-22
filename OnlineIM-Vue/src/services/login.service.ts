@@ -43,7 +43,7 @@ export const LoginService = {
                 });
                 userStore.loggedInUser.user_id=response.data.user_info.user_id
                 userStore.token = response.data.access_token
-                await userStore.updateToken()
+
                 console.log("token:\n"+response.data.access_token);
 
                 // 显示欢迎消息

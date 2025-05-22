@@ -34,8 +34,7 @@ const menuItems = [
     <ContextMenu v-model:open="isMenuOpen">
       <ContextMenuTrigger>
         <img 
-          :src="avatarUrl || '/images/group.png'" 
-          :alt="altText" 
+          :src="avatarUrl || '/images/group.png'"
           class="w-10 h-10 rounded-full mr-2 cursor-pointer"
         />
       </ContextMenuTrigger>

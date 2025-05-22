@@ -21,10 +21,6 @@ async function handleConfirm() {
     try {
       const newGroup = await friendGroupsService.createFriendGroup(groupName.value);
       listStore.userGroups.push(newGroup);
-      listStore.groupedFriends.push({
-        group: newGroup,
-        friends: []
-      });
       groupName.value = ''
       emit('update:show', false)
     } catch (error) {
@@ -40,8 +36,8 @@ function handleCancel() {
 </script>
 
 <template>
-  <div v-if="show" class="fixed inset-0 bg-black/80 bg-opacity-50 flex items-center justify-center z-50">
-    <div class="bg-white p-6 rounded-lg shadow-sm max-w-sm w-full mx-auto border-[2px] shadow-2xl">
+  <div v-if="props.show" class="fixed inset-0 bg-black/80 bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white p-6 rounded-lg shadow-sm max-w-sm w-full mx-auto border-[2px] ">
       <h3 class="text-lg font-medium text-gray-800 mb-4">添加分组</h3>
       <div class="mb-4">
         <input

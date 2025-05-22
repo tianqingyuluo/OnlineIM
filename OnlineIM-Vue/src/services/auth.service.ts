@@ -14,7 +14,7 @@ export const authService = {
       refreshToken:string
       ): Promise<TokenResponse> {
       try {
-        const response = await api.post<TokenResponse>('/auth/refresh',{refresh_token: refreshToken});
+        const response = await api.post<TokenResponse>('/auth/refresh-token');
         return response.data;
       } catch (error: any) {
         console.error('登出失败:', error);

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {ref, onMounted, computed, watch} from 'vue'
+import {ref, onMounted, computed} from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { groupService } from '@/services/group.service'
 import type { GroupResponse } from '@/type/group'
@@ -18,6 +18,9 @@ const groupId = computed(() => {
 const fetchGroupInfo = async () => {
   try {
     group.value = await groupService.getGroupInfo(groupId.value)
+    if (group.value.my_role==='0') {group.value.my_role = "成员"}
+    if (group.value.my_role==='1') {group.value.my_role = "管理员"}
+    if (group.value.my_role==='2') {group.value.my_role = "群主"}
   } catch (error) {
     console.error('获取群组信息失败:', error)
   }

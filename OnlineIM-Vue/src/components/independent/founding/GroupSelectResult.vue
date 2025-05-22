@@ -3,7 +3,7 @@ import { groupService } from '@/services/group.service.ts'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import GroupProfile from "@/components/independent/profile/GroupProfile.vue"
 import { type GroupSearchResult } from '@/type/group.ts'
-
+import { debounce } from 'lodash';
 const props = defineProps({
   keyword: {
     type: String,
@@ -18,12 +18,18 @@ const page = ref(0)
 const loading = ref(false)
 const hasMore = ref(true)
 
-watch(() => props.keyword, async (newKeyword) => {
-  if (newKeyword) {
-    await searchGroups(newKeyword)
+
+
+const debouncedSearch = debounce(async (keyword: string) => {
+  if (keyword) {
+    await searchGroups(keyword);
   } else {
-    searchResults.value = []
+    searchResults.value = [];
   }
+}, 500);
+
+watch(() => props.keyword, (newKeyword) => {
+  debouncedSearch(newKeyword);
 })
 
 async function handleGroupClick(groupId: string) {

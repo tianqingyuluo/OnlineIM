@@ -65,6 +65,9 @@ onMounted(async () => {
       GroupSettingService.getGroupSetting(groupId.value)
     ])
     console.log("API返回数据:", groupInfo) // 检查API返回
+    if (groupInfo.my_role ==='0')groupInfo.my_role='member'
+    if (groupInfo.my_role ==='1')groupInfo.my_role='admin'
+    if (groupInfo.my_role ==='2')groupInfo.my_role='owner'
     currentGroup.value = groupInfo
     currentGroupSettings.value = groupSettings
     console.log("设置后的群组信息:", currentGroup.value) // 检查响应式数据

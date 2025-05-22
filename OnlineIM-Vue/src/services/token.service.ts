@@ -22,7 +22,9 @@ export class TokenService {
 
   public async updateToken(): Promise<void> {
     try {
+      await new Promise(resolve => setTimeout(resolve, 1000));
       const response = await authService.updateToken(this.token)
+      console.log(response)
       this.token = response.access_token
       useUserStore().token = response.access_token
       this.scheduleNextRefresh((response.expires_in - 30) * 1000)

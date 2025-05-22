@@ -5,7 +5,7 @@ import OtherProfile from "@/components/independent/profile/otherProfile.vue";
 import { type UserSearchResult } from '@/type/User.ts';
 import {Button} from "@/components/ui/button";
 import SendFriendRequest from "@/components/independent/friends/SendFriendRequest.vue";
-
+import { debounce } from 'lodash';
 const props = defineProps({
   keyword: {
     type: String,
@@ -23,12 +23,18 @@ const loading = ref(false)
 const hasMore = ref(true)
 
 // 监听keyword变化
-watch(() => props.keyword, async (newKeyword) => {
-  if (newKeyword) {
-    await searchUsers(newKeyword)
+
+
+const debouncedSearch = debounce(async (keyword: string) => {
+  if (keyword) {
+    await searchUsers(keyword);
   } else {
-    searchResults.value = [] // 添加.value
+    searchResults.value = [];
   }
+}, 500);
+
+watch(() => props.keyword, (newKeyword) => {
+  debouncedSearch(newKeyword);
 })
 
 function handleAddFriend(user: UserSearchResult) {

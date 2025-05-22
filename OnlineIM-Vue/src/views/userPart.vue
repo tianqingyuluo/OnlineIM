@@ -36,12 +36,24 @@ onMounted(async () => {
     let foundFriend: Friend | null = null
 
     // 遍历所有分组中的好友
-    for (const group of listStore.groupedFriends) {
+    for (const group of listStore.userGroups) {
       const friend = group.friends.find(
-          f => f.friend_info.user_id === userId.value
+          f => f.user_id === userId.value
       )
       if (friend) {
-        foundFriend = friend
+        foundFriend = {
+          friendship_id: friend.friendship_id,
+          friend_info: {
+            user_id: friend.user_id,
+            username: friend.username,
+            nickname: friend.nickname,
+            avatar_url: friend.avatar_url,
+            remark: friend.remark,
+            friend_group_id: friend.friend_group_id,
+            online_status: friend.online_status
+          },
+          created_at: friend.created_at
+        }
         break
       }
     }
@@ -154,8 +166,8 @@ async function handleGroupChange(newGroupId: string) {
             <SelectGroup>
               <SelectItem 
                 v-for="group in listStore.userGroups"
-                :key="group.id"
-                :value="group.id"
+                :key="group.group_id"
+                :value="group.group_id"
               >
                 {{ group.name }}
               </SelectItem>

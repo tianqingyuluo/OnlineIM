@@ -1,7 +1,9 @@
+import type { FriendInFriendGroup} from "@/type/Friends.ts";
+
 export interface UserGroupInfo {
-    "id": string,
-    "name": string,
-    "userId": string,
-    "sort": number,
-    "createdAt": string
+    group_id: string,
+    name: string,
+    sort: number,
+    createdAt: string
+    friends: FriendInFriendGroup[]
 }

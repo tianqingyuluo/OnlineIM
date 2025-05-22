@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {ref, onMounted, onUnmounted, onBeforeUnmount} from 'vue'
+import {ref, onMounted, onUnmounted} from 'vue'
 import { groupService } from '@/services/group.service'
 import type { GroupMemberAll } from '@/type/group'
 import {
@@ -175,7 +175,7 @@ onUnmounted(() => {
     <div v-else>
       <!-- 将上下文菜单移到循环内部 -->
       <div v-for="member in members" :key="member.user_info.user_id">
-        <ContextMenu v-model:open="contextMenuOpen" @update:open="onContextMenuOpenChange">
+        <ContextMenu @update:open="onContextMenuOpenChange">
           <ContextMenuTrigger>
             <div class="member-item">
               <img

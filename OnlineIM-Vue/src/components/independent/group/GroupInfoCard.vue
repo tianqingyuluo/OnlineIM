@@ -50,13 +50,12 @@ const handleViewAnnouncement = () => {
 }
 
 const handleSettingChange = async (key: keyof GroupSetting, value: any) => {
+
   try {
-    // 将布尔值转换为数字类型
-    const processedValue = typeof value === 'boolean' ? (value ? 1 : 0) : value;
     // 创建包含所有设置字段的完整对象
     const updatedSettings = await GroupSettingService.updateGroupSetting(props.group.group_id, {
       ...props.groupSettings,
-      [key]: processedValue
+      [key]: value
     })
     // 更新本地状态
     if (props.groupSettings) {
@@ -65,7 +64,6 @@ const handleSettingChange = async (key: keyof GroupSetting, value: any) => {
     return updatedSettings
   } catch (err) {
     console.error('更新群设置失败:', err)
-    throw err
   }
 }
 
@@ -128,7 +126,9 @@ const fetchMembers = async () => {
 
 // 初始化获取成员
 onMounted(() => {
+  console.log( "父组件传进来的",props.group)
   fetchMembers()
+
 })
 
 </script>
@@ -166,7 +166,7 @@ onMounted(() => {
         <div class="space-y-3">
           <div>
             <span class="text-gray-500">创建时间:</span>
-            <span class="ml-2">{{ new Date(group.created_at).toLocaleString() }}</span>
+            <span class="ml-2">{{ group.create_at }}</span>
           </div>
           <div>
             <span class="text-gray-500">我的角色:</span>
@@ -230,27 +230,23 @@ onMounted(() => {
           <div v-if="myRole === 'owner' || myRole === 'admin'" class="space-y-2">
             <div class="flex items-center justify-between py-2 border-b border-gray-100">
               <span class="text-gray-500">允许成员邀请</span>
-              <Switch v-model="groupSettings.allowMemberInvite" @update:modelValue="val => handleSettingChange('allowMemberInvite', val)"/>
+              <Switch v-model="groupSettings.allow_member_invite" @update:modelValue="val => handleSettingChange('allow_member_invite', val)"/>
             </div>
             <div class="flex items-center justify-between py-2 border-b border-gray-100">
               <span class="text-gray-500">允许成员修改群名</span>
-              <Switch v-model="groupSettings.allowMemberModifyName" @update:modelValue="val => handleSettingChange('allowMemberModifyName', val)"/>
+              <Switch v-model="groupSettings.allow_member_modify_name" @update:modelValue="val => handleSettingChange('allow_member_modify_name', val)"/>
             </div>
             <div class="flex items-center justify-between py-2 border-b border-gray-100">
               <span class="text-gray-500">允许成员上传文件</span>
-              <Switch v-model="groupSettings.allowMemberUploadFile" @update:modelValue="val => handleSettingChange('allowMemberUploadFile', val)"/>
+              <Switch v-model="groupSettings.allow_member_upload_file" @update:modelValue="val => handleSettingChange('allow_member_upload_file', val)"/>
             </div>
             <div class="flex items-center justify-between py-2 border-b border-gray-100">
               <span class="text-gray-500">允许成员@所有人</span>
-              <Switch v-model="groupSettings.allowMemberAtAll" @update:modelValue="val => handleSettingChange('allowMemberAtAll', val)"/>
+              <Switch v-model="groupSettings.allow_member_at_all" @update:modelValue="val => handleSettingChange('allow_member_at_all', val)"/>
             </div>
             <div class="flex items-center justify-between py-2 border-b border-gray-100">
               <span class="text-gray-500">允许查看历史消息</span>
-              <Switch v-model="groupSettings.allowViewHistoryMessage" @update:modelValue="val => handleSettingChange('allowViewHistoryMessage', val)"/>
-            </div>
-            <div class="flex items-center justify-between py-2 border-b border-gray-100">
-              <span class="text-gray-500">禁言设置</span>
-              <Switch v-model="groupSettings.mute_type" @update:modelValue="val => handleSettingChange('mute_type', val)"/>
+              <Switch v-model="groupSettings.allow_view_history_message" @update:modelValue="val => handleSettingChange('allow_view_history_message', val)"/>
             </div>
           </div>
           <Button

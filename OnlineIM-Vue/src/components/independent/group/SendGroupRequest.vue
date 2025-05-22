@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { groupService } from '@/services/group.service'
 import { toTypedSchema } from '@vee-validate/zod'
-import { useForm, FormField } from 'vee-validate'
+import { useForm } from 'vee-validate'
 import { z } from 'zod'
 
 const props = defineProps({

@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import FriendSelection from '@/components/independent/group/FriendSelection.vue';
 import { ref } from "vue";
 import { groupService } from "@/services/group.service";
+import { toast } from "vue-sonner";
 const emit = defineEmits(['close']);
 const selectedFriends = ref<string[]>([]);
 const props = defineProps<{
