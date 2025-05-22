@@ -30,7 +30,7 @@
         FROM
             friend_requests fr
             INNER JOIN
-            users u ON fr.to_user_id = u.id
+            users u ON fr.from_user_id = u.id
         WHERE
             fr.to_user_id = #{id}
         ORDER BY fr.updated_at DESC
