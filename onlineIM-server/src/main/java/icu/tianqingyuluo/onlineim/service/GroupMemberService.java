@@ -3,10 +3,17 @@ package icu.tianqingyuluo.onlineim.service;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.GroupMemberResponse;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Map;
 
 @Service
 public interface GroupMemberService {
+    /**
+     *  获取群组成员信息
+     * @param groupId 群组ID
+     */
+    List<GroupMemberResponse> getGroupMembers(String groupId);
+
     /**
      * 获取群成员详情
      * @param groupId 群组ID

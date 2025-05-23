@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 public class GroupMemberServiceImpl implements GroupMemberService {
@@ -20,6 +21,11 @@ public class GroupMemberServiceImpl implements GroupMemberService {
         this.groupMapper = groupMapper;
         this.groupMemberMapper = groupMemberMapper;
         this.groupSettingMapper = groupSettingMapper;
+    }
+
+    @Override
+    public List<GroupMemberResponse> getGroupMembers(String groupId) {
+        return groupMemberMapper.getGroupMembersByGroupID(groupId);
     }
 
     @Override

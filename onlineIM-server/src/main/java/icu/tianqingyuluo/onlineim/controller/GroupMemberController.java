@@ -6,10 +6,13 @@ import icu.tianqingyuluo.onlineim.service.UserService;
 import icu.tianqingyuluo.onlineim.util.ErrorCodeUtil;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.ibatis.exceptions.PersistenceException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -31,6 +34,56 @@ public class GroupMemberController {
     }
 
     /**
+     * 获取该群群成员信息
+     *
+     * @param
+     */
+    @GetMapping("")
+    public ResponseEntity<?> getMembers(
+            @RequestHeader("Authorization") String token,
+            @PathVariable String groupId) {
+        String userID = jwtUtil.getUserIDFromToken(token);
+        // 检查用户是否是群成员，有权限查看成员列表
+        boolean isMember = groupMemberService.isGroupMember(groupId, userID);
+        if (!isMember) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorCodeUtil.getErrorOutput("403", "您不是该群成员，无权限查看"));
+        }
+        try {
+            // 该方法应负责查询指定群组的所有成员列表，并返回 List<GroupMemberResponse>。
+            List<GroupMemberResponse> members = groupMemberService.getGroupMembers(groupId);
+            Map<String, Object> response = new HashMap<>();
+            response.put("members", members);
+            response.put("total", members.size());
+            return ResponseEntity.ok(response);
+        } catch (PersistenceException e) {
+            log.error("获取群成员列表失败: {}", groupId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ErrorCodeUtil.getErrorOutput("500", "服务器内部错误"));
+        }
+    }
+
+//        try {
+//            String userID = jwtUtil.getUserIDFromToken(token);
+//
+//            if (!groupMemberService.isGroupMember(groupId,userID)) {
+//                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ErrorCodeUtil.getErrorOutput("401", "无权查看群组成员"));
+//            }
+//            List<GroupMemberResponse> groupMembers = groupMemberService.getGroupMembers(groupId);
+//            if(!groupMembers.isEmpty()){
+//                Map<String,Object> response = new HashMap<>();
+//                response.put("groupMembers", groupMembers);
+//                response.put("total", groupMembers.size());
+//                return ResponseEntity.status(HttpStatus.OK).body(response);
+//            }
+//            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ErrorCodeUtil.getErrorOutput("404", "啊哦，发生了些小错误"));
+//        }
+//        catch (Exception e) {
+//            log.error(e.getMessage());
+//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ErrorCodeUtil.getErrorOutput("500", "服务器内部错误"));
+//        }
+//  }
+
+
+    /**
      * 获取群成员详情
      * @param groupId 群组ID
      * @param memberId 成员ID
@@ -42,8 +95,7 @@ public class GroupMemberController {
             @PathVariable String memberId,
             @RequestHeader("Authorization") String token) {
         try {
-            String username = jwtUtil.getUsernameFromToken(token);
-            String operatorId = userService.getUserInfoByUsername(username).getUserId();
+            String operatorId = jwtUtil.getUserIDFromToken(token);
 
             GroupMemberResponse response = groupMemberService.getMemberDetail(groupId, memberId, operatorId);
             if (response == null) {

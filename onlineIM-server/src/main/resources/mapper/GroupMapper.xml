@@ -55,7 +55,7 @@
             (
             CONCAT('mem_', ${@cn.hutool.core.util.IdUtil@getSnowflakeNextIdStr()}),
             #{gid},
-            #{userid},
+            #{userid}
             )
         </foreach>
     </insert>

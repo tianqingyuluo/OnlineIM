@@ -2,6 +2,7 @@ package icu.tianqingyuluo.onlineim.controller;
 
 import icu.tianqingyuluo.onlineim.pojo.dto.request.GroupSettingUpdateRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.GroupSettingResponse;
+import icu.tianqingyuluo.onlineim.service.GroupService;
 import icu.tianqingyuluo.onlineim.service.GroupSettingService;
 import icu.tianqingyuluo.onlineim.service.UserService;
 import icu.tianqingyuluo.onlineim.util.ErrorCodeUtil;
@@ -22,11 +23,16 @@ public class GroupSettingController {
     private final JwtUtil jwtUtil;
     private final UserService userService;
     private final GroupSettingService groupSettingService;
+    private final GroupService groupService;
 
-    public GroupSettingController(JwtUtil jwtUtil, UserService userService, GroupSettingService groupSettingService) {
+    public GroupSettingController(JwtUtil jwtUtil,
+                                  UserService userService,
+                                  GroupSettingService groupSettingService,
+                                  GroupService groupService) {
         this.jwtUtil = jwtUtil;
         this.userService = userService;
         this.groupSettingService = groupSettingService;
+        this.groupService = groupService;
     }
 
     /**
@@ -71,11 +77,11 @@ public class GroupSettingController {
             String userId = userService.getUserInfoByUsername(username).getUserId();
 
             // 检查权限
-            // boolean isAdminOrOwner = groupService.isUserAdminOrOwner(groupId, userId);
-            // if (!isAdminOrOwner) {
-            //     return ResponseEntity.status(HttpStatus.FORBIDDEN)
-            //             .body(ErrorCodeUtil.getErrorOutput("403", "无权限修改群组设置"));
-            // }
+             boolean isAdminOrOwner = groupService.isUserAdminOrOwner(groupId, userId);
+             if (!isAdminOrOwner) {
+                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                         .body(ErrorCodeUtil.getErrorOutput("403", "无权限修改群组设置"));
+             }
 
             GroupSettingResponse response = groupSettingService.updateGroupSettings(groupId, request, userId);
             if (response == null) {
@@ -104,11 +110,11 @@ public class GroupSettingController {
             String userId = userService.getUserInfoByUsername(username).getUserId();
 
             // 检查权限
-            // boolean isAdminOrOwner = groupService.isUserAdminOrOwner(groupId, userId);
-            // if (!isAdminOrOwner) {
-            //     return ResponseEntity.status(HttpStatus.FORBIDDEN)
-            //             .body(ErrorCodeUtil.getErrorOutput("403", "无权限启用全员禁言"));
-            // }
+             boolean isAdminOrOwner = groupService.isUserAdminOrOwner(groupId, userId);
+             if (!isAdminOrOwner) {
+                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                         .body(ErrorCodeUtil.getErrorOutput("403", "无权限启用全员禁言"));
+             }
 
             GroupSettingResponse response = groupSettingService.muteAll(groupId, userId);
             if (response == null) {
@@ -136,12 +142,12 @@ public class GroupSettingController {
             String username = jwtUtil.getUsernameFromToken(token);
             String userId = userService.getUserInfoByUsername(username).getUserId();
 
-            // 检查权限
-            // boolean isAdminOrOwner = groupService.isUserAdminOrOwner(groupId, userId);
-            // if (!isAdminOrOwner) {
-            //     return ResponseEntity.status(HttpStatus.FORBIDDEN)
-            //             .body(ErrorCodeUtil.getErrorOutput("403", "无权限取消全员禁言"));
-            // }
+             // 检查权限
+             boolean isAdminOrOwner = groupService.isUserAdminOrOwner(groupId, userId);
+             if (!isAdminOrOwner) {
+                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                         .body(ErrorCodeUtil.getErrorOutput("403", "无权限取消全员禁言"));
+             }
 
             GroupSettingResponse response = groupSettingService.unmuteAll(groupId, userId);
             if (response == null) {
