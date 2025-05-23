@@ -1,16 +1,16 @@
 package icu.tianqingyuluo.onlineim.storage.impl;
 
 import icu.tianqingyuluo.onlineim.storage.OSSAdapter;
+import icu.tianqingyuluo.onlineim.util.RealIPUtil;
 import io.minio.*;
 import io.minio.errors.*;
 import io.minio.http.Method;
 import io.minio.messages.DeleteError;
 import io.minio.messages.DeleteObject;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.InputStream;
-import java.security.InvalidKeyException;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -178,7 +178,9 @@ public class MinIOAdapter implements OSSAdapter {
      * @param objectName 对象名称
      * @return 文件URL
      */
+    @SneakyThrows
     private String getFileUrl(String bucketName, String objectName) {
-        return String.format("%s/%s/%s", endpoint, bucketName, objectName);
+        return String.format("http://%s:8080/%s/%s", RealIPUtil.getRealLocalIP(), bucketName, objectName);
     }
+
 }
