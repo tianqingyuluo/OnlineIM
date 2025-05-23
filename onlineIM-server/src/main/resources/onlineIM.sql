@@ -2,7 +2,7 @@ CREATE TABLE `users` (
                          `id` VARCHAR(143) NOT NULL COMMENT '用户ID，格式为：usr_+UUID',
                          `username` VARCHAR(32) NOT NULL COMMENT '用户名',
                          `password` VARCHAR(128) NOT NULL COMMENT '密码哈希值',
-                         `nickname` VARCHAR(32) NOT NULL COMMENT '昵称',
+                         `nickname` VARCHAR(40) NOT NULL COMMENT '昵称',
                          `avatar` VARCHAR(256) DEFAULT NULL COMMENT '头像URL',
                          `gender` TINYINT UNSIGNED DEFAULT 0 COMMENT '性别：0-未知，1-男，2-女',
                          `signature` VARCHAR(256) DEFAULT NULL COMMENT '个性签名',
