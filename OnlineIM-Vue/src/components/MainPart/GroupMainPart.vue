@@ -17,6 +17,7 @@ import { GroupSettingService } from "@/services/groupsetting.service";
 import GroupAvatarWithMenu from "@/components/MainPart/GroupAvatarWithMenu.vue";
 import type {MessageResponse} from "@/type/message.ts";
 import {useOtherStore} from "@/stores/otherStore.ts";
+import { dbService } from "@/utils/indexedDB";
 
 
 const menuRef = ref<HTMLElement | null>(null)//右上角群info
@@ -50,12 +51,13 @@ const currentGroup = ref<GroupResponse | null>(null)
 const currentGroupSettings = ref<any>(null)
 const userStore = useUserStore()
 const currentUser = computed(() => userStore.loggedInUser)
-
+// const inMyHistory = ref(false);
 const groupId = computed(() => {
   const id = route.params.id
   return Array.isArray(id) ? id[0] : id
 })
-
+// const myHistory =  await dbService.getHistory(userStore.loggedInUser.user_id, groupId.value);
+// const lastHistorySeqId = myHistory.length > 0 ? myHistory[myHistory.length - 1].seq_id : null;
 
 onMounted(async () => {
   try {
@@ -110,6 +112,16 @@ async function loadMessages() {
          groupMessages.value = [...sortedMessages, ...groupMessages.value]
        }
       
+      // 将消息历史存储到IndexedDB
+ 
+      
+      // if (sortedMessages.length > 0 && lastHistorySeqId !== null && sortedMessages[0].seq_id < lastHistorySeqId) {
+      //     inMyHistory.value = true;
+      // }
+      //
+      // const newMessages = sortedMessages.filter(msg => !myHistory.some(historyMsg => historyMsg.seq_id === msg.seq_id));
+      // await dbService.putHistory(newMessages);
+
       hasMore.value = has_more_before
       noMoreInfo.value = !has_more_before
     }

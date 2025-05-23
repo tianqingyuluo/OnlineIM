@@ -36,6 +36,7 @@ const searchQuery = ref('');
 
 // 初始化所有分组为展开状态
 onMounted(() => {
+  console.log(listStore.userGroups)
   listStore.userGroups.forEach(group => {
     expandedGroups.value[group.group_id] = true;
   });

@@ -7,6 +7,7 @@ import type {Conversation} from "@/type/Conversation.ts";
 import type {Friend} from "@/type/Friends.ts";
 import { TokenService } from '@/services/token.service'
 import type {GroupResponse} from "@/type/group.ts";
+import { dbService } from '@/utils/indexedDB';
 
 // 默认用户对象（所有字段为空值）
 const DEFAULT_USER: User = {
@@ -59,8 +60,15 @@ export const useUserStore = defineStore('user', {
       return !!this.token
     },
     async fetchUserData() {
-      if (this.loggedInUser.user_id==='')
-        await meService.me();
+      // if (this.loggedInUser.user_id==='') {
+         await meService.me();
+      // }
+      // const avatarUrl = this.loggedInUser.avatar_url;
+      // try {
+      //   await dbService.addImageFromUrl(avatarUrl);
+      // } catch (error) {
+      //   console.error('Failed to cache avatar:', error);
+      // }
     },
     async updateToken() {
       TokenService.init(this.token)

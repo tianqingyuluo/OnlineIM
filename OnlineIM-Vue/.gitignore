@@ -24,3 +24,6 @@ dist-ssr
 config.ts
 shared/config.js
 ignore
+test
+memory-bank
+.windsurfrules

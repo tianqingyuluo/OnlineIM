@@ -11,6 +11,7 @@ const showProfile = ref(false)
 
 const handleLogout = () => {
    userStore.clearUser()
+   userStore.token = ''
   router.push('/login')
 }
 

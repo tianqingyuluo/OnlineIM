@@ -66,6 +66,7 @@ export const groupService = {
   async getGroupInfo(groupId: string): Promise<GroupResponse> {
     try {
       const response = await api.get<GroupResponse>(`/groups/${groupId}`);
+      console.log("获取群组消息",response.data);
       return response.data;
     } catch (error) {
       console.error('获取群组信息失败:', error);

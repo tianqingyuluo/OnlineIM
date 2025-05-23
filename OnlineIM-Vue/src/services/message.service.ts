@@ -1,5 +1,7 @@
 import api from './api.service';
 import type {MessageResponse} from "@/type/message.ts";
+import { dbService } from "@/utils/indexedDB.ts";
+import {useUserStore} from "@/stores/user.ts";
 
 export const MessageService = {
     async getMessageHistory(
@@ -39,5 +41,11 @@ export const MessageService = {
         } catch (error: any) {
             throw error;
         }
+    },
+    async getHistoryByIndexDB(conversation_id: string, before_message_id?: string): Promise<{messages: MessageResponse[], has_more_before: boolean}> {
+        const userStore = useUserStore();
+        const userId = userStore.loggedInUser.user_id;
+        const messages = await dbService.getHistory(userId, conversation_id, before_message_id);
+        return { messages, has_more_before: messages.length === 50 };
     }
 };

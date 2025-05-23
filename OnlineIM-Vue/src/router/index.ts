@@ -91,7 +91,7 @@ const router = createRouter({
 router.beforeEach((to, _from, next) => {
   const userStore = useUserStore()
 
-  if (to.path !== '/login'&&to.path!=='/register' && !userStore.loggedInUser.user_id) {
+  if (to.path !== '/login'&&to.path!=='/register' && !userStore.token) {
     next('/login')
     toast.error('用户未登录')
   } else if (to.path === '/login' && userStore.token) {

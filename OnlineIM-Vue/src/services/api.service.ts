@@ -3,7 +3,6 @@ import axios from 'axios';
 import { API_BASE_URL } from '../../shared/config.ts';
 import { useUserStore } from '@/stores/user';
 import { toast } from 'vue-sonner';
-import router from '@/router';
 // 定义标准API响应格式
 export type ApiResponse<T = any> = {
   data?: T;
@@ -27,7 +26,6 @@ const api = axios.create({
 // 请求拦截器添加调试日志
 api.interceptors.request.use(
   (config) => {
-    console.log('请求配置:', config) // 添加调试日志
     const userStore=useUserStore();
     // 从 localStorage 获取 token
     const token = userStore.token
@@ -53,10 +51,8 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-
-    const userStore = useUserStore();
-    
-    // 如果请求被取消
+    useUserStore();
+// 如果请求被取消
     if (axios.isCancel(error)) {
       return Promise.reject({
         code: 'REQUEST_CANCELLED',

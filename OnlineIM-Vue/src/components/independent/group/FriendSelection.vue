@@ -32,12 +32,12 @@
               @before-leave="el => el.style.height = el.scrollHeight + 'px'"
               @leave="el => el.style.height = 0"
           >
-            <div v-show="isGroupExpanded(group.id)" class="transition-all duration-300">
+            <div v-show="isGroupExpanded(group.group_id)" class="transition-all duration-300">
               <div
                   v-for="friend in group.friends"
-                  :key="friend.userid"
+                  :key="friend.user_id"
                   class="flex items-center p-2 hover:bg-gray-50 rounded cursor-pointer"
-                  @click="toggleFriendSelection(friend.userid)"
+                  @click="toggleFriendSelection(friend.user_id)"
               >
                 <img
                     :src="friend.avatar_url || '/images/default-avatar.png'"
@@ -50,7 +50,7 @@
                 <input
                     type="checkbox"
                     v-model="selectedMembers"
-                    :value="friend.userid"
+                    :value="friend.user_id"
                     class="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-500"
                 />
               </div>
@@ -78,20 +78,14 @@ const emit = defineEmits<{
   (e: 'update:modelValue', value: string[]): void
 }>()
 
-const selectedFriends = ref<string[]>(props.modelValue)
-
-watch(selectedFriends, (newVal) => {
-  emit('update:modelValue', newVal)
-})
 
 const selectedMembers = computed({
   get: () => props.modelValue  || [],
   set: (value) => {
-    if (props.modelValue !== undefined) {
-      emit('update:modelValue', value)
-    }
+    emit('update:modelValue', value)
   }
 })
+
 
 // 初始化所有分组为展开状态
 listStore.userGroups.forEach(group => {
@@ -111,11 +105,14 @@ const userGroups = computed(() => {
 })
 
 function toggleFriendSelection(userId: string) {
-  const index = selectedMembers.value.indexOf(userId)
+  const currentMembers = selectedMembers.value;
+  const index = currentMembers.indexOf(userId);
   if (index === -1) {
-    selectedMembers.value.push(userId)
+    // Add member: create a new array with the new member
+    selectedMembers.value = [...currentMembers, userId];
   } else {
-    selectedMembers.value.splice(index, 1)
+    // Remove member: create a new array excluding the member
+    selectedMembers.value = currentMembers.filter(id => id !== userId);
   }
 }
 </script>

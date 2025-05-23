@@ -44,9 +44,9 @@ const formSchema = toTypedSchema(
       z.null()
     ]).transform(val => val || ''),
     gender: z.union([
-      z.number().min(0).max(2),
+      z.string().refine(val => ['0','1','2'].includes(val)),
       z.null()
-    ]).transform(val => val === null ? 0 : val).default(0)
+    ]).transform(val => val === null ? '0' : val).default('0')
   })
 )
 
@@ -58,7 +58,7 @@ const tempSettings = computed(() => ({
   nickname: userStore.loggedInUser?.nickname || '',
   email: userStore.loggedInUser?.email || '',
   region: userStore.loggedInUser?.region || '',
-  gender: userStore.loggedInUser?.gender || 0, // 确保默认值
+  gender: userStore.loggedInUser?.gender || '0', // 确保默认值
   phone: userStore.loggedInUser?.phone || '',
   signature: userStore.loggedInUser?.signature || '',
   avatar_url: userStore.loggedInUser?.avatar_url || ''
@@ -78,13 +78,13 @@ const [gender] = defineField('gender'); // 确保正确绑定
 const saveSettings = handleSubmit(async (values) => {
   try {
     const updatedUser = await meService.updateMe({
-      nickname: values.nickname || undefined,
-      email: values.email || undefined,
-      region: values.region || undefined,
-      gender: (values.gender as 0 | 1 | 2 | undefined) || 0, // 0表示未设置，1表示男，2表示女
-      phone: values.phone || undefined,
-      signature: values.signature || undefined,
-      avatar_url: tempSettings.value.avatar_url || undefined
+      nickname: values.nickname || '',
+      email: values.email || '',
+      region: values.region || '',
+      gender: values.gender ||'0', // 0表示未设置，1表示男，2表示女
+      phone: values.phone || '',
+      signature: values.signature || '',
+      avatar_url: tempSettings.value.avatar_url || ''
     });
     userStore.setLoggedInUser(updatedUser);
     emit('close');
@@ -228,9 +228,9 @@ const handleDrag = ({ deltaX, deltaY }: { deltaX: number; deltaY: number }) => {
                 v-model="gender"
                 class="w-full p-2.5 border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 bg-white text-gray-800"
             >
-              <option :value="0">未设置</option>
-              <option :value="1">男</option>
-              <option :value="2">女</option>
+              <option :value="'0'">未设置</option>
+              <option :value="'1'">男</option>
+              <option :value="'2'">女</option>
             </select>
           </div>
         </div>

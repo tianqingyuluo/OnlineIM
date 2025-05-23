@@ -17,6 +17,7 @@ const handleInvite = async () => {
   }
   
   try {
+    console.log('邀请好友:', selectedFriends.value);
     await groupService.inviteUsersToGroup(props.groupId, selectedFriends.value);
     handleClose();
   } catch (error) {
