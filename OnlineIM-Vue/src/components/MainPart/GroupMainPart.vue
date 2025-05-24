@@ -18,6 +18,8 @@ import GroupAvatarWithMenu from "@/components/MainPart/GroupAvatarWithMenu.vue";
 import type {MessageResponse} from "@/type/message.ts";
 import {useOtherStore} from "@/stores/otherStore.ts";
 import { dbService } from "@/utils/indexedDB";
+import {conversationService} from "@/services/conversation.service.ts";
+import type {Conversation} from "@/type/Conversation.ts";
 
 
 const menuRef = ref<HTMLElement | null>(null)//右上角群info
@@ -47,24 +49,24 @@ onMounted(() => {
 })
 
 const route = useRoute()
+const conversation =ref<Conversation | null>(null)
 const currentGroup = ref<GroupResponse | null>(null)
 const currentGroupSettings = ref<any>(null)
 const userStore = useUserStore()
 const currentUser = computed(() => userStore.loggedInUser)
-// const inMyHistory = ref(false);
 const groupId = computed(() => {
   const id = route.params.id
   return Array.isArray(id) ? id[0] : id
 })
-// const myHistory =  await dbService.getHistory(userStore.loggedInUser.user_id, groupId.value);
-// const lastHistorySeqId = myHistory.length > 0 ? myHistory[myHistory.length - 1].seq_id : null;
+
 
 onMounted(async () => {
   try {
     console.log("当前群组ID:", groupId.value) // 添加这行检查路由参数
-    const [groupInfo, groupSettings] = await Promise.all([
+    const [groupInfo, groupSettings,Conversaation] = await Promise.all([
       groupService.getGroupInfo(groupId.value),
-      GroupSettingService.getGroupSetting(groupId.value)
+      GroupSettingService.getGroupSetting(groupId.value),
+      conversationService.getConversationById(groupId.value)
     ])
     console.log("API返回数据:", groupInfo) // 检查API返回
     if (groupInfo.my_role ==='0')groupInfo.my_role='member'
@@ -72,8 +74,9 @@ onMounted(async () => {
     if (groupInfo.my_role ==='2')groupInfo.my_role='owner'
     currentGroup.value = groupInfo
     currentGroupSettings.value = groupSettings
+    conversation.value=Conversaation
     console.log("设置后的群组信息:", currentGroup.value) // 检查响应式数据
-    
+
     // 确保加载群组信息后立即加载消息
     await loadMessages()
   } catch (error) {
@@ -85,42 +88,46 @@ const isLoading = ref(false)
 const hasMore = ref(true)
 const noMoreInfo = ref(false)
 
+
+const lastHistorySeqId = ref<string | null>(null);
+const inMyHistory = ref(false);
 async function loadMessages() {
+
   if (isLoading.value || !hasMore.value) return
-  
+
   isLoading.value = true
   try {
-    const before_message_id = groupMessages.value.length > 0 
+    const before_message_id = groupMessages.value.length > 0
       ? groupMessages.value[0].seq_id
       : undefined
 
     const response  = await MessageService.getMessageHistory(
-      groupId.value, 
+      groupId.value,
       before_message_id
     )
     const messages=response.messages
     const has_more_before = response.has_more_before
     const has_more_after = response.has_more_after
-    
+
     console.log('获取到的消息历史:', messages)
-    
-    if (messages.length > 0) { 
+
+    if (messages.length > 0) {
        const sortedMessages = messages.sort((a, b) => a.seq_id - b.seq_id);
-       if (!before_message_id) { 
-         groupMessages.value = sortedMessages 
-       } else { 
+       if (!before_message_id) {
+         groupMessages.value = sortedMessages
+       } else {
          groupMessages.value = [...sortedMessages, ...groupMessages.value]
        }
-      
+
       // 将消息历史存储到IndexedDB
- 
-      
-      // if (sortedMessages.length > 0 && lastHistorySeqId !== null && sortedMessages[0].seq_id < lastHistorySeqId) {
-      //     inMyHistory.value = true;
-      // }
-      //
-      // const newMessages = sortedMessages.filter(msg => !myHistory.some(historyMsg => historyMsg.seq_id === msg.seq_id));
-      // await dbService.putHistory(newMessages);
+
+
+      if (sortedMessages.length > 0 && lastHistorySeqId !== null && sortedMessages[0].seq_id < lastHistorySeqId) {
+          inMyHistory.value = true;
+      }
+      const newMessages = sortedMessages.filter(msg => lastHistorySeqId.value === null 
+      || (msg.seq_id !== null && true && msg.seq_id > lastHistorySeqId.value));
+      await dbService.putHistory(newMessages);
 
       hasMore.value = has_more_before
       noMoreInfo.value = !has_more_before
@@ -135,7 +142,7 @@ async function loadMessages() {
 function handleScroll(e: Event) {
   const target = e.target as HTMLElement
   const scrollThreshold = 100 // 设置滚动阈值
-  
+
   // 当滚动到接近顶部(阈值范围内)且还有更多消息可加载时
   if (target.scrollTop <= scrollThreshold && hasMore.value && !isLoading.value) {
     loadMessages()
@@ -143,12 +150,18 @@ function handleScroll(e: Event) {
 }
 
 onMounted(() => {
+  const myHistory =  dbService.getHistory(userStore.loggedInUser.user_id, groupId.value);
+  console.log("拉到的历史记录",myHistory)
+  if (myHistory !==null ) {
+    lastHistorySeqId.value = myHistory.length > 0 ? myHistory[myHistory.length - 1].seq_id : null;
+  }
+  console.log("我的最新indexDB",lastHistorySeqId)
   loadMessages()
   const chatContainer = document.querySelector('.overflow-y-auto')
   if (chatContainer) {
     chatContainer.addEventListener('scroll', handleScroll)
   }
-  
+
   // 添加键盘事件监听
   const textarea = document.getElementById('message-2')
   if (textarea) {
@@ -161,7 +174,7 @@ onBeforeUnmount(() => {
   if (chatContainer) {
     chatContainer.removeEventListener('scroll', handleScroll)
   }
-  
+
   // 移除键盘事件监听
   const textarea = document.getElementById('message-2')
   if (textarea) {
@@ -237,14 +250,24 @@ function handleKeyDown(e: KeyboardEvent) {
     // Ctrl+Enter换行
     const cursorPos = textareaEl.selectionStart || 0
     const currentValue = textareaEl.value || ''
-    textareaEl.value = 
-      currentValue.substring(0, cursorPos) + 
-      '\n' + 
+    textareaEl.value =
+      currentValue.substring(0, cursorPos) +
+      '\n' +
       currentValue.substring(cursorPos)
     textareaEl.selectionStart = cursorPos + 1
     textareaEl.selectionEnd = cursorPos + 1
   }
 }
+const clearGroupMessages=async () =>  {
+  console.log('聊天记录clearGroupMessages触发')
+  try {
+    groupMessages.value = [];
+  } catch (error) {
+    console.error('清空聊天记录失败:', error);
+  }
+}
+
+provide('clearGroupMessages', clearGroupMessages);
 
 async function handleSendClick() {
   const textareaEl = document.getElementById('message-2') as HTMLTextAreaElement
@@ -252,7 +275,7 @@ async function handleSendClick() {
     try {
       const response = await MessageService.putMessage(
         groupId.value,
-        0, // 文本消息
+        'text', // 文本消息
         textareaEl.value
       )
             // 添加到消息列表
@@ -306,7 +329,8 @@ function toggleMenu() {
           <GroupInfoCard
   :group="currentGroup" 
   :group-settings="currentGroupSettings" 
-  :myRole="currentGroup.my_role" 
+  :myRole="currentGroup.my_role"
+  :conversation="conversation"
   class="h-full overflow-y-auto"
   @click.stop
 />

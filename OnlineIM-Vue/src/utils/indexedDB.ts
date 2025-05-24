@@ -5,6 +5,7 @@ const DB_NAME = 'im_db';
 const DB_VERSION = 1;
 const DB_PERSISTENCE_KEY = 'im_db_persistence';
 const IMAGE_STORE = 'images';
+const HISTORY_STORE = 'history';
 
 
 export const STORES = {
@@ -50,8 +51,8 @@ export const initDB = async (): Promise<IDBPDatabase> => {
       if (!db.objectStoreNames.contains(IMAGE_STORE)) {
         const store = db.createObjectStore(IMAGE_STORE, { keyPath: 'name' });
       }
-      if (!db.objectStoreNames.contains('history')) {
-        const store = db.createObjectStore('history', { keyPath: 'message_id' });
+      if (!db.objectStoreNames.contains(HISTORY_STORE)) {
+        const store = db.createObjectStore(HISTORY_STORE, { keyPath: 'message_id' });
         store.createIndex('conversation_id', 'conversation_id');
         store.createIndex('user_id', 'user_id');
       }
@@ -161,7 +162,7 @@ export const dbService = {
   },
   async getHistory(userId: string, conversationId: string, seqId?: string) {
     const db = await initDB();
-    const tx = db.transaction('history');
+    const tx = db.transaction(HISTORY_STORE);
     const userIndex = tx.store.index('user_id');
     const userRecords = await userIndex.getAll(userId);
     const conversationRecords = userRecords.filter(record => record.conversation_id === conversationId);
@@ -178,7 +179,7 @@ export const dbService = {
     const userStore = useUserStore();
     const userId = userStore.loggedInUser.user_id;
     const db = await initDB();
-    const tx = db.transaction('history', 'readwrite');
+    const tx = db.transaction(HISTORY_STORE, 'readwrite');
     await Promise.all([
       ...items.map(item => {
         const clonedItem = JSON.parse(JSON.stringify(item));

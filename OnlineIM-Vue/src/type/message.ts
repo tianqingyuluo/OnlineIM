@@ -13,6 +13,7 @@ export interface MessageResponse {
     status: "delivered" | "read" | "recalled";
     timestamp: string;
     is_recalled: boolean;
+    client_message_id: string;
 }
 
 export interface MessageHistoryResponse {

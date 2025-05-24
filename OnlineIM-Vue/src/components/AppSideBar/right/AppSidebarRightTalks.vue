@@ -3,8 +3,7 @@ import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
+  SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem
@@ -22,15 +21,29 @@ const searchQuery = ref('');
 const emits = defineEmits(['chatSelected'])
 const listStore = useListStore()
 
-const filteredConversations = computed(() => {
+// 修改 filteredConversations 计算属性，拆分为置顶和非置顶
+const pinnedConversations = computed(() => {
   const query = searchQuery.value.toLowerCase().trim();
-  if (!query) return listStore.conversations || [];
-  
-  return (listStore.conversations || []).filter(conversation => {
+  const conversations = (listStore.conversations || []).filter(conversation => conversation.is_pinned);
+  if (!query) return conversations;
+  return conversations.filter(conversation => {
     const name = (conversation.target_info?.name || '').toLowerCase();
     return name.includes(query);
   });
 });
+
+const unpinnedConversations = computed(() => {
+  const query = searchQuery.value.toLowerCase().trim();
+  const conversations = (listStore.conversations || []).filter(conversation => !conversation.is_pinned);
+  if (!query) return conversations;
+  return conversations.filter(conversation => {
+    const name = (conversation.target_info?.name || '').toLowerCase();
+    return name.includes(query);
+  });
+});
+
+// 用于判断是否显示“没有找到对应会话”
+const hasConversations = computed(() => pinnedConversations.value.length > 0 || unpinnedConversations.value.length > 0);
 
 function handleChatClick(conversation: Conversation) {
   activeId.value = conversation.conversation_id
@@ -65,35 +78,73 @@ function handleChatClick(conversation: Conversation) {
       <SidebarGroup>
         <SidebarGroupContent>
           <SidebarMenu class="w-full">
-            <div v-if="filteredConversations.length === 0" class="flex justify-center items-center py-8 text-gray-500">
+            <!-- 置顶会话 -->
+            <template v-if="pinnedConversations.length > 0">
+              <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase">置顶</div>
+              <div class="bg-gray-50">
+              <SidebarMenuItem v-for="conversation in pinnedConversations" :key="conversation.conversation_id" class="w-full">
+                <SidebarMenuButton
+                  as-child
+                  :isActive="activeId === conversation.conversation_id"
+                  @click="handleChatClick(conversation)"
+                  class="data-[active=true]:bg-gray-100 data-[active=true]:text-black flex items-center w-full h-[80px] px-4 hover:bg-gray-50"
+                >
+                  <div class="flex items-center w-full">
+                    <div class="w-[50px] h-[50px] rounded-full overflow-hidden mr-4 flex-shrink-0">
+                      <img
+                        :src="conversation.target_info?.avatar_url || '/default-avatar.png'"
+                        :alt="conversation.target_info?.name || ''"
+                        class="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div class="flex flex-col flex-grow space-y-1">
+                      <span class="text-[18px] font-bold">
+                        {{ conversation.target_info?.name || 'Unknown' }}
+                      </span>
+                      <span class="text-[13px] text-gray-500 truncate">
+                        {{ conversation.last_message?.content_preview || '无消息' }}
+                      </span>
+                    </div>
+                  </div>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              </div>
+            </template>
+
+            <!-- 非置顶会话 -->
+            <template v-if="unpinnedConversations.length > 0">
+              <div v-if="pinnedConversations.length > 0" class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase">其他</div>
+              <SidebarMenuItem v-for="conversation in unpinnedConversations" :key="conversation.conversation_id" class="w-full">
+                <SidebarMenuButton
+                  as-child
+                  :isActive="activeId === conversation.conversation_id"
+                  @click="handleChatClick(conversation)"
+                  class="data-[active=true]:bg-gray-100 data-[active=true]:text-black flex items-center w-full h-[80px] px-4 hover:bg-gray-50"
+                >
+                  <div class="flex items-center w-full">
+                    <div class="w-[50px] h-[50px] rounded-full overflow-hidden mr-4 flex-shrink-0">
+                      <img
+                        :src="conversation.target_info?.avatar_url || '/default-avatar.png'"
+                        :alt="conversation.target_info?.name || ''"
+                        class="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div class="flex flex-col flex-grow space-y-1">
+                      <span class="text-[18px] font-bold">
+                        {{ conversation.target_info?.name || 'Unknown' }}
+                      </span>
+                      <span class="text-[13px] text-gray-500 truncate">
+                        {{ conversation.last_message?.content_preview || '无消息' }}
+                      </span>
+                    </div>
+                  </div>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </template>
+
+            <div v-if="!hasConversations" class="flex justify-center items-center py-8 text-gray-500">
               没有找到对应会话
             </div>
-            <SidebarMenuItem v-else v-for="conversation in filteredConversations" :key="conversation.conversation_id" class="w-full">
-              <SidebarMenuButton
-                as-child
-                :isActive="activeId === conversation.conversation_id"
-                @click="handleChatClick(conversation)"
-                class="data-[active=true]:bg-gray-100 data-[active=true]:text-black flex items-center w-full h-[80px] px-4 hover:bg-gray-50"
-              >
-                <div class="flex items-center w-full">
-                  <div class="w-[50px] h-[50px] rounded-full overflow-hidden mr-4 flex-shrink-0">
-                    <img
-                      :src="conversation.target_info?.avatar_url || '/default-avatar.png'"
-                      :alt="conversation.target_info.name"
-                      class="w-full h-full object-cover"
-                    />
-                  </div>
-                  <div class="flex flex-col flex-grow space-y-1">
-                    <span class="text-[18px] font-bold">
-                      {{ conversation.target_info.name }}
-                    </span>
-                    <span class="text-[13px] text-gray-500 truncate">
-                      {{ conversation.last_message.content_preview }}
-                    </span>
-                  </div>
-                </div>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
           </SidebarMenu>
         </SidebarGroupContent>
       </SidebarGroup>

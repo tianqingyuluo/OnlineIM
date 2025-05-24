@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type {GroupMemberAll, GroupResponse} from '@/type/group.ts'
-import {nextTick, onMounted, ref, shallowRef, watch} from 'vue';
+import {inject, nextTick, onMounted, ref, shallowRef, watch} from 'vue';
 import GroupMembersList from '@/components/independent/group/GroupMembersList.vue'
 import type {GroupSetting} from '@/type/groupsetting';
 import {groupService} from '@/services/group.service';
@@ -9,6 +9,8 @@ import {GroupSettingService} from '@/services/groupsetting.service';
 import {Button} from "@/components/ui/button";
 import {toast} from 'vue-sonner';
 import AddFriendModal from '@/components/independent/group/AddFriendModal.vue';
+import {conversationService} from "@/services/conversation.service.ts";
+
 
 const showAddFriendModal = ref(false);
 
@@ -16,7 +18,7 @@ const props = defineProps<{
   group: GroupResponse
   myRole?: string
   groupSettings: GroupSetting
-  currentUser: any
+  conversation: any
 }>()
 
 const groupMembersListRef = shallowRef<{
@@ -36,7 +38,8 @@ const roleTranslations = {
   admin: '管理员',
   member: '成员'
 }
-
+const isMute = ref(props.conversation?.is_mute || false)
+const isPinned = ref(props.conversation?.is_pinned || false)
 
 defineExpose({  groupMembersListRef})
 const handleViewMembers = () => {
@@ -71,6 +74,28 @@ const handleSettingChange = async (key: keyof GroupSetting, value: any) => {
 const members = ref<GroupMemberAll[]>([])
 const loading = ref(false)
 const error = ref<Error | null>(null)
+
+const setMute = async (isMute: boolean) => {
+    if (isMute) {
+    await conversationService.muteConversation(props.conversation.conversation_id)
+  }else
+    await conversationService.unmuteConversation(props.conversation.conversation_id)
+};
+
+const setPinned =async (isPinned: boolean) => {
+  if (isPinned) {
+    await conversationService.topConversation(props.conversation.conversation_id)
+  }else
+    await conversationService.unTopConversation(props.conversation.conversation_id)
+};
+
+const clearGroupMessages = inject<() => Promise<void>>('clearGroupMessages');
+const clearMessage = async () => {
+   await conversationService.clearMessages(props.conversation.conversation_id);
+   if (clearGroupMessages) {
+     await clearGroupMessages();
+   }
+ };
 
 const handleDissolveGroup = async () => {
   try {
@@ -134,131 +159,157 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="transition-container h-full">
+  <div class="transition-container h-full flex flex-col">
     <Transition name="card-slide" mode="out-in">
       <div
           v-if="!showMembersList"
           key="info"
-          class="group-info-card bg-white rounded-lg shadow-sm p-4 h-full"
+          class="group-info-card bg-white rounded-lg shadow-sm p-6 h-full flex flex-col"
       >
         <!-- 群头像和基本信息 -->
-        <div class="flex items-center mb-4">
-          <div class="relative">
+        <div class="flex items-start mb-6">
+          <div class="relative flex-shrink-0">
             <img
                 :src="group.avatar_url || '/images/default-group-avatar.png'"
-                class="w-16 h-16 rounded-full mr-4"
+                class="w-20 h-20 rounded-full mr-5"
                 alt="群头像"
             >
-            <div 
+            <div
                 v-if="myRole === 'owner' || myRole === 'admin'"
-                class="absolute inset-0 flex items-center justify-center w-16 h-16 rounded-full mr-4 bg-black/80 opacity-0 hover:opacity-100 transition-opacity duration-200 cursor-pointer"
+                class="absolute inset-0 flex items-center justify-center w-20 h-20 rounded-full mr-5 bg-black/80 opacity-0 hover:opacity-100 transition-opacity duration-200 cursor-pointer"
                 @click="changeAvatar"
             >
-                <span class="text-white text-xs">更改头像</span>
+              <span class="text-white text-xs">更改头像</span>
             </div>
           </div>
-          <div>
-          <p class="text-gray-500 text-sm">群昵称: {{group.name }}</p>
-</div>
+          <div class="flex-1 min-w-0">
+            <h2 class="text-xl font-semibold text-gray-800 truncate">{{ group.name }}</h2>
+            <p class="text-gray-500 text-sm mt-1">创建时间: {{ group.create_at }}</p>
+            <p class="text-gray-500 text-sm mt-1">我的角色: {{ roleTranslations[group.my_role] }}</p>
+          </div>
         </div>
 
-        <!-- 群详情 -->
-        <div class="space-y-3">
-          <div>
-            <span class="text-gray-500">创建时间:</span>
-            <span class="ml-2">{{ group.create_at }}</span>
-          </div>
-          <div>
-            <span class="text-gray-500">我的角色:</span>
-            <span class="ml-2">{{ roleTranslations[group.my_role] }}</span>
-          </div>
-          <div v-if="group.description">
-            <span class="text-gray-500">群描述:</span>
-            <p class="mt-1">{{ group.description }}</p>
+        <!-- 群详情内容区域 -->
+        <div class="flex-1 overflow-y-auto space-y-4 pr-2 -mr-2">
+          <!-- 群描述 -->
+          <div v-if="group.description" class="bg-gray-50 p-3 rounded-lg">
+            <h3 class="text-gray-500 text-sm font-medium mb-1">群描述</h3>
+            <p class="text-gray-700">{{ group.description }}</p>
           </div>
 
-          <!-- 群成员网格 -->
-          <div v-if="members.length > 0" class="mt-4">
-            <div class="flex items-center mb-2">
-              <span class="text-gray-500">群成员:</span>
-              <button
-                  class="ml-2 px-2 py-1 rounded bg-gray-100 transition-colors"
-                  @click="handleViewMembers"
-              >
-                点击查看{{ group.member_count }}个群成员>
-              </button>
-            </div>
-            <div class="grid grid-cols-4 gap-4">
-              <div 
-                v-for="member in members" 
-                :key="member.user_info.user_id"
-                class="flex flex-col items-center hover:bg-gray-100"
-              >
-                <img
-                  :src="member.user_info.avatar_url || '/images/default-avatar.png'"
-                  class="w-10 h-10 rounded-full"
-                  :alt="member.user_info.username"
-                >
-                <span class="text-xs mt-2 truncate w-full text-center">{{ member.user_info.nickname||member.user_info.username }}</span>
-              </div>
-              <!-- 邀请成员按钮 -->
-              <div 
-                class="flex flex-col items-center cursor-pointer hover:bg-gray-100"
-                @click="showAddFriendModal = true"
-              >
-                <div class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
-                  <span class="text-4xl">+</span>
-                </div>
-                <span class="text-xs mt-1">邀请成员</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- 预留群公告位置 -->
-          <div>
-            <span class="text-gray-500">群公告:</span>
+          <!-- 群公告 -->
+          <div class="bg-gray-100 p-3 rounded-lg">
+            <h3 class="text-gray-500 text-sm font-medium mb-1">群公告</h3>
             <button
-                class="ml-2 px-2 py-1 rounded bg-gray-100 transition-colors"
+                class="w-full text-left text-gray-700 bg-white hover:text-primary transition-colors hover:bg-gray-50"
                 @click="handleViewAnnouncement"
             >
-              {{ group.announcement || '暂无公告' }}>
+              {{ group.announcement || '暂无公告' }}
             </button>
           </div>
 
-          
-          <!-- 群组设置 -->
-          <div v-if="myRole === 'owner' || myRole === 'admin'" class="space-y-2">
-            <div class="flex items-center justify-between py-2 border-b border-gray-100">
-              <span class="text-gray-500">允许成员邀请</span>
-              <Switch v-model="groupSettings.allow_member_invite" @update:modelValue="val => handleSettingChange('allow_member_invite', val)"/>
+          <!-- 群成员网格 -->
+          <div v-if="members.length > 0" class="mt-6">
+            <div class="flex items-center mb-3">
+              <span class="text-gray-500 text-sm">群成员：</span>
+              <button
+                  class="ml-2 px-3 py-1 text-sm rounded bg-gray-100 hover:bg-gray-200 transition-colors"
+                  @click="handleViewMembers"
+              >
+                查看全部 {{ group.member_count }} 人
+              </button>
             </div>
-            <div class="flex items-center justify-between py-2 border-b border-gray-100">
-              <span class="text-gray-500">允许成员修改群名</span>
-              <Switch v-model="groupSettings.allow_member_modify_name" @update:modelValue="val => handleSettingChange('allow_member_modify_name', val)"/>
-            </div>
-            <div class="flex items-center justify-between py-2 border-b border-gray-100">
-              <span class="text-gray-500">允许成员上传文件</span>
-              <Switch v-model="groupSettings.allow_member_upload_file" @update:modelValue="val => handleSettingChange('allow_member_upload_file', val)"/>
-            </div>
-            <div class="flex items-center justify-between py-2 border-b border-gray-100">
-              <span class="text-gray-500">允许成员@所有人</span>
-              <Switch v-model="groupSettings.allow_member_at_all" @update:modelValue="val => handleSettingChange('allow_member_at_all', val)"/>
-            </div>
-            <div class="flex items-center justify-between py-2 border-b border-gray-100">
-              <span class="text-gray-500">允许查看历史消息</span>
-              <Switch v-model="groupSettings.allow_view_history_message" @update:modelValue="val => handleSettingChange('allow_view_history_message', val)"/>
+
+            <div class="grid grid-cols-4 gap-y-4"> <!-- 只保留垂直间隙 -->
+              <!-- 成员列表 -->
+              <div
+                  v-for="member in members.slice(0, 11)"
+                  :key="member.user_info.user_id"
+                  class="flex flex-col items-center hover:bg-gray-100"
+
+              >
+                <div class="w-14 h-14 rounded-full bg-gray-100 p-1 flex justify-center items-center"> <!-- 灰色圆形背景 -->
+                  <img
+                      :src="member.user_info.avatar_url || '/images/default-avatar.png'"
+                      class="w-12 h-12 rounded-full object-cover"
+                      :alt="member.user_info.username"
+                  >
+                </div>
+                <span class="text-xs mt-2 truncate w-full text-center">
+        {{ member.user_info.nickname || member.user_info.username }}
+      </span>
+              </div>
+
+              <!-- 邀请成员按钮 -->
+              <div
+                  class="flex flex-col items-center"
+                  @click="showAddFriendModal = true"
+              >
+                <div class="w-14 h-14 rounded-full bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors cursor-pointer">
+                  <span class="text-2xl text-gray-500">+</span>
+                </div>
+                <span class="text-xs mt-2 text-gray-500">邀请成员</span>
+              </div>
             </div>
           </div>
+          <!-- 群组设置 -->
+          <div v-if="myRole === 'owner' || myRole === 'admin'" class="bg-gray-50 p-3 rounded-lg space-y-3">
+            <h3 class="text-gray-500 text-sm font-medium">群组设置</h3>
+            <div class="space-y-2">
+              <div class="flex items-center justify-between py-2">
+                <span class="text-gray-700 text-sm">允许成员邀请</span>
+                <Switch v-model="groupSettings.allow_member_invite" @update:modelValue="val => handleSettingChange('allow_member_invite', val)"/>
+              </div>
+              <div class="flex items-center justify-between py-2">
+                <span class="text-gray-700 text-sm">允许成员修改群名</span>
+                <Switch v-model="groupSettings.allow_member_modify_name" @update:modelValue="val => handleSettingChange('allow_member_modify_name', val)"/>
+              </div>
+              <div class="flex items-center justify-between py-2">
+                <span class="text-gray-700 text-sm">允许成员上传文件</span>
+                <Switch v-model="groupSettings.allow_member_upload_file" @update:modelValue="val => handleSettingChange('allow_member_upload_file', val)"/>
+              </div>
+              <div class="flex items-center justify-between py-2">
+                <span class="text-gray-700 text-sm">允许成员@所有人</span>
+                <Switch v-model="groupSettings.allow_member_at_all" @update:modelValue="val => handleSettingChange('allow_member_at_all', val)"/>
+              </div>
+              <div class="flex items-center justify-between py-2">
+                <span class="text-gray-700 text-sm">允许查看历史消息</span>
+                <Switch v-model="groupSettings.allow_view_history_message" @update:modelValue="val => handleSettingChange('allow_view_history_message', val)"/>
+              </div>
+            </div>
+          </div>
+
+          <!-- 个人设置 -->
+          <div class="bg-gray-50 p-3 rounded-lg space-y-3">
+            <h3 class="text-gray-500 text-sm font-medium">个人设置</h3>
+            <div class="flex items-center justify-between py-2">
+              <span class="text-gray-700 text-sm">设为免打扰</span>
+              <Switch v-model="isMute" @update:modelValue="val => setMute(val)"/>
+            </div>
+            <div class="flex items-center justify-between py-2">
+              <span class="text-gray-700 text-sm">设为置顶</span>
+              <Switch v-model="isPinned" @update:modelValue="val => setPinned(val)"/>
+            </div>
+          </div>
+        </div>
+
+        <!-- 底部操作按钮 -->
+        <div class="mt-6 space-y-3">
+          <Button
+              class="w-full p-3 bg-white text-red-500 border border-red-500 hover:bg-red-50 transition-colors"
+              @click="clearMessage"
+          >
+            清空聊天记录
+          </Button>
           <Button
               v-if="group?.my_role === 'owner'"
-              class="flex flex-col items-center justify-center w-full p-4 mt-4 bg-white text-red-500 border border-red-500 hover:bg-red-50 hover:scale-105 transition-transform duration-200"
+              class="w-full p-3 bg-white text-red-500 border border-red-500 hover:bg-red-50 transition-colors"
               @click="handleDissolveGroup"
           >
             解散群组
           </Button>
         </div>
       </div>
-
 
       <GroupMembersList
           v-else
@@ -270,11 +321,11 @@ onMounted(() => {
           @click.stop
       />
     </Transition>
-    
-    <AddFriendModal 
-      v-if="showAddFriendModal"
-      @close="showAddFriendModal = false"
-      :group-id="group.group_id"
+
+    <AddFriendModal
+        v-if="showAddFriendModal"
+        @close="showAddFriendModal = false"
+        :group-id="group.group_id"
     />
   </div>
 

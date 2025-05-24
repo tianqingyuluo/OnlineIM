@@ -119,7 +119,7 @@ export const useListStore = defineStore('list', {
             }
           }
           if (convsResult.status === 'fulfilled') {
-            this.conversations = convsResult.value.conversations;
+            this.conversations = convsResult.value;
           }
           if (friendsResult.status === 'fulfilled') {
             this.friends = friendsResult.value.friends;

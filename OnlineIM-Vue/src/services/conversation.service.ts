@@ -1,7 +1,6 @@
 import api from './api.service';
-import type { FormContext } from 'vee-validate';
 import { useListStore } from '@/stores/list';
-import {type ConversationsResponse} from "@/type/Conversation.ts";
+import {type Conversation} from "@/type/Conversation.ts";
 
 export const conversationService = {
   async getConversations(
@@ -9,21 +8,64 @@ export const conversationService = {
       limit?: number;
       offset?: number;
     },
-    formContext?: FormContext
-  ): Promise<ConversationsResponse> {
+  ): Promise<Conversation[]> {
     try {
-      const response = await api.get<ConversationsResponse>('/conversations', {
+      const response = await api.get<Conversation[]>('/conversations', {
         params
       });
       console.log(response.data);
       const listStore = useListStore();
-      listStore.conversations = response.data.conversations;
-      listStore.total = response.data.total;
+      listStore.conversations = response.data;
       return response.data;
     } catch (error: any) {
-      if (formContext && error.response?.data?.errors) {
-        formContext.setErrors(error.response.data.errors);
-      }
+      throw error;
+    }
+  },
+  async getConversationById(conversationId: string): Promise<Conversation> {
+    try {
+      const response = await api.get<Conversation>(`/conversations/${conversationId}`);
+      return response.data
+    }catch(error: any) {
+      throw error;
+    }
+  },
+  async topConversation(conversationId: string[]) {
+    try {
+      const response= await api.put(`/conversations/${conversationId}/top`);
+      return response.data
+    } catch(error: any) {
+      throw error;
+    }
+  },
+  async unTopConversation(conversationId: string){
+    try {
+      const response= await api.delete(`/conversations/${conversationId}/top`);
+      return response.data
+    } catch(error: any) {
+      throw error;
+    }
+  },
+  async muteConversation(conversationId: string) {
+    try {
+      const response= await api.put(`/conversations/${conversationId}/mute`);
+      return response.data
+    } catch(error: any) {
+      throw error;
+    }
+  },
+  async unmuteConversation(conversationId: string) {
+    try {
+      const response= await api.delete(`/conversations/${conversationId}/mute`);
+      return response.data
+    } catch(error: any) {
+      throw error;
+    }
+  },
+  async clearMessages(conversationId: string) {
+    try{
+      const response= await api.delete(`/conversations/${conversationId}/messages`);
+      return response.data
+    }catch(error: any) {
       throw error;
     }
   }
