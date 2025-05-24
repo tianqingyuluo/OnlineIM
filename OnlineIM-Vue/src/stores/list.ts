@@ -35,7 +35,7 @@ export const useListStore = defineStore('list', {
       }
       
       if (!this.hasInit) {
-        this.hasInit = true
+        this.hasInit = false
         console.log('开始初始化用户数据...')
         console.log('当前用户ID:', userStore.loggedInUser.user_id)
 

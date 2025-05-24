@@ -24,10 +24,10 @@ const listStore = useListStore()
 
 const filteredConversations = computed(() => {
   const query = searchQuery.value.toLowerCase().trim();
-  if (!query) return listStore.conversations;
+  if (!query) return listStore.conversations || [];
   
-  return listStore.conversations.filter(conversation => {
-    const name = (conversation.target_info.name || '').toLowerCase();
+  return (listStore.conversations || []).filter(conversation => {
+    const name = (conversation.target_info?.name || '').toLowerCase();
     return name.includes(query);
   });
 });
