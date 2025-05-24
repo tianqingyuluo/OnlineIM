@@ -28,6 +28,10 @@
 	</scm>
 	<properties>
 		<java.version>21</java.version>
+		<minio.version>8.5.2</minio.version>
+		<aws.sdk.version>2.20.26</aws.sdk.version>
+		<aliyun.oss.version>3.16.1</aliyun.oss.version>
+		<tencent.cos.version>5.6.97</tencent.cos.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -104,6 +108,32 @@
 			<artifactId>jjwt-jackson</artifactId>
 			<version>0.11.5</version>
 			<scope>runtime</scope>
+		</dependency>
+		
+		<!-- OSS存储服务依赖 -->
+		<!-- MinIO -->
+		<dependency>
+			<groupId>io.minio</groupId>
+			<artifactId>minio</artifactId>
+			<version>${minio.version}</version>
+		</dependency>
+		<!-- Amazon S3 -->
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>s3</artifactId>
+			<version>${aws.sdk.version}</version>
+		</dependency>
+		<!-- 阿里云OSS -->
+		<dependency>
+			<groupId>com.aliyun.oss</groupId>
+			<artifactId>aliyun-sdk-oss</artifactId>
+			<version>${aliyun.oss.version}</version>
+		</dependency>
+		<!-- 腾讯云COS -->
+		<dependency>
+			<groupId>com.qcloud</groupId>
+			<artifactId>cos_api</artifactId>
+			<version>${tencent.cos.version}</version>
 		</dependency>
 	</dependencies>
 
