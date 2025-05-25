@@ -16,6 +16,7 @@ import CreateGroup from "@/components/independent/group/CreateGroup.vue";
 import {Button} from "@/components/ui/button";
 import { useListStore } from '@/stores/list'
 import { useRouter } from 'vue-router'
+import { dbService } from '@/utils/indexedDB'; // 引入 dbService
 
 const listStore = useListStore()
 const activeItem = ref<string | null>(null);
@@ -45,6 +46,25 @@ const showCreateGroup = ref(false);
 
 function handleCreateGroup() {
   showCreateGroup.value = true;
+}
+
+// 新增一个异步函数来获取缓存的图片 URL
+async function getCachedImageUrl(url: string): Promise<string> {
+  if (!url) return '/images/group.png'; // 如果 URL 不存在，返回默认图片
+  try {
+    const cachedImage = await dbService.getImage(url);
+    if (cachedImage) {
+      // 如果 IndexedDB 中有缓存，创建 Blob URL
+      return URL.createObjectURL(cachedImage);
+    } else {
+      // 如果没有缓存，返回原始 URL
+      return url;
+    }
+  } catch (error) {
+    console.error('从 IndexedDB 获取图片失败:', error);
+    // 获取失败也返回原始 URL
+    return url;
+  }
 }
 </script>
 
@@ -90,7 +110,7 @@ function handleCreateGroup() {
                 <div class="flex items-center w-full">
                   <div class="w-[50px] h-[50px] rounded-full overflow-hidden mr-4 flex-shrink-0">
                     <img
-                        :src="group.avatar_url || '/images/group.png'"
+                        :src="getCachedImageUrl(group.avatar_url || '/images/group.png')"
                         :alt="group.name"
                         class="w-full h-full object-cover"
                     />

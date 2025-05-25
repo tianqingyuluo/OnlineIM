@@ -99,14 +99,18 @@ export const useListStore = defineStore('list', {
               console.error(`${serviceNames[index]}加载失败:`, result.reason);
             }
           });
-
+          
           // 更新成功返回的数据
           if (userGroupsResult.status === 'fulfilled') {
             this.userGroups = userGroupsResult.value;
             await dbService.bulkPut(STORES.USER_GROUPS, this.userGroups);
+            console.log('从API加载好友分组数据:', this.userGroups, '条记录');
             for (const group of this.userGroups) {
+              console.log('当前好友分组:', group);
               for (const friend of group.friends) {
+                console.log('当前好友:', friend);
                 const url = friend.avatar_url;
+                console.log('试图好友头像URL:', url);
                 if (url) {
                   try {
                     await dbService.addImageFromUrl(url);

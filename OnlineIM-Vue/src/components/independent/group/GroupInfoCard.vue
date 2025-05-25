@@ -154,7 +154,7 @@ const fetchMembers = async () => {
 
 // 初始化获取成员
 onMounted(() => {
-  console.log( "父组件传进来的",props.group)
+  console.log( "父组件传进来的",props.group,props.conversation)
   fetchMembers()
 
 })

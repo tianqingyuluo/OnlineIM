@@ -148,14 +148,30 @@ export const dbService = {
   async addImage(name: string, blob: Blob) {
     const db = await initDB();
     const tx = db.transaction(IMAGE_STORE, 'readwrite');
+    // 检查是否已存在同名图片
+    const existingImage = await tx.store.get(name);
+    if (existingImage) {
+      console.log(`Image with name ${name} already exists, skipping cache.`);
+      await tx.done;
+      return; // 如果已存在，则直接返回，不进行put操作
+    }
+    // 如果不存在，则进行put操作
     await tx.store.put({ name, data: blob });
     await tx.done;
   },
 
   async addImageFromUrl(url: string) {
-    const response = await fetch(url);
-    const blob = await response.blob();
-    await this.addImage(url, blob);
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        console.error(`Failed to fetch image from ${url}: ${response.statusText}`);
+        return;
+      }
+      const blob = await response.blob();
+      await this.addImage(url, blob);
+    } catch (error) {
+      console.error(`Error caching image from URL ${url}:`, error);
+    }
   },
 
   async getImage(name: string): Promise<string | null> {
@@ -186,6 +202,11 @@ export const dbService = {
       filtered = allMessages.filter(
           r => r.seq_id < seqId && r.seq_id >= last_message_id
       );
+    }
+    if (seqId){
+      filtered=allMessages.filter(
+          r => r.seq_id <seqId
+      )
     }
     return filtered.slice(-50)
   },

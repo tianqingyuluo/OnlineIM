@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import type { MessageResponse } from '@/type/message';
+import type { MessageResponse, privateMessageResponse } from '@/type/message';
 import { dbService } from '@/utils/indexedDB';
 import { MessageService } from '@/services/message.service';
 
@@ -19,7 +19,7 @@ export const useHistoryStore = defineStore('history', {
   state: () => ({
     pendingMessages: {} as Record<string, PendingMessageInfo>,
     groupMessages: [] as MessageResponse[],
-    chatMessages: [] as MessageResponse[],
+    chatMessages: [] as privateMessageResponse[],
     isLoading: false,
     hasMore: true,
     noMoreInfo: false,
@@ -76,25 +76,34 @@ export const useHistoryStore = defineStore('history', {
         const before_message_id = isGroup ?
             (this.groupMessages.length > 0 ? this.groupMessages[0].seq_id : undefined) :
             (this.chatMessages.length > 0 ? this.chatMessages[0].seq_id : undefined);
-
+        console.log("before_message_id", before_message_id);
         let shouldFetch = this.shouldFetchFromServer(conversationId, before_message_id);
         console.log("是否从服务器拉数据",shouldFetch);
-        let messages: MessageResponse[] = [];
+        let messages: any[] = []; // 使用 any 暂时兼容不同类型
         let has_more = false;
 
         if (shouldFetch) {
-          const response = await MessageService.getMessageHistory(
-              conversationId,
-              before_message_id
-          );
+          let response;
+          if (isGroup) {
+            response = await MessageService.getMessageHistory(
+                conversationId,
+                before_message_id
+            );
+          } else {
+            response = await MessageService.getPrivateHistory(
+                conversationId,
+                before_message_id
+            );
+          }
           console.log("服务器返回数据", response.messages,response.has_more_before);
           messages = response.messages;
           has_more = response.has_more_before;
 
           if (messages.length > 0) {
-            await this.updatePendingRanges(conversationId, messages);
+            // 注意：updatePendingRanges 和 putHistory 可能需要根据消息类型调整
+            await this.updatePendingRanges(conversationId, messages as any[]);
             console.log("开始推送历史记录");
-            await dbService.putHistory(messages);
+            await dbService.putHistory(messages as any[]);
             console.log("推送历史记录成功");
           }
         } else {
@@ -109,12 +118,15 @@ export const useHistoryStore = defineStore('history', {
           messages = response.messages;
           has_more = response.has_more_before;
           if (!has_more) {
-            has_more = true;
-            this.lastHistorySeqId = this.pendingMessages[conversationId].ranges[-1].minSeqId;
+            if (this.pendingMessages[conversationId]) {
+              has_more = true;
+              this.lastHistorySeqId = this.pendingMessages[conversationId].ranges[-1].minSeqId;
+            }
+
           }
         }
 
-        this.processMessages(messages, isGroup, before_message_id);
+        this.processMessages(messages as any[], isGroup, before_message_id);
         this.updateLoadState(has_more);
 
       } catch (error) {
@@ -232,6 +244,19 @@ export const useHistoryStore = defineStore('history', {
         this.chatMessages = beforeSeqId ? [...sorted, ...this.chatMessages] : sorted;
       }
       console.log("当前历史记录",this.groupMessages);
+
+      // 缓存头像到 IndexedDB
+      messages.forEach(async (msg) => {
+        const avatarUrl = msg.sender_info?.avatar_url;
+        if (avatarUrl) {
+          try {
+            await dbService.addImageFromUrl(avatarUrl);
+          } catch (error) {
+            console.error('缓存消息发送者头像失败:', error);
+            console.error('错误的头像URL:', avatarUrl);
+          }
+        }
+      });
     },
 
     updateLoadState(has_more: boolean) {
