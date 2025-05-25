@@ -56,6 +56,8 @@ const userMessages = ref<any[]>([])
 const isLoading = ref(false)
 const hasMore = ref(true)
 const noMoreInfo = ref(false)
+const lastHistorySeqId = ref<string | null>(null); // 新增：用于记录最后一条历史消息的 seq_id
+const inMyHistory = ref(false); // 新增：是否在我的历史记录中
 
 async function loadMessages() {
   if (isLoading.value || !hasMore.value) return
@@ -71,17 +73,19 @@ async function loadMessages() {
         before_message_id
     )
     const messages = response.messages
+    const has_more_before = response.has_more_before; // 新增：从响应中获取是否有更多之前的消息
 
     if (messages.length > 0) {
       const sortedMessages = messages.sort((a, b) => a.seq_id - b.seq_id);
       if (!before_message_id) {
         userMessages.value = sortedMessages
       } else {
+        // 将新加载的消息添加到列表的开头
         userMessages.value = [...sortedMessages, ...userMessages.value]
       }
 
-      hasMore.value = response.has_more_before
-      noMoreInfo.value = !response.has_more_before
+      hasMore.value = has_more_before; // 更新 hasMore 状态
+      noMoreInfo.value = !has_more_before; // 更新 noMoreInfo 状态
     }
   } catch (error) {
     console.error('获取消息历史失败:', error)
@@ -92,8 +96,9 @@ async function loadMessages() {
 
 function handleScroll(e: Event) {
   const target = e.target as HTMLElement
-  const scrollThreshold = 100
+  const scrollThreshold = 100 // 设置滚动阈值
 
+  // 当滚动到接近顶部(阈值范围内)且还有更多消息可加载时
   if (target.scrollTop <= scrollThreshold && hasMore.value && !isLoading.value) {
     loadMessages()
   }
@@ -102,11 +107,16 @@ function handleScroll(e: Event) {
 onMounted(async () => {
   try {
     currentUser.value = await userService.getUserById(userId.value)
+    // 直接加载消息，不需要等待 currentUser
     await loadMessages()
 
     const chatContainer = document.querySelector('.overflow-y-auto')
     if (chatContainer) {
       chatContainer.addEventListener('scroll', handleScroll)
+      // 初始加载后滚动到底部
+      nextTick(() => {
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+      });
     }
 
     const textarea = document.getElementById('message-2')
@@ -130,9 +140,11 @@ onBeforeUnmount(() => {
   }
 })
 
-// 日期处理函数
+// 日期处理函数 (从 GroupMainPart.vue 复制)
 function parseChineseDate(dateStr: string) {
   if (!dateStr) return new Date();
+
+  // 处理 "2001年1月1，0.00" 这种格式
   const match = dateStr.match(/(\d+)年(\d+)月(\d+)[，,](\d+)\.(\d+)/);
   if (match) {
     const [_, year, month, day, hour, minute] = match;
@@ -142,13 +154,19 @@ function parseChineseDate(dateStr: string) {
         parseInt(day),
         parseInt(hour),
         parseInt(minute)
-    )
+    );
   }
-  return new Date(dateStr);
+
+  // 尝试解析ISO格式或其它格式
+  const date = new Date(dateStr);
+  return isNaN(date.getTime()) ? new Date() : date;
 }
 
+  // 判断是否需要显示时间（5分钟间隔） (从 GroupMainPart.vue 复制)
 function shouldShowTime(index: number, list: any[]) {
   if (index === 0) return true;
+  // 注意：这里需要根据实际消息对象的字段调整，GroupMainPart.vue 使用的是 sendTime
+  // 假设 UserMainPart.vue 的消息对象时间字段是 created_at
   const prevTime = parseChineseDate(list[index - 1].created_at).getTime();
   const currentTime = parseChineseDate(list[index].created_at).getTime();
   return currentTime - prevTime > 5 * 60 * 1000;
@@ -160,11 +178,25 @@ provide('messageInputRef', messageInputRef)
 function handleEmojiSelect(emoji: string) {
   const textareaEl = document.getElementById('message-2') as HTMLTextAreaElement
   if (textareaEl) {
+    // 获取当前光标位置
     const cursorPos = textareaEl.selectionStart || 0
     const currentValue = textareaEl.value || ''
-    const newValue = currentValue.substring(0, cursorPos) + emoji + currentValue.substring(cursorPos)
+
+    // 在光标位置插入表情
+    const newValue =
+      currentValue.substring(0, cursorPos) +
+      emoji +
+      currentValue.substring(cursorPos)
+
+    // 更新文本框值
     textareaEl.value = newValue
-    textareaEl.selectionStart = textareaEl.selectionEnd = cursorPos + emoji.length
+
+    // 设置新的光标位置
+    const newCursorPos = cursorPos + emoji.length
+    textareaEl.selectionStart = newCursorPos
+    textareaEl.selectionEnd = newCursorPos
+
+    // 保持焦点
     textareaEl.focus()
   }
 }
@@ -175,12 +207,15 @@ function handleKeyDown(e: KeyboardEvent) {
     e.preventDefault()
     handleSendClick()
   } else if (e.key === 'Enter' && e.ctrlKey) {
+    // Ctrl+Enter换行
     const cursorPos = textareaEl.selectionStart || 0
+    const currentValue = textareaEl.value || ''
     textareaEl.value =
-        textareaEl.value.substring(0, cursorPos) +
-        '\n' +
-        textareaEl.value.substring(cursorPos)
-    textareaEl.selectionStart = textareaEl.selectionEnd = cursorPos + 1
+      currentValue.substring(0, cursorPos) +
+      '\n' +
+      currentValue.substring(cursorPos)
+    textareaEl.selectionStart = cursorPos + 1
+    textareaEl.selectionEnd = cursorPos + 1
   }
 }
 
@@ -190,9 +225,10 @@ async function handleSendClick() {
     try {
       const response = await MessageService.putMessage(
           userId.value,
-          0,
+          0, // 私聊消息类型可能需要确认
           textareaEl.value
       )
+      // 将新消息添加到列表末尾
       userMessages.value.push(response)
       textareaEl.value = ''
       nextTick(() => {
@@ -234,8 +270,8 @@ const items = [
     </div>
 
     <!-- 主内容区 -->
-    <div class="flex-1 overflow-y-auto p-4" @scroll="handleScroll">
-      <div v-if="noMoreInfo" class="flex justify-center py-2 text-sm text-gray-500">
+    <div class="flex-1 overflow-y-auto p-4" @scroll="handleScroll"> <!-- 添加滚动事件监听 -->
+      <div v-if="noMoreInfo" class="flex justify-center py-2 text-sm text-gray-500"> <!-- 添加没有更多信息提示 -->
         没有更多信息
       </div>
       <div v-if="userMessages.length > 0" class="space-y-4">
@@ -275,6 +311,9 @@ const items = [
       <div v-else class="flex items-center justify-center h-full text-gray-500">
         暂无消息记录
       </div>
+      <div v-if="isLoading" class="flex justify-center py-2 text-sm text-gray-500"> <!-- 添加加载中提示 -->
+        加载中...
+      </div>
     </div>
 
     <Tools @select="handleEmojiSelect" />
@@ -298,7 +337,6 @@ const items = [
     加载中...
   </div>
 </template>
-
 <style scoped>
 /* 滑动动画 */
 .slide-enter-active,

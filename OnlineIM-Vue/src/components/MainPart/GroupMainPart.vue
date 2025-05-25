@@ -20,6 +20,7 @@ import {useOtherStore} from "@/stores/otherStore.ts";
 import { dbService } from "@/utils/indexedDB";
 import {conversationService} from "@/services/conversation.service.ts";
 import type {Conversation} from "@/type/Conversation.ts";
+import { useHistoryStore } from '@/stores/history.ts';
 
 
 const menuRef = ref<HTMLElement | null>(null)//右上角群info
@@ -59,6 +60,7 @@ const groupId = computed(() => {
   return Array.isArray(id) ? id[0] : id
 })
 
+const historyStore = useHistoryStore();
 
 onMounted(async () => {
   try {

@@ -2,6 +2,7 @@
 import type {GroupMemberAll, GroupResponse} from '@/type/group.ts'
 import {inject, nextTick, onMounted, ref, shallowRef, watch} from 'vue';
 import GroupMembersList from '@/components/independent/group/GroupMembersList.vue'
+import Announcement from '@/components/Announcement.vue'; // 引入 Announcement 组件
 import type {GroupSetting} from '@/type/groupsetting';
 import {groupService} from '@/services/group.service';
 import {Switch} from "@/components/ui/switch";
@@ -25,6 +26,8 @@ const groupMembersListRef = shallowRef<{
   membersListContainer?: HTMLElement
 } | null>(null)
 const showMembersList = ref(false)
+const showAnnouncement = ref(false); // 控制公告组件显示状态
+
 // 添加监听确保子组件加载
 watch(() => showMembersList.value, (newVal) => {
   if (newVal) {
@@ -49,7 +52,7 @@ const handleViewMembers = () => {
 }
 
 const handleViewAnnouncement = () => {
-  // 点击逻辑待实现
+  showAnnouncement.value = true; // 点击公告按钮时显示 Announcement 组件
 }
 
 const handleSettingChange = async (key: keyof GroupSetting, value: any) => {
@@ -161,8 +164,9 @@ onMounted(() => {
 <template>
   <div class="transition-container h-full flex flex-col">
     <Transition name="card-slide" mode="out-in">
+      <!-- 群信息卡片 -->
       <div
-          v-if="!showMembersList"
+          v-if="!showMembersList && !showAnnouncement"
           key="info"
           class="group-info-card bg-white rounded-lg shadow-sm p-6 h-full flex flex-col"
       >
@@ -311,8 +315,9 @@ onMounted(() => {
         </div>
       </div>
 
+      <!-- 群成员列表 -->
       <GroupMembersList
-          v-else
+          v-else-if="showMembersList && !showAnnouncement"
           key="members"
           :groupId="group.group_id"
           :myRole="group.my_role"
@@ -320,6 +325,9 @@ onMounted(() => {
           ref="groupMembersListRef"
           @click.stop
       />
+
+      <!-- 群公告组件 -->
+      <!-- 修改为覆盖层显示 -->
     </Transition>
 
     <AddFriendModal
@@ -327,6 +335,18 @@ onMounted(() => {
         @close="showAddFriendModal = false"
         :group-id="group.group_id"
     />
+
+    <!-- 群公告覆盖层 -->
+    <Transition name="fade-slide" mode="out-in">
+      <div v-if="showAnnouncement" class="fixed inset-0 flex z-50">
+        <div class="fixed inset-0 bg-white/80 transition-opacity" @click="showAnnouncement = false"></div>
+        <Announcement
+            class="relative z-50 w-[80%] max-w-2xl m-auto"
+            :groupId="group.group_id"
+            @back="showAnnouncement = false"
+        />
+      </div>
+    </Transition>
   </div>
 
 </template>
@@ -354,6 +374,26 @@ onMounted(() => {
 }
 
 .card-slide-leave-to {
+  opacity: 0;
+}
+
+/* 新增覆盖层过渡样式 */
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all 0.3s ease;
+}
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+/* 蒙版过渡 */
+.bg-white\/80 {
+  transition: opacity 0.3s ease;
+}
+.fade-slide-enter-from .bg-white\/80,
+.fade-slide-leave-to .bg-white\/80 {
   opacity: 0;
 }
 </style>
