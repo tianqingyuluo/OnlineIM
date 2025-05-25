@@ -15,9 +15,7 @@ import {MessageService} from "@/services/message.service.ts";
 import { useUserStore } from '@/stores/user.ts';
 import { GroupSettingService } from "@/services/groupsetting.service";
 import GroupAvatarWithMenu from "@/components/MainPart/GroupAvatarWithMenu.vue";
-import type {MessageResponse} from "@/type/message.ts";
 import {useOtherStore} from "@/stores/otherStore.ts";
-import { dbService } from "@/utils/indexedDB";
 import {conversationService} from "@/services/conversation.service.ts";
 import type {Conversation} from "@/type/Conversation.ts";
 import { useHistoryStore } from '@/stores/history.ts';
@@ -80,85 +78,27 @@ onMounted(async () => {
     console.log("设置后的群组信息:", currentGroup.value) // 检查响应式数据
 
     // 确保加载群组信息后立即加载消息
-    await loadMessages()
+    await historyStore.loadInitialHistory(userStore.loggedInUser.user_id, groupId.value, true);
   } catch (error) {
     console.error('获取群组信息失败:', error)
   }
 })
-const groupMessages = ref<MessageResponse[]>([])
-const isLoading = ref(false)
-const hasMore = ref(true)
-const noMoreInfo = ref(false)
 
-
-const lastHistorySeqId = ref<string | null>(null);
-const inMyHistory = ref(false);
-async function loadMessages() {
-
-  if (isLoading.value || !hasMore.value) return
-
-  isLoading.value = true
-  try {
-    const before_message_id = groupMessages.value.length > 0
-      ? groupMessages.value[0].seq_id
-      : undefined
-
-    const response  = await MessageService.getMessageHistory(
-      groupId.value,
-      before_message_id
-    )
-    const messages=response.messages
-    const has_more_before = response.has_more_before
-    const has_more_after = response.has_more_after
-
-    console.log('获取到的消息历史:', messages)
-
-    if (messages.length > 0) {
-       const sortedMessages = messages.sort((a, b) => a.seq_id - b.seq_id);
-       if (!before_message_id) {
-         groupMessages.value = sortedMessages
-       } else {
-         groupMessages.value = [...sortedMessages, ...groupMessages.value]
-       }
-
-      // 将消息历史存储到IndexedDB
-
-
-      if (sortedMessages.length > 0 && lastHistorySeqId !== null && sortedMessages[0].seq_id < lastHistorySeqId) {
-          inMyHistory.value = true;
-      }
-      const newMessages = sortedMessages.filter(msg => lastHistorySeqId.value === null 
-      || (msg.seq_id !== null && true && msg.seq_id > lastHistorySeqId.value));
-      await dbService.putHistory(newMessages);
-
-      hasMore.value = has_more_before
-      noMoreInfo.value = !has_more_before
-    }
-  } catch (error) {
-    console.error('获取消息历史失败:', error)
-  } finally {
-    isLoading.value = false
-  }
-}
 
 function handleScroll(e: Event) {
   const target = e.target as HTMLElement
   const scrollThreshold = 100 // 设置滚动阈值
 
   // 当滚动到接近顶部(阈值范围内)且还有更多消息可加载时
-  if (target.scrollTop <= scrollThreshold && hasMore.value && !isLoading.value) {
-    loadMessages()
+  if (target.scrollTop <= scrollThreshold && historyStore.hasMore && !historyStore.isLoading) {
+    console.log("试图拉取数据", groupId.value)
+    historyStore.loadMessages(groupId.value, true);
   }
 }
 
 onMounted(() => {
-  const myHistory =  dbService.getHistory(userStore.loggedInUser.user_id, groupId.value);
-  console.log("拉到的历史记录",myHistory)
-  if (myHistory !==null ) {
-    lastHistorySeqId.value = myHistory.length > 0 ? myHistory[myHistory.length - 1].seq_id : null;
-  }
-  console.log("我的最新indexDB",lastHistorySeqId)
-  loadMessages()
+  historyStore.init()
+  historyStore.loadInitialHistory(userStore.loggedInUser.user_id, groupId.value, true);
   const chatContainer = document.querySelector('.overflow-y-auto')
   if (chatContainer) {
     chatContainer.addEventListener('scroll', handleScroll)
@@ -184,35 +124,7 @@ onBeforeUnmount(() => {
   }
 })
 
-// 解析中文日期格式
-function parseChineseDate(dateStr: string) {
-  if (!dateStr) return new Date();
 
-  // 处理 "2001年1月1，0.00" 这种格式
-  const match = dateStr.match(/(\d+)年(\d+)月(\d+)[，,](\d+)\.(\d+)/);
-  if (match) {
-    const [_, year, month, day, hour, minute] = match;
-    return new Date(
-        parseInt(year),
-        parseInt(month) - 1,
-        parseInt(day),
-        parseInt(hour),
-        parseInt(minute)
-    );
-  }
-
-  // 尝试解析ISO格式或其它格式
-  const date = new Date(dateStr);
-  return isNaN(date.getTime()) ? new Date() : date;
-}
-
-// 判断是否需要显示时间（5分钟间隔）
-function shouldShowTime(index: number, list: any[]) {
-  if (index === 0) return true;
-  const prevTime = parseChineseDate(list[index - 1].sendTime).getTime();
-  const currentTime = parseChineseDate(list[index].sendTime).getTime();
-  return currentTime - prevTime > 5 * 60 * 1000;
-}
 
 const messageInputRef = ref<HTMLTextAreaElement | null>(null)
 provide('messageInputRef', messageInputRef)
@@ -263,7 +175,7 @@ function handleKeyDown(e: KeyboardEvent) {
 const clearGroupMessages=async () =>  {
   console.log('聊天记录clearGroupMessages触发')
   try {
-    groupMessages.value = [];
+    historyStore.groupMessages = [];
   } catch (error) {
     console.error('清空聊天记录失败:', error);
   }
@@ -281,7 +193,7 @@ async function handleSendClick() {
         textareaEl.value
       )
             // 添加到消息列表
-      groupMessages.value.push(response)
+      historyStore.groupMessages.push(response)
       
       // 清空输入框
       textareaEl.value = ''
@@ -342,15 +254,15 @@ function toggleMenu() {
 
     <!-- 主内容区 -->
     <div class="flex-1 overflow-y-auto p-4" @scroll="handleScroll">
-      <div v-if="noMoreInfo" class="flex justify-center py-2 text-sm text-gray-500">
+      <div v-if="historyStore.noMoreInfo" class="flex justify-center py-2 text-sm text-gray-500">
         没有更多信息
       </div>
-      <div v-if="groupMessages.length > 0" class="space-y-4">
-        <template v-for="(msg, index) in groupMessages" :key="msg.message_id">
+      <div v-if="historyStore.groupMessages.length > 0" class="space-y-4">
+        <template v-for="(msg, index) in historyStore.groupMessages" :key="msg.message_id">
           <!-- 时间显示 -->
-          <div v-if="shouldShowTime(index, groupMessages)" class="flex justify-center">
+          <div class="flex justify-center">
             <span class="text-[13px] text-gray-500 truncate">
-              {{ new Date(msg.timestamp).toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-') }}
+              {{ msg.timestamp }}
             </span>
           </div>
 

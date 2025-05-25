@@ -43,10 +43,14 @@ export const MessageService = {
             throw error;
         }
     },
-    async getHistoryByIndexDB(conversation_id: string, before_message_id?: string): Promise<{messages: MessageResponse[], has_more_before: boolean}> {
+    async getHistoryByIndexDB(conversation_id: string, last_message_id?:string,before_message_id?: string): Promise<{messages: MessageResponse[], has_more_before: boolean}> {
+        if (last_message_id==='0'){
+            last_message_id=undefined;
+        }
         const userStore = useUserStore();
         const userId = userStore.loggedInUser.user_id;
-        const messages = await dbService.getHistory(userId, conversation_id, before_message_id);
+        console.log(userId, before_message_id,conversation_id);
+        const messages = await dbService.getHistory(userId, conversation_id,last_message_id, before_message_id);
         return { messages, has_more_before: messages.length === 50 };
     }
 };
