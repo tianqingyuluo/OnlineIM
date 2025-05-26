@@ -334,10 +334,6 @@ export const useHistoryStore = defineStore('history', {
 
 
 
-
-
-
-
     async updateMessageTimestamp(clientId: string) {
       const index = this.pendingMessagesInfo.findIndex(
           item => item.clientId === clientId
@@ -423,7 +419,8 @@ export const useHistoryStore = defineStore('history', {
         this.chatMessages.push(message);
       }
     },
-    sendMessage(conversationId: string, receiverId: string, messageType: string, content: string) {
+    sendMessage(conversationId: string, receiverId: string,
+       messageType: string, content: string,isGroup:boolean,atUsers?:string[]) {
       
       let clientId=  this.addPendingMessageContent(content, conversationId);
       const tempMessage: MessageResponse = {
@@ -437,17 +434,26 @@ export const useHistoryStore = defineStore('history', {
         status: 0,
         is_recalled: false,
         client_message_id: clientId
-        
       };
 
-      this.chatMessages.push(tempMessage);
-      const websocketMessage = {
-        conversationId: tempMessage.conversation_id,
-        receiverId: receiverId,
-        messageType: messageType,
+      if (isGroup) {
+        this.groupMessages.push(tempMessage);
+      } else {
+        this.chatMessages.push(tempMessage);
+      }
+
+      const websocketMessage: any = {
+        conversation_id: tempMessage.conversation_id,
+        receiver_id: receiverId,
+        message_type: messageType,
         content: content,
-        clientId: clientId
+        client_message_id: clientId
       };
+
+      if (atUsers) {
+        websocketMessage.at_users = atUsers;
+      }
+
       console.log('发送消息 - 临时消息时间戳:', tempMessage.timestamp);
       websocketService.sendMessage({ type: 'PRIVATE_MESSAGE_REQUEST', message: websocketMessage });
     }

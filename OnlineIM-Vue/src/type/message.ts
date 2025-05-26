@@ -9,7 +9,7 @@ export interface MessageResponse {
     message_type: string;
     seq_id: string,
     content: any;
-    mentioned_user_ids?: string[];
+    mentioned_user_ids?:any;
     status: number;
     timestamp: string;
     is_recalled: boolean;

@@ -191,7 +191,7 @@ async function handleSendClick() {
       const messageType = 'text';
 
       // 调用 historyStore 的 sendMessage 方法
-      historyStore.sendMessage(conversationId, receiverId, messageType, messageContent);
+      historyStore.sendMessage(conversationId, receiverId, messageType, messageContent,false);
 
       // 清空输入框
       textareaEl.value = '';
@@ -221,11 +221,11 @@ async function handleResendMessage(message: MessageResponse) {
     
     // 直接通过WebSocket重新发送消息
     const websocketMessage = {
-      conversationId: message.conversation_id,
-      receiverId: userId.value,
-      messageType: 'text',
+      conversation_id: message.conversation_id,
+      receiver_id: userId.value,
+      message_type: 'text',
       content: message.content,
-      clientId: message.client_message_id
+      client_message_id: message.client_message_id
     };
     
     // 发送WebSocket消息

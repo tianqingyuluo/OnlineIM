@@ -11,7 +11,6 @@ import type { GroupResponse } from '@/type/group'
 import { onActivated } from 'vue'
 import GroupInfoCard from '@/components/independent/group/GroupInfoCard.vue'
 import { onClickOutside } from '@vueuse/core'
-import {MessageService} from "@/services/message.service.ts";
 import { useUserStore } from '@/stores/user.ts';
 import { GroupSettingService } from "@/services/groupsetting.service";
 import GroupAvatarWithMenu from "@/components/MainPart/GroupAvatarWithMenu.vue";
@@ -19,8 +18,9 @@ import {useOtherStore} from "@/stores/otherStore.ts";
 import {conversationService} from "@/services/conversation.service.ts";
 import type {Conversation} from "@/type/Conversation.ts";
 import { useHistoryStore } from '@/stores/history.ts';
-
-
+import type {MessageResponse} from "@/type/message.ts";
+import {websocketService} from "@/services/websocket.service.ts";
+import { CircleEllipsis, AlertCircle } from 'lucide-vue-next';
 const menuRef = ref<HTMLElement | null>(null)//右上角群info
 const menuButtonRef = ref<HTMLElement | null>(null)
 
@@ -62,28 +62,32 @@ const historyStore = useHistoryStore();
 
 onMounted(async () => {
   try {
-    console.log("当前群组ID:", groupId.value) // 添加这行检查路由参数
-    const [groupInfo, groupSettings,Conversaation] = await Promise.all([
+    console.log("当前群组ID:", groupId.value);
+    const [groupInfo, groupSettings, Conversation] = await Promise.all([
       groupService.getGroupInfo(groupId.value),
       GroupSettingService.getGroupSetting(groupId.value),
       conversationService.getConversationById(groupId.value)
-    ])
-    console.log("API返回数据:", groupInfo) // 检查API返回
-    if (groupInfo.my_role ==='0')groupInfo.my_role='member'
-    if (groupInfo.my_role ==='1')groupInfo.my_role='admin'
-    if (groupInfo.my_role ==='2')groupInfo.my_role='owner'
-    currentGroup.value = groupInfo
-    currentGroupSettings.value = groupSettings
-    conversation.value=Conversaation
-    console.log("设置后的群组信息:", currentGroup.value) // 检查响应式数据
+    ]);
+    currentGroup.value = groupInfo;
+    currentGroupSettings.value = groupSettings;
+    conversation.value = Conversation;
 
-    // 确保加载群组信息后立即加载消息
+    // 确保组件渲染完成
+    await nextTick();
+
+    // 绑定键盘事件
+    const textarea = document.getElementById('message-2');
+    if (textarea) {
+      textarea.addEventListener('keydown', handleKeyDown);
+      console.log('键盘事件绑定成功');
+    }
+
+    // 加载消息
     await historyStore.loadInitialHistory(userStore.loggedInUser.user_id, groupId.value, true);
   } catch (error) {
-    console.error('获取群组信息失败:', error)
+    console.error('初始化失败:', error);
   }
-})
-
+});
 
 function handleScroll(e: Event) {
   const target = e.target as HTMLElement
@@ -156,20 +160,19 @@ function handleEmojiSelect(emoji: string) {
 }
 
 function handleKeyDown(e: KeyboardEvent) {
-  const textareaEl = e.target as HTMLTextAreaElement
+  console.log('按键:', e.key); // 调试
+  const textareaEl = e.target as HTMLTextAreaElement;
   if (e.key === 'Enter' && !e.ctrlKey && !e.shiftKey) {
-    e.preventDefault()
-    handleSendClick()
+    e.preventDefault();
+    console.log('触发发送');
+    handleSendClick();
   } else if (e.key === 'Enter' && e.ctrlKey) {
-    // Ctrl+Enter换行
-    const cursorPos = textareaEl.selectionStart || 0
-    const currentValue = textareaEl.value || ''
-    textareaEl.value =
-      currentValue.substring(0, cursorPos) +
-      '\n' +
-      currentValue.substring(cursorPos)
-    textareaEl.selectionStart = cursorPos + 1
-    textareaEl.selectionEnd = cursorPos + 1
+    // Ctrl+Enter 换行
+    const cursorPos = textareaEl.selectionStart || 0;
+    const currentValue = textareaEl.value || '';
+    textareaEl.value = currentValue.substring(0, cursorPos) + '\n' + currentValue.substring(cursorPos);
+    textareaEl.selectionStart = cursorPos + 1;
+    textareaEl.selectionEnd = cursorPos + 1;
   }
 }
 const clearGroupMessages=async () =>  {
@@ -184,29 +187,31 @@ const clearGroupMessages=async () =>  {
 provide('clearGroupMessages', clearGroupMessages);
 
 async function handleSendClick() {
-  const textareaEl = document.getElementById('message-2') as HTMLTextAreaElement
-  if (textareaEl && textareaEl.value.trim()) {
+  const textareaEl = document.getElementById('message-2') as HTMLTextAreaElement;
+  const messageContent = textareaEl?.value.trim();
+
+  if (messageContent) {
     try {
-      const response = await MessageService.putMessage(
-        groupId.value,
-        'text', // 文本消息
-        textareaEl.value
-      )
-            // 添加到消息列表
-      historyStore.groupMessages.push(response)
+      if (conversation.value){
+        const conversationId = conversation.value.conversation_id || '';
+        const receiverId = groupId.value;
+        const messageType = 'text';
+        historyStore.sendMessage(conversationId, receiverId, messageType, messageContent,true);
+      }
       
+      
+
       // 清空输入框
-      textareaEl.value = ''
-      
+      textareaEl.value = '';
+
       // 滚动到底部
       await nextTick(() => {
-        const chatContainer = document.querySelector('.overflow-y-auto')
-        if (chatContainer) {
-          chatContainer.scrollTop = chatContainer.scrollHeight
-        }
-      })
+        const chatContainer = document.querySelector('.overflow-y-auto');
+        chatContainer?.scrollTo(0, chatContainer.scrollHeight);
+      });
+
     } catch (error) {
-      console.error('发送消息失败:', error)
+      console.error('发送消息失败:', error);
     }
   }
 }
@@ -219,6 +224,37 @@ const showMenu = ref(false)
 
 function toggleMenu() {
   showMenu.value = !showMenu.value
+}
+async function handleResendMessage(message: MessageResponse) {
+  try {
+    // 更新消息时间戳
+    const oldTimestamp = message.timestamp;
+    message.timestamp = new Date().toISOString();
+    console.log('重发消息 - 时间戳变化:', { old: oldTimestamp, new: message.timestamp });
+    
+    // 更新 historyStore 中的时间戳
+    await historyStore.updateMessageTimestamp(message.client_message_id);
+    
+    // 直接通过WebSocket重新发送消息
+    const websocketMessage : any = {
+      conversation_id: message.conversation_id,
+      receiver_id: groupId.value,
+      message_type: 'text',
+      content: message.content,
+      client_message_id: message.client_message_id
+    };
+    if (message.mentioned_user_ids) {
+      websocketMessage.at_user=message.mentioned_user_ids;
+    }
+    
+    // 发送WebSocket消息
+    websocketService.sendMessage({ type: 'PRIVATE_MESSAGE_REQUEST', message: websocketMessage });
+    
+    // 触发视图更新
+    historyStore.groupMessages = [...historyStore.groupMessages];
+  } catch (error) {
+    console.error('重新发送消息失败:', error);
+  }
 }
 </script>
 
@@ -286,6 +322,17 @@ function toggleMenu() {
             <!-- 自己的消息 -->
             <template v-else>
               <div class="flex items-start">
+                <div class="relative">
+                  <CircleEllipsis
+                      v-if="historyStore.isMessagePending(msg.client_message_id) &&!historyStore.isMessageTimeout(msg.client_message_id)"
+                      class="w-5 h-5 mr-2 text-gray-400 loading-spinner"
+                  />
+                  <AlertCircle
+                      v-if="historyStore.isMessagePending(msg.client_message_id) && historyStore.isMessageTimeout(msg.client_message_id)"
+                      class="w-5 h-5 mr-2 text-red-500 cursor-pointer"
+                      @click="handleResendMessage(msg)"
+                  />
+                </div>
                 <UserTextArea
                   :message="msg.content"
                   :isSelf="true"
@@ -332,5 +379,17 @@ function toggleMenu() {
 .slide-enter-from,
 .slide-leave-to {
   transform: translateX(100%);
+}
+
+/* 加载动画 - 3秒后停止 */
+.loading-spinner {
+  animation: spin 1s linear infinite;
+  animation-duration: 3s;
+  animation-iteration-count: 3;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 </style>
