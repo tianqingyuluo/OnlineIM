@@ -1,5 +1,5 @@
 import api from './api.service';
-import type {MessageResponse, privateMessageResponse} from "@/type/message.ts";
+import type {MessageResponse} from "@/type/message.ts";
 import { dbService } from "@/utils/indexedDB.ts";
 import {useUserStore} from "@/stores/user.ts";
 

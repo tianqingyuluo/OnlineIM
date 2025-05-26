@@ -19,7 +19,7 @@ export const useHistoryStore = defineStore('history', {
   state: () => ({
     pendingMessages: {} as Record<string, PendingMessageInfo>,
     groupMessages: [] as MessageResponse[],
-    chatMessages: [] as privateMessageResponse[],
+    chatMessages: [] as MessageResponse[],
     isLoading: false,
     hasMore: true,
     noMoreInfo: false,

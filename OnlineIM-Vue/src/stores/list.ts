@@ -6,11 +6,13 @@ import { groupService } from '@/services/group.service';
 import type {GroupJoinRequestResponse, GroupResponse} from "@/type/group.ts";
 import type {UserGroupInfo} from "@/type/userGroup.ts";
 import {friendGroupsService} from "@/services/friendGroups.servise.ts";
-import type {Friend, FriendInFriendGroup} from "@/type/Friends.ts";
+import type {Friend, FriendInFriendGroup, FriendRequest} from "@/type/Friends.ts";
 import { toast } from 'vue-sonner';
 import { blacklistService, type BlacklistUser} from "@/services/blacklist.service.ts";
 import {useUserStore} from "@/stores/user.ts";
 import { dbService, STORES } from '@/utils/indexedDB';
+import { useNotificationStore } from './notificationStore';
+
 
 export const useListStore = defineStore('list', {
   state: () => ({
@@ -22,9 +24,10 @@ export const useListStore = defineStore('list', {
     groups: [] as GroupResponse[],//全群组列表
     groupTotal: 0,
     groupJoinRequestList:[] as GroupJoinRequestResponse[],
+    FriendRequestsList:[] as FriendRequest[],
     hasInit : false,
     blacklist: [] as BlacklistUser[],
-
+    
   }),
   actions: {
     async fetchUserData() {
@@ -33,11 +36,26 @@ export const useListStore = defineStore('list', {
         window.location.href = '/login';
         return;
       }
+      const notificationStore = useNotificationStore();
+
       
+      await useUserStore().updateToken();
+
+
+
       if (!this.hasInit) {
         this.hasInit = false
         console.log('开始初始化用户数据...')
         console.log('当前用户ID:', userStore.loggedInUser.user_id)
+
+
+        this.FriendRequestsList=await friendsService.getReceivedFriendRequests();
+        if (this.FriendRequestsList.length > 0) {
+          notificationStore.hasnewfriend = true;
+        }
+        if ((await this.getGroupJoinRequestList()).length>0){
+          notificationStore.hasnewgroup = true;
+        }
 
         // 从IndexedDB加载缓存数据
         try {
@@ -104,13 +122,9 @@ export const useListStore = defineStore('list', {
           if (userGroupsResult.status === 'fulfilled') {
             this.userGroups = userGroupsResult.value;
             await dbService.bulkPut(STORES.USER_GROUPS, this.userGroups);
-            console.log('从API加载好友分组数据:', this.userGroups, '条记录');
             for (const group of this.userGroups) {
-              console.log('当前好友分组:', group);
               for (const friend of group.friends) {
-                console.log('当前好友:', friend);
                 const url = friend.avatar_url;
-                console.log('试图好友头像URL:', url);
                 if (url) {
                   try {
                     await dbService.addImageFromUrl(url);
@@ -178,8 +192,7 @@ export const useListStore = defineStore('list', {
             throw error;
           }
 
-          await this.getGroupJoinRequestList();
-          await useUserStore().updateToken();
+
         } catch (error) {
           console.error('获取最新数据失败:', error);
         }

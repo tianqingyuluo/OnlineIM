@@ -19,68 +19,6 @@ const handleRequest = async (request: GroupJoinRequestResponse, action: string) 
 
 onMounted(() => {
     requests.value = listStore.groupJoinRequestList
-    requests.value = [
-    {
-    requestID: "req_001",
-    groupID: "grp_001",
-    groupName: "前端开发群",
-    userInfo: {
-      username: "user123",
-      nickname: "开发者小张",
-      avatarUrl: "/avatars/user123.jpg",
-      userID: "usr_001"
-    },
-    inviterInfo: {
-      username: "admin456",
-      nickname: "群主老王",
-      avatarUrl: "/avatars/admin456.jpg",
-      userID: "usr_002"
-    },
-    message: "希望能加入贵群学习前端技术",
-    status: "pending",
-    createdAt: "2023-06-15T10:30:00Z"
-  },
-  {
-    requestID: "req_002",
-    groupID: "grp_002",
-    groupName: "Vue技术交流",
-    userInfo: {
-      username: "vue_lover",
-      nickname: "Vue爱好者",
-      avatarUrl: "/avatars/vue_lover.jpg",
-      userID: "usr_003"
-    },
-    inviterInfo: {
-      username: "vue_master",
-      nickname: "Vue专家",
-      avatarUrl: "/avatars/vue_master.jpg",
-      userID: "usr_004"
-    },
-    message: "申请加入Vue技术交流群",
-    status: "accepted",
-    createdAt: "2023-06-16T14:20:00Z"
-  },
-  {
-    requestID: "req_003",
-    groupID: "grp_003",
-    groupName: "Node.js实战",
-    userInfo: {
-      username: "node_newbie",
-      nickname: "Node新手",
-      avatarUrl: "/avatars/node_newbie.jpg",
-      userID: "usr_005"
-    },
-    inviterInfo: {
-      username: "node_guru",
-      nickname: "Node大神",
-      avatarUrl: "/avatars/node_guru.jpg",
-      userID: "usr_006"
-    },
-    message: "",
-    status: "rejected",
-    createdAt: "2023-06-17T09:15:00Z"
-  }
-    ]
 })
 </script>
 

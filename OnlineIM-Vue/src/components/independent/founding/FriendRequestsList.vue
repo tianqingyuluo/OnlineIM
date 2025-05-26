@@ -1,57 +1,25 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
-import { friendsService } from '@/services/friends.service'
+import { ref, onMounted} from 'vue'
 import type { FriendRequest } from '@/type/Friends'
+import { useListStore } from '@/stores/list';
 
+const listStore = useListStore();
 const requests = ref<FriendRequest[]>([])
-const offset = ref(0)
-const loading = ref(false)
-const hasMore = ref(true)
 
-async function loadRequests() {
-  if (loading.value || !hasMore.value) return
-  
-  loading.value = true
-  try {
-    const response = await friendsService.getReceivedFriendRequests({
-      offset: offset.value
-    })
-    requests.value = [...requests.value, ...response.requests]
-    hasMore.value = response.total == 8
-    offset.value += 8
-  } catch (error) {
-    console.error('加载好友请求失败:', error)
-  } finally {
-    loading.value = false
-  }
-}
 
-function handleScroll() {
-  const element = document.querySelector('.request-list-container')
-  if (element && element.scrollHeight - element.scrollTop <= element.clientHeight + 100) {
-    loadRequests()
-  }
-}
 
 onMounted(() => {
-  loadRequests()
-  const container = document.querySelector('.request-list-container')
-  if (container) {
-    container.addEventListener('scroll', handleScroll)
-  }
+  // 直接从 store 获取数据
+  requests.value = listStore.FriendRequestsList;
+
 })
 
-onUnmounted(() => {
-  const container = document.querySelector('.request-list-container')
-  if (container) {
-    container.removeEventListener('scroll', handleScroll)
-  }
-})
+
 </script>
 
 <template>
   <div class="request-list-container">
-    <div v-if="requests.length === 0 && !loading" class="empty-message">
+    <div v-if="requests.length === 0" class="empty-message">
       暂无好友请求
     </div>
     <div v-else>
@@ -69,11 +37,11 @@ onUnmounted(() => {
             <button class="accept-btn">同意</button>
             <button class="reject-btn">拒绝</button>
           </template>
-          <span v-else-if="requst.status === '1'" class="status-text p-2">已同意</span>
+          <span v-else-if="request.status === '1'" class="status-text p-2">已同意</span>
           <span v-else class="status-text p-2">已拒绝</span>
         </div>
       </div>
-      <div v-if="loading" class="loading">加载中...</div>
+
       <div v-if="!hasMore && requests.length > 0" class="no-more">没有更多好友请求了</div>
     </div>
 
@@ -128,9 +96,7 @@ onUnmounted(() => {
 .message {
   color: hsl(0, 0%, 40%);
   font-size: 0.875rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+
 }
 
 .loading,

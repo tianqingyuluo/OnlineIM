@@ -4,6 +4,10 @@ import { onMounted, onUnmounted, ref, watch } from 'vue'
 import GroupProfile from "@/components/independent/profile/GroupProfile.vue"
 import { type GroupSearchResult } from '@/type/group.ts'
 import { debounce } from 'lodash';
+import { useListStore } from '@/stores/list'; // 引入 listStore
+
+const listStore = useListStore(); // 使用 listStore
+
 const props = defineProps({
   keyword: {
     type: String,
@@ -93,6 +97,21 @@ onUnmounted(() => {
     container.removeEventListener('scroll', handleScroll)
   }
 })
+
+// 判断群组状态
+const getGroupStatus = (group: GroupSearchResult) => {
+  if (listStore.groups.some(g => g.group_id === group.group_id)) {
+    return 'joined'; // 已加入
+  }
+  return 'stranger'; // 未加入
+};
+
+// 添加群组的占位函数
+function handleAddGroup(group: GroupSearchResult) {
+  console.log('添加群组:', group.name);
+  // TODO: 实现添加群组的逻辑
+}
+
 </script>
 
 <template>
@@ -113,6 +132,20 @@ onUnmounted(() => {
           <span class="text-sm font-medium">{{ result.name }}</span>
           <span class="text-xs text-gray-500">成员: {{ result.member_count }}</span>
         </div>
+        
+        <!-- 根据群组状态显示不同内容 -->
+        <template v-if="getGroupStatus(result) === 'joined'">
+          <span class="ml-auto text-sm text-gray-500">已加入</span>
+        </template>
+        <template v-else>
+          <Button 
+            class="ml-auto px-3 py-1 text-sm"
+            @click.stop="handleAddGroup(result)"
+          >
+            添加
+          </Button>
+        </template>
+
       </div>
       <div v-if="!hasMore" class="text-center py-4 text-gray-500">
         没有更多数据了

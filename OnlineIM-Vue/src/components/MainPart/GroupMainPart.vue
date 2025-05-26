@@ -271,7 +271,8 @@ function toggleMenu() {
             <!-- 对方消息 -->
             <template v-if="msg.sender_info.user_id !== currentUser.user_id">
               <div class="flex items-start max-w-[80%]">
-                <GroupAvatarWithMenu :avatar-url="currentGroup.avatar_url || '/images/group.png'" :alt-text="msg.sender_info.user_id" />
+                <GroupAvatarWithMenu :avatar-url="currentGroup.avatar_url || '/images/group.png'" :alt-text="msg.sender_info.user_id"
+                :message="msg"/>
                 <div class="flex flex-col">
                   <span class="text-xs text-gray-500 mb-1">{{ msg.sender_info.nickname }}</span>
                   <UserTextArea

@@ -14,7 +14,6 @@ export interface MessageResponse {
     timestamp: string;
     is_recalled: boolean;
     client_message_id: string;
-    avatarUrl?: string; // 添加 avatarUrl 属性
 }
 export interface privateMessageResponse {
     message_id: string;

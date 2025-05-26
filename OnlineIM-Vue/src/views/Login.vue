@@ -50,7 +50,7 @@ const onSubmit = handleSubmit(async (values) => {
 
   console.log('提交登录表单:', values)
   try {
-    const response = await LoginService.login(values, router)
+    const response = await LoginService.login(values)
     console.log('登录响应:', response) // 添加调试日志
   } catch (error) {
     console.error('登录错误:', error) // 添加错误日志

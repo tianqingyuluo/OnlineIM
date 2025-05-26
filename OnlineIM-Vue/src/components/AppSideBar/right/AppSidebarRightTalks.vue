@@ -21,7 +21,7 @@ const searchQuery = ref('');
 const emits = defineEmits(['chatSelected'])
 const listStore = useListStore()
 
-// 修改 filteredConversations 计算属性，拆分为置顶和非置顶
+
 const pinnedConversations = computed(() => {
   const query = searchQuery.value.toLowerCase().trim();
   const conversations = (listStore.conversations || []).filter(conversation => conversation.is_pinned);
@@ -42,7 +42,7 @@ const unpinnedConversations = computed(() => {
   });
 });
 
-// 用于判断是否显示“没有找到对应会话”
+
 const hasConversations = computed(() => pinnedConversations.value.length > 0 || unpinnedConversations.value.length > 0);
 
 function handleChatClick(conversation: Conversation) {

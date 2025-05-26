@@ -11,9 +11,11 @@ import {Button} from "@/components/ui/button";
 import {toast} from 'vue-sonner';
 import AddFriendModal from '@/components/independent/group/AddFriendModal.vue';
 import {conversationService} from "@/services/conversation.service.ts";
-
+import GroupMemberProfileModal from '@/components/independent/group/GroupMemberProfileModal.vue'; // 引入成员资料模态框组件
 
 const showAddFriendModal = ref(false);
+const showMemberProfileModal = ref(false); // 控制成员资料模态框显示状态
+const selectedMember = ref<GroupMemberAll | null>(null); // 存储选中的成员数据
 
 const props = defineProps<{
   group: GroupResponse
@@ -54,6 +56,12 @@ const handleViewMembers = () => {
 const handleViewAnnouncement = () => {
   showAnnouncement.value = true; // 点击公告按钮时显示 Announcement 组件
 }
+
+// 处理点击成员头像事件
+const handleMemberClick = (member: GroupMemberAll) => {
+  selectedMember.value = member;
+  showMemberProfileModal.value = true;
+};
 
 const handleSettingChange = async (key: keyof GroupSetting, value: any) => {
 
@@ -229,8 +237,8 @@ onMounted(() => {
               <div
                   v-for="member in members.slice(0, 11)"
                   :key="member.user_info.user_id"
-                  class="flex flex-col items-center hover:bg-gray-100"
-
+                  class="flex flex-col items-center hover:bg-gray-100 cursor-pointer" 
+                  @click="handleMemberClick(member)" 
               >
                 <div class="w-14 h-14 rounded-full bg-gray-100 p-1 flex justify-center items-center"> <!-- 灰色圆形背景 -->
                   <img
@@ -347,6 +355,13 @@ onMounted(() => {
         />
       </div>
     </Transition>
+
+    <!-- 成员资料模态框 -->
+    <GroupMemberProfileModal
+        v-if="showMemberProfileModal"
+        :member="selectedMember"
+        @close="showMemberProfileModal = false"
+    />
   </div>
 
 </template>
