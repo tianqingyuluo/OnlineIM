@@ -1,10 +1,11 @@
 import { defineStore } from 'pinia';
-import type { MessageResponse, privateMessageResponse } from '@/type/message';
+import type { MessageResponse } from '@/type/message';
 import { dbService } from '@/utils/indexedDB';
 import { MessageService } from '@/services/message.service';
-
+import {useUserStore} from "@/stores/user.ts";
+import { websocketService } from '@/services/websocket.service';
 interface PendingMessageRange {
-  id?: number; // IndexedDB 自动生成的 ID
+  id?: number;
   minSeqId: string;
   maxSeqId: string;
 }
@@ -15,6 +16,16 @@ interface PendingMessageInfo {
   ranges: PendingMessageRange[];
 }
 
+// 新增接口定义
+interface PendingMessageInfoItem {
+  clientId: string;    // 唯一标识
+  content: string;
+  timestamp: string;
+  createAt: string;
+  conversationId: string;
+  timeoutId?: NodeJS.Timeout;
+  isTimeout?: boolean;
+}
 export const useHistoryStore = defineStore('history', {
   state: () => ({
     pendingMessages: {} as Record<string, PendingMessageInfo>,
@@ -26,10 +37,19 @@ export const useHistoryStore = defineStore('history', {
     lastHistorySeqId: null as string | null,
     inMyHistory: false,
     hasInit: false,
+    pendingMessagesInfo: [] as PendingMessageInfoItem[],
+
   }),
 
   actions: {
+    generateClientId(): string {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+    },
     async init() {
+
+      this.pendingMessagesInfo.forEach(item => {
+        if (item.timeoutId) clearTimeout(item.timeoutId);
+      });
       this.isLoading = false;
       this.hasMore = true;
       this.lastHistorySeqId = null;
@@ -298,32 +318,157 @@ export const useHistoryStore = defineStore('history', {
       }
     },
 
-    async removePendingRange(
-        userId: string,
-        conversationId: string,
-        rangeId: number
-    ) {
-      await dbService.deletePendingRange(rangeId);
 
-      const pendingInfo = this.pendingMessages[conversationId];
-      if (!pendingInfo) return;
 
-      pendingInfo.ranges = pendingInfo.ranges.filter(r => r.id !== rangeId);
-      if (pendingInfo.ranges.length === 0) {
-        delete this.pendingMessages[conversationId];
-        this.lastHistorySeqId = null;
-      } else {
-        this.lastHistorySeqId = pendingInfo.ranges.reduce((max, range) =>
-                range.maxSeqId.localeCompare(max || "0") > 0 ? range.maxSeqId : max || "0",
-            "0"
-        );
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    async updateMessageTimestamp(clientId: string) {
+      const index = this.pendingMessagesInfo.findIndex(
+          item => item.clientId === clientId
+      );
+
+      if (index === -1) {
+        console.log('更新消息时间戳 - 未找到匹配消息');
+        return;
       }
+
+      const message = this.pendingMessagesInfo[index];
+
+      // 清除旧定时器
+      if (message.timeoutId) clearTimeout(message.timeoutId);
+
+      // 更新字段
+      message.timestamp = new Date().toISOString();
+      message.isTimeout = false;
+
+      // 设置新定时器
+      message.timeoutId = setTimeout(() => {
+        message.isTimeout = true;
+        this.pendingMessagesInfo = [...this.pendingMessagesInfo];
+      }, 3000);
+
+      // 触发响应式更新
+      this.pendingMessagesInfo.splice(index, 1, message);
+    },
+
+    // 新增：添加待发送消息内容（使用 clientId）
+    addPendingMessageContent(content: string, conversationId: string) {
+      const clientId = this.generateClientId();
+      const createAt = new Date().toISOString();
+
+      const messageInfo: PendingMessageInfoItem = {
+        clientId,
+        content,
+        timestamp: createAt,
+        createAt,
+        conversationId,
+        isTimeout: false,
+        timeoutId: setTimeout(() => {
+          const index = this.pendingMessagesInfo.findIndex(
+              item => item.clientId === clientId
+          );
+          if (index !== -1) {
+            this.pendingMessagesInfo[index].isTimeout = true;
+            this.pendingMessagesInfo = [...this.pendingMessagesInfo];
+          }
+        }, 3000)
+      };
+
+      this.pendingMessagesInfo.push(messageInfo);
+      return clientId;
+    },
+
+
+    handleWebSocketMessage(message: MessageResponse) {
+
+      console.log('处理WebSocket消息 - 收到消息:', {
+        clientId: message.client_message_id,
+        content: message.content
+      });
+
+      const index = this.pendingMessagesInfo.findIndex(
+          item => item.clientId === message.client_message_id
+      );
+
+      if (index !== -1) {
+        if (this.pendingMessagesInfo[index].timeoutId) {
+          clearTimeout(this.pendingMessagesInfo[index].timeoutId);
+        }
+        this.pendingMessagesInfo.splice(index, 1);
+
+        // 更新正式消息
+        const tempIndex = this.chatMessages.findIndex(
+            msg => msg.client_message_id === message.client_message_id
+        );
+        if (tempIndex !== -1) {
+          this.chatMessages[tempIndex] = message;
+        }
+      } else {
+        this.chatMessages.push(message);
+      }
+    },
+    sendMessage(conversationId: string, receiverId: string, messageType: string, content: string) {
+      
+      let clientId=  this.addPendingMessageContent(content, conversationId);
+      const tempMessage: MessageResponse = {
+        message_id: Date.now().toString(),
+        conversation_id: conversationId,
+        sender_info: useUserStore().loggedInUser || { user_id: '', username: '未知用户', avatar_url: '' },
+        message_type: messageType,
+        content: content,
+        timestamp: new Date().toISOString(),
+        seq_id: '',
+        status: 0,
+        is_recalled: false,
+        client_message_id: clientId
+        
+      };
+
+      this.chatMessages.push(tempMessage);
+      const websocketMessage = {
+        conversationId: tempMessage.conversation_id,
+        receiverId: receiverId,
+        messageType: messageType,
+        content: content,
+        clientId: clientId
+      };
+      console.log('发送消息 - 临时消息时间戳:', tempMessage.timestamp);
+      websocketService.sendMessage({ type: 'PRIVATE_MESSAGE_REQUEST', message: websocketMessage });
     }
   },
 
   getters: {
     hasPendingMessages: (state) => (conversationId: string) => {
       return !!state.pendingMessages[conversationId]?.ranges?.length;
+    },
+
+    isMessagePending: (state) => (clientId: string) => {
+      return state.pendingMessagesInfo.some(item => item.clientId === clientId);
+    },
+
+    isMessageTimeout: (state) => (clientId: string) => {
+      const message = state.pendingMessagesInfo.find(
+          item => item.clientId === clientId
+      );
+      return message?.isTimeout || false;
     }
+
+
   }
 });

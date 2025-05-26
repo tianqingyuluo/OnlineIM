@@ -67,32 +67,42 @@ export const useListStore = defineStore('list', {
             dbService.getAll(STORES.USER_GROUPS, userId),
             dbService.getAll(STORES.BLACKLIST, userId)
           ]);
+          if (dbConvs){
+            if (dbConvs.length) {
+              this.conversations = dbConvs;
+              console.log('从IndexedDB加载会话数据:', dbConvs.length, '条记录');
+              console.debug('会话数据详情:', dbConvs);
+            }
+          }
+          if (dbFriends) {
+            if (dbFriends.length) {
+              this.friends = dbFriends;
+              console.log('从IndexedDB加载好友数据:', dbFriends.length, '条记录');
+              console.debug('好友数据详情:', dbFriends);
+            }
+          }
+          if (dbGroups) {
+            if (dbGroups.length) {
+              this.groups = dbGroups;
+              console.log('从IndexedDB加载群组数据:', dbGroups.length, '条记录');
+              console.debug('群组数据详情:', dbGroups);
+            }
+          }
+          if (dbUserGroups) {
+            if (dbUserGroups.length) {
+              this.userGroups = dbUserGroups;
+              console.log('从IndexedDB加载好友分组数据:', dbUserGroups.length, '条记录');
+              console.debug('好友分组数据详情:', dbUserGroups);
+            }
+          }
+          if (dbBlacklist) {
+            if (dbBlacklist.length) {
+              this.blacklist = dbBlacklist;
+              console.log('从IndexedDB加载黑名单数据:', dbBlacklist.length, '条记录');
+              console.debug('黑名单数据详情:', dbBlacklist);
+            }
+          }
 
-          if (dbConvs.length) {
-            this.conversations = dbConvs;
-            console.log('从IndexedDB加载会话数据:', dbConvs.length, '条记录');
-            console.debug('会话数据详情:', dbConvs);
-          }
-          if (dbFriends.length) {
-            this.friends = dbFriends;
-            console.log('从IndexedDB加载好友数据:', dbFriends.length, '条记录');
-            console.debug('好友数据详情:', dbFriends);
-          }
-          if (dbGroups.length) {
-            this.groups = dbGroups;
-            console.log('从IndexedDB加载群组数据:', dbGroups.length, '条记录');
-            console.debug('群组数据详情:', dbGroups);
-          }
-          if (dbUserGroups.length) {
-            this.userGroups = dbUserGroups;
-            console.log('从IndexedDB加载好友分组数据:', dbUserGroups.length, '条记录');
-            console.debug('好友分组数据详情:', dbUserGroups);
-          }
-          if (dbBlacklist.length) {
-            this.blacklist = dbBlacklist;
-            console.log('从IndexedDB加载黑名单数据:', dbBlacklist.length, '条记录');
-            console.debug('黑名单数据详情:', dbBlacklist);
-          }
         } catch (error) {
           console.error('从IndexedDB加载数据失败:', error);
         }

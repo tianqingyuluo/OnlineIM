@@ -3,6 +3,7 @@ import api from './api.service';
 import { useUserStore } from '@/stores/user';
 import { toast } from 'vue-sonner';
 import router from "@/router";
+import { websocketService } from '@/services/websocket.service';
 
 export const LoginService = {
     validationRules: {
@@ -45,6 +46,9 @@ export const LoginService = {
                 userStore.token = response.data.access_token
 
                 console.log("token:\n"+response.data.access_token);
+
+                // 连接 WebSocket
+                websocketService.connect();
 
                 // 显示欢迎消息
                 toast.success('登录成功', {

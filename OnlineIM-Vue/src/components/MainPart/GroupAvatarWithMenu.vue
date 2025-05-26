@@ -79,24 +79,12 @@ const menuItems = computed(() => {
 
 const handleMenuItemClick = (action: string) => {
   if (action === 'viewProfile') {
-    // 直接控制悬浮资料卡显示，不再emit事件
-    const rect = triggerRef.value?.getBoundingClientRect();
-    if (rect) {
-      // Position the hover card 12px to the right of the avatar
-      hoverCardStyle.value = {
-        position: 'fixed',
-        top: `${rect.top}px`,
-        left: `${rect.right + 12}px`, // right is x + width
-        zIndex: 50, // Ensure it's above other content
-      };
-      showHoverProfile.value = true;
-    }
+    emit('viewProfile', props.message.sender_info.user_id)
   } else if (action === 'addFriend') {
     emit('addFriend', props.message.sender_info.user_id)
   }
 }
 </script>
-
 <template>
   <div class="flex items-start max-w-[80%] relative">
     <!-- 右键菜单区域 -->
@@ -104,54 +92,64 @@ const handleMenuItemClick = (action: string) => {
       <ContextMenuTrigger>
         <!-- 头像触发区域 -->
         <img
-            ref="triggerRef"
-            :src="avatarUrl || '/images/group.png'"
-            class="w-10 h-10 rounded-full mr-2 cursor-pointer"
-            @mouseup="handleAvatarClick"
+          ref="triggerRef"
+          :src="avatarUrl || '/images/group.png'"
+          class="w-10 h-10 rounded-full mr-2 cursor-pointer"
+          @mouseup="handleAvatarClick"
         />
       </ContextMenuTrigger>
       <ContextMenuContent class="w-48">
         <ContextMenuItem
-            v-for="item in menuItems"
-            :key="item.title"
-            @click="handleMenuItemClick(item.action)"
+          v-for="item in menuItems"
+          :key="item.title"
+          @click="handleMenuItemClick(item.action)"
         >
           {{ item.title }}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
 
-    <!-- 悬浮资料卡片 (通过 Teleport 渲染到 body) -->
+    <!-- 添加 Transition 组件包裹悬浮资料卡片 -->
     <Teleport to="body">
-      <Transition name="hover-profile">
-        <HoverProfile
-            v-if="showHoverProfile"
-            :style="hoverCardStyle" // 应用计算出的样式
-            class="shadow-lg bg-white h-[300px] w-[400px] rounded-lg"
-            :user-id="message.sender_info.user_id"
-        />
-      </Transition>
+    <Transition  name="hover-profile">
+      <hover-profile
+        v-if="showHoverProfile"
+        class="absolute top-0 left-12 z-50 shadow-lg bg-white h-[300px] w-[200px]"
+        :user-id="message.sender_info.user_id"
+      />
+    </Transition>
     </Teleport>
   </div>
 </template>
 
 <style scoped>
-/* 添加过渡动画 */
-.hover-profile-enter-active,
+/* 优化后的动画效果 */
+.hover-profile-enter-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition-delay: 0.1s;
+}
+
 .hover-profile-leave-active {
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 1, 1);
 }
 
 .hover-profile-enter-from,
 .hover-profile-leave-to {
   opacity: 0;
-  /* 过渡动画不再依赖 transform，因为位置由 style 动态设置 */
+  transform: translateX(-10px) scale(0.95);
 }
 
-/* 确保进入和离开的最终状态 */
-.hover-profile-enter-to,
-.hover-profile-leave-from {
+.hover-profile-enter-to {
   opacity: 1;
-  /* 最终位置由 style 动态设置 */
+  transform: translateX(0) scale(1);
+}
+
+/* 添加细微的悬浮效果 */
+.hover-profile-enter-active .profile-card {
+  transition: transform 0.3s ease;
+}
+
+.hover-profile-enter-active .profile-card:hover {
+  transform: translateY(-2px);
 }
 </style>
