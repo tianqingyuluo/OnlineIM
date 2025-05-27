@@ -1,5 +1,7 @@
 package icu.tianqingyuluo.onlineim.mapper;
 
+import icu.tianqingyuluo.onlineim.pojo.dto.request.GroupAnnouncementRequest;
+import icu.tianqingyuluo.onlineim.pojo.dto.response.GroupAnnouncementResponse;
 import icu.tianqingyuluo.onlineim.pojo.entity.GroupAnnouncement;
 import org.apache.ibatis.annotations.*;
 
@@ -15,11 +17,15 @@ import java.util.Map;
 public interface GroupAnnouncementMapper {
         
     /**
-     * 根据ID查询公告
+     * 根据群组ID查询群公告列表
      */
-    @Select("SELECT * FROM group_announcements WHERE id = #{id}")
-    GroupAnnouncement getById(String id);
-    
+    List<GroupAnnouncementResponse> getAnnouncementsByGroupId(String groupId);
+
+    /**
+     * 根据群公告ID查询群公告
+     */
+    GroupAnnouncementResponse getAnnouncementsByAnnouncementId(@Param("announcementId") String announcementId,@Param("groupId") String groupId);
+
     /**
      * 获取群组的公告列表（XML实现带分页和排序）
      */
@@ -30,31 +36,47 @@ public interface GroupAnnouncementMapper {
      */
     @Select("SELECT COUNT(*) FROM group_announcements WHERE group_id = #{groupId} AND status = 1")
     int countByGroupId(String groupId);
-    
+
+    /**
+     * 效验公告是否属于该群组
+     */
+    @Select("SELECT COUNT(*)>0 FROM group_announcements WHERE id = #{id} AND group_id = #{groupId}")
+    int isSelfAnnouncement(@Param("id") String id,@Param("groupId") String groupId);
+
     /**
      * 新增群公告
      */
-    @Insert("INSERT INTO group_announcements(id, group_id, publisher_id, title, content, status, pin, created_at, updated_at) " +
-            "VALUES(#{id}, #{groupId}, #{publisherId}, #{title}, #{content}, #{status}, #{pin}, #{createdAt}, #{updatedAt})")
-    int insert(GroupAnnouncement announcement);
+    @Insert("INSERT INTO group_announcements(id, group_id, publisher_id, title, content, pin) " +
+            "VALUES(#{id}, #{groupId}, #{publisherId}, #{request.title}, #{request.content}, #{request.pin})")
+    int insert(@Param("id") String id,@Param("groupId") String groupId,@Param("publisherId") String publisherId,@Param("request") GroupAnnouncementRequest request);
     
     /**
      * 更新群公告内容
      */
-    @Update("UPDATE group_announcements SET title = #{title}, content = #{content}, updated_at = #{updatedAt} WHERE id = #{id}")
-    int update(GroupAnnouncement announcement);
+    @Update("UPDATE group_announcements SET " +
+            "title = #{request.title}, " +
+            "content = #{request.content}, " +
+            "pin = #{request.pin} " +
+            "WHERE id = #{id}")
+    int update(@Param("id") String id,@Param("request") GroupAnnouncementRequest request);
     
     /**
      * 更新公告状态
      */
     @Update("UPDATE group_announcements SET status = #{status}, updated_at = #{updatedAt} WHERE id = #{id}")
     int updateStatus(@Param("id") String id, @Param("status") int status, @Param("updatedAt") String updatedAt);
-    
+
+    /**
+     * 取消群组原有的置顶公告
+     */
+    @Update("UPDATE group_announcements SET pin = 0 WHERE group_id = #{groupId} AND pin = 1")
+    int cancelPin(String groupId);
+
     /**
      * 更新公告置顶状态
      */
-    @Update("UPDATE group_announcements SET pin = #{pin}, updated_at = #{updatedAt} WHERE id = #{id}")
-    int updatePin(@Param("id") String id, @Param("pin") int pin, @Param("updatedAt") String updatedAt);
+    @Update("UPDATE group_announcements SET pin = #{pin} WHERE id = #{id}")
+    int updatePin(@Param("id") String id, @Param("pin") boolean pin);
     
     /**
      * 删除公告

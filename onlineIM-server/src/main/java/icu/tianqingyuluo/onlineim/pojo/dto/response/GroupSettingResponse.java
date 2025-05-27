@@ -50,7 +50,13 @@ public class GroupSettingResponse {
      */
     @JsonProperty("allow_view_history_message")
     private Boolean allowViewHistoryMessage;
-    
+
+    /**
+     * 是否允许查看历史消息
+     */
+    @JsonProperty("mute_type")
+    private Boolean muteType;
+
     /**
      * 最后更新时间
      */

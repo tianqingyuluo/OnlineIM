@@ -1,6 +1,7 @@
 package icu.tianqingyuluo.onlineim.websocket;
 
 import cn.hutool.core.util.IdUtil;
+import icu.tianqingyuluo.onlineim.util.RealIPUtil;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
@@ -139,7 +140,7 @@ public class NettyWebSocketServer {
         redisTemplate.opsForHash().put(
                 "websocket_servers",
                 serverId,
-                "{ip:'"+getLocalIP()+"', port:"+port+", connections:"+0+"}"
+                "{ip:'" + RealIPUtil.getRealLocalIP() + "', port:"+port+"}"
         );
     }
 
@@ -147,21 +148,4 @@ public class NettyWebSocketServer {
         redisTemplate.opsForHash().delete("websocket_servers", serverId);
     }
 
-    // 得到所有的手
-    public String getLocalIP() throws SocketException {
-        Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
-        while (interfaces.hasMoreElements()) {
-            NetworkInterface iface = interfaces.nextElement();
-            if (iface.isLoopback() || !iface.isUp()) continue;
-
-            Enumeration<InetAddress> addresses = iface.getInetAddresses();
-            while(addresses.hasMoreElements()) {
-                InetAddress addr = addresses.nextElement();
-                if (addr instanceof Inet4Address) { // 优先IPv4
-                    return addr.getHostAddress();
-                }
-            }
-        }
-        throw new RuntimeException("No network interface found");
-    }
 }

@@ -1,15 +1,18 @@
 package icu.tianqingyuluo.onlineim.service.impl;
 
+import cn.hutool.core.util.IdUtil;
 import icu.tianqingyuluo.onlineim.mapper.FriendRequestResponseMapper;
 import icu.tianqingyuluo.onlineim.mapper.FriendResponseMapper;
 import icu.tianqingyuluo.onlineim.mapper.UserBriefResponseMapper;
+import icu.tianqingyuluo.onlineim.pojo.dto.request.FriendRequestRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.FriendRequestResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.FriendResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
-import icu.tianqingyuluo.onlineim.pojo.entity.UserFriend;
 import icu.tianqingyuluo.onlineim.service.FriendService;
+import lombok.SneakyThrows;
 import org.springframework.stereotype.Service;
 
+import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
 
 @Service
@@ -67,5 +70,16 @@ public class FriendServiceImpl implements FriendService {
     @Override
     public void updateStatusByID(String id, String status) {
         friendRequestResponseMapper.updateStatusByID(id,status);
+    }
+
+    @Override
+    public void sendFriendRequest(String userid, FriendRequestRequest friendRequestRequest) throws SQLIntegrityConstraintViolationException{
+        if(!friendRequestResponseMapper.existsPendingRequest(userid,friendRequestRequest.getTargetUserId())){
+            String friendRequestID = "req_" + IdUtil.getSnowflakeNextIdStr();
+            friendRequestResponseMapper.sendFriendRequest(friendRequestID,userid,friendRequestRequest);
+        }
+        else{
+            throw new SQLIntegrityConstraintViolationException("好友申请已存在");
+        }
     }
 }

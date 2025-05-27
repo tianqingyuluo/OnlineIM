@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="icu.tianqingyuluo.onlineim.mapper.GroupJoinRequestResponseMapper">
+    <!-- 群组结果映射 -->
+    <resultMap id="GroupJoinRequestResponseMap" type="icu.tianqingyuluo.onlineim.pojo.dto.response.GroupJoinRequestResponse">
+        <result property="requestID" column="id"/>
+        <result property="groupID" column="group_id"/>
+        <result property="groupName" column="name"/>
+        <result property="joinedAt" column="join_time"/>
+        <result property="message" column="grp_message"/>
+        <result property="status" column="grp_status"/>
+        <result property="createdAt" column="created_at"/>
+        <association property="userInfo" javaType="icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse">
+            <id property="userId" column="user_id"/>
+            <result property="username" column="username"/>
+            <result property="nickname" column="userNickname"/>
+            <result property="avatarUrl" column="userAvatar"/>
+        </association>
+        <association property="inviterInfo" javaType="icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse">
+            <id property="userId" column="inviter_id"/>
+            <result property="username" column="inviterName"/>
+            <result property="nickname" column="inviterNickName"/>
+            <result property="avatarUrl" column="inviterAvatar"/>
+        </association>
+    </resultMap>
+
+    <select id="getGroupJoinRequests" resultMap="GroupJoinRequestResponseMap">
+        SELECT grp.id,grp.group_id,g.name,grp.user_id,grp.inviter_id,grp.status as grp_status,grp.message as grp_message,grp.created_at,
+               u1.username, u1.nickname as userNickname, u1.avatar as userAvatar,
+               u2.username as inviterName, u2.nickname as inviterNickName, u2.avatar as inviterAvatar
+        FROM group_join_requests grp
+                 LEFT JOIN users u1 ON grp.user_id = u1.id
+                 LEFT JOIN users u2 ON grp.inviter_id = u2.id
+                 LEFT JOIN `groups` g ON grp.group_id = g.id
+        WHERE grp.group_id = #{groupId}
+        ORDER BY grp.created_at DESC
+    </select>
+</mapper>

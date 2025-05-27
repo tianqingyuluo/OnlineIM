@@ -3,18 +3,22 @@ package icu.tianqingyuluo.onlineim.controller;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.UserUpdateRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserResponse;
+import icu.tianqingyuluo.onlineim.service.FileStorageService;
 import icu.tianqingyuluo.onlineim.service.UserService;
 import icu.tianqingyuluo.onlineim.service.impl.UserDetailsServiceImpl;
+import icu.tianqingyuluo.onlineim.storage.OSSAdapter;
 import icu.tianqingyuluo.onlineim.util.ErrorCodeUtil;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ibatis.exceptions.PersistenceException;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -32,9 +36,17 @@ public class UserController {
 
     private final JwtUtil jwtUtil;
 
-    public UserController(UserDetailsServiceImpl userDetailsService, UserService userService, JwtUtil jwtUtil) {
+    private final FileStorageService fileStorageService;
+
+    @Value("${oss.default-bucket}")
+    private String bucketName;
+
+    public UserController(UserDetailsServiceImpl userDetailsService,
+                          UserService userService, JwtUtil jwtUtil,
+                          FileStorageService fileStorageService) {
         this.userService = userService;
         this.jwtUtil = jwtUtil;
+        this.fileStorageService = fileStorageService;
     }
 
     /**
@@ -90,10 +102,23 @@ public class UserController {
      * @return 更新结果
      */
     @PostMapping("/me/avatar")
-    public ResponseEntity<Map<String, String>> uploadAvatar(@RequestParam("file") MultipartFile avatar) {
+    public ResponseEntity<Map<String, String>> uploadAvatar(
+            @RequestHeader("Authorization") String token,
+            @RequestParam("file") MultipartFile avatar) {
         // TODO: 实现上传头像逻辑
         // UNDO: 使用minio传入数据桶中
-        return null;
+        Map<String, String> response = new HashMap<>();
+        String userID = jwtUtil.getUserIDFromToken(token);
+
+        try {
+            String avatarUrl = fileStorageService.uploadAvatar(avatar, userID);
+            response.put("avatar_url", avatarUrl);
+            return ResponseEntity.ok(response);
+        }
+        catch (Exception e) {
+            log.error(e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "传输文件失败"));
+        }
     }
     
     /**

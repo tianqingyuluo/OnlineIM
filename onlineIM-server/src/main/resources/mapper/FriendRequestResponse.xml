@@ -7,6 +7,8 @@
     <!-- 用户结果映射 -->
     <resultMap id="FriendRequestResponseMap" type="icu.tianqingyuluo.onlineim.pojo.dto.response.FriendRequestResponse">
         <id property="requestID" column="id"/>
+        <result property="message" column="req_message"/>
+        <result property="status" column="req_status"/>
         <result property="createdAt" column="created_at"/>
         <association property="senderInfo" javaType="icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse">
             <id property="userId" column="id"/>
@@ -18,8 +20,8 @@
     <select id="getFriendRequestListByUserID" resultMap="FriendRequestResponseMap">
         SELECT
             fr.id,
-            fr.message,
-            fr.status,
+            fr.message as req_message,
+            fr.status as req_status,
             fr.created_at,
             u.id,
             u.username,
@@ -28,15 +30,16 @@
         FROM
             friend_requests fr
             INNER JOIN
-            users u ON fr.to_user_id = u.id
+            users u ON fr.from_user_id = u.id
         WHERE
             fr.to_user_id = #{id}
+        ORDER BY fr.updated_at DESC
     </select>
     <select id="getSendFriendRequestListByUserID" resultMap="FriendRequestResponseMap">
         SELECT
             fr.id,
-            fr.message,
-            fr.status,
+            fr.message as req_message,
+            fr.status as req_status,
             fr.created_at,
             u.id,
             u.username,
@@ -48,14 +51,15 @@
             users u ON fr.to_user_id = u.id
         WHERE
             fr.from_user_id = #{id}
+        ORDER BY fr.updated_at DESC
     </select>
     <select id="existFriendByID" >
         SELECT EXISTS(
             SELECT 1
             FROM user_friends
             WHERE
-                user_id = #{friendId}        -- 替换为目标用户ID
-              AND friend_id = #{userid}      -- 替换为要验证的好友ID
+                id = #{friendId}
+              AND user_id = #{userid}
         ) AS is_friend;
     </select>
 </mapper>
