@@ -2,6 +2,7 @@ class SimpleMusicPlayer {
     private audio: HTMLAudioElement | null = null;
     private isPlaying = false;
     private defaultAudioSrc = '/point.mp3'; // 硬编码默认路径
+    private readonly defaultVolume = 0.8;
 
     /**
      * 初始化音频（如果未提供src，则使用默认音频源）
@@ -12,12 +13,15 @@ class SimpleMusicPlayer {
         if (this.audio) {
             this.stop();
             this.audio.removeEventListener('ended', this.handleAudioEnded);
+
         }
 
         // 创建新音频实例
         this.audio = new Audio(src);
+        this.audio.volume = this.defaultVolume;
         this.audio.addEventListener('ended', this.handleAudioEnded);
         this.audio.load();
+
     }
 
     /**

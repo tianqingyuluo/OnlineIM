@@ -70,7 +70,7 @@ const sendRequest = handleSubmit(async (values) => {
           {{ user.nickname || user.username }}
         </h3>
         <p class="text-sm text-gray-500">
-          @{{ user.username }}
+          @{{ user.username ||user.nickname }}
         </p>
       </div>
     </div>

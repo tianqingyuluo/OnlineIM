@@ -7,10 +7,11 @@ import {
 } from '@/components/ui/context-menu'
 import { ref, computed } from 'vue'
 import { onClickOutside } from '@vueuse/core'
-import { type MessageResponse } from '@/type/message'
-import { useUserStore } from '@/stores/user'
-import { useListStore } from '@/stores/list'
+import { type MessageResponse } from '@/type/message.ts'
+import { useUserStore } from '@/stores/user.ts'
+import { useListStore } from '@/stores/list.ts'
 import HoverProfile from '@/components/independent/profile/hoverProfile.vue' // 引入 HoverProfile 组件
+import SendFriendRequest from '@/components/independent/friends/SendFriendRequest.vue' // 引入 SendFriendRequest 组件
 
 const userStore = useUserStore()
 const listStore = useListStore()
@@ -31,26 +32,22 @@ const emit = defineEmits(['viewProfile', 'addFriend', 'sendMessage'])
 // 悬浮资料卡控制
 const showHoverProfile = ref(false)
 const triggerRef = ref<HTMLElement | null>(null)
-// 悬浮资料卡位置控制
-const hoverCardStyle = ref({});
 
 // 点击外部关闭
 onClickOutside(triggerRef, () => {
   showHoverProfile.value = false
 })
-
+const hoverCardStyle = ref({});
 // 头像左键点击处理
 const handleAvatarClick = (event: MouseEvent) => {
   if (event.button === 0) { // 0 表示左键
     event.preventDefault()
     const rect = triggerRef.value?.getBoundingClientRect();
     if (rect) {
-      // Position the hover card 12px to the right of the avatar
+      // 计算固定位置，考虑页面滚动
       hoverCardStyle.value = {
-        position: 'fixed',
         top: `${rect.top}px`,
-        left: `${rect.right + 12}px`, // right is x + width
-        zIndex: 50, // Ensure it's above other content
+        left: `${rect.right + 12}px`,
       };
       showHoverProfile.value = !showHoverProfile.value;
     }
@@ -77,11 +74,25 @@ const menuItems = computed(() => {
   return items
 })
 
+// 好友请求弹窗控制
+const showSendFriendRequest = ref(false)
+const selectedUserForFriendRequest = ref(null)
+
+const openSendFriendRequest = (user: any) => {
+  selectedUserForFriendRequest.value = user
+  showSendFriendRequest.value = true
+}
+
+const closeSendFriendRequest = () => {
+  showSendFriendRequest.value = false
+  selectedUserForFriendRequest.value = null
+}
+
 const handleMenuItemClick = (action: string) => {
   if (action === 'viewProfile') {
     emit('viewProfile', props.message.sender_info.user_id)
   } else if (action === 'addFriend') {
-    emit('addFriend', props.message.sender_info.user_id)
+    openSendFriendRequest(props.message.sender_info)
   }
 }
 </script>
@@ -92,33 +103,53 @@ const handleMenuItemClick = (action: string) => {
       <ContextMenuTrigger>
         <!-- 头像触发区域 -->
         <img
-          ref="triggerRef"
-          :src="avatarUrl || '/images/group.png'"
-          class="w-10 h-10 rounded-full mr-2 cursor-pointer"
-          @mouseup="handleAvatarClick"
+            ref="triggerRef"
+            :src="avatarUrl || '/images/group.png'"
+            class="w-10 h-10 rounded-full mr-2 cursor-pointer"
+            @mouseup="handleAvatarClick"
         />
       </ContextMenuTrigger>
       <ContextMenuContent class="w-48">
         <ContextMenuItem
-          v-for="item in menuItems"
-          :key="item.title"
-          @click="handleMenuItemClick(item.action)"
+            v-for="item in menuItems"
+            :key="item.title"
+            @click="handleMenuItemClick(item.action)"
         >
           {{ item.title }}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
 
-    <!-- 添加 Transition 组件包裹悬浮资料卡片 -->
     <Teleport to="body">
-    <Transition  name="hover-profile">
-      <hover-profile
-        v-if="showHoverProfile"
-        class="absolute top-0 left-12 z-50 shadow-lg bg-white h-[300px] w-[200px]"
-        :user-id="message.sender_info.user_id"
-      />
-    </Transition>
+      <Transition name="hover-profile">
+        <div 
+          v-if="showHoverProfile"
+          class="fixed z-50 bg-white h-[400px] w-[600px] shadow-lg flex items-center justify-center"
+          :style="hoverCardStyle"
+        >
+          <hover-profile
+            class="h-full w-full"
+            :user-id="message.sender_info.user_id"
+          />
+        </div>
+      </Transition>
     </Teleport>
+
+    <Teleport to="body">
+      <Transition name="send-friend-request">
+        <div
+          v-if="showSendFriendRequest"
+          class="fixed inset-0 m-auto w-1/2 h-1/2 z-[100]"
+        >
+          <SendFriendRequest
+            :user="selectedUserForFriendRequest"
+            @close="closeSendFriendRequest"
+            @success="closeSendFriendRequest"
+          />
+        </div>
+      </Transition>
+    </Teleport>
+
   </div>
 </template>
 

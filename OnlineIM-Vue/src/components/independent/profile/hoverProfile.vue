@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, nextTick } from 'vue'
+import SendFriendRequest from "@/components/independent/friends/SendFriendRequest.vue";
 
 import { userService } from '@/services/user.service'
 import { useListStore } from '@/stores/list'
@@ -119,6 +120,23 @@ async function handleGroupChange(newGroupId: string) {
     }
   }
 }
+
+const isFriend = computed(() => {
+  return listStore.friends.some(friend => friend.friend_info.user_id === props.userId);
+});
+
+const showSendFriendRequest = ref(false);
+const selectedUserForFriendRequest = ref<User | null>(null);
+
+function openSendFriendRequest() {
+
+  showSendFriendRequest.value = true;
+}
+
+function closeSendFriendRequest() {
+  showSendFriendRequest.value = false;
+
+}
 </script>
 
 <template>
@@ -180,19 +198,26 @@ async function handleGroupChange(newGroupId: string) {
       </div>
     </div>
     <!-- 根据是否是好友显示不同按钮 -->
-    <Button v-if="friendInfo" class="flex flex-col items-center justify-center w-full p-4 mt-8 hover:scale-105 transition-transform duration-200">发消息</Button>
-    <Button v-else class="flex flex-col items-center justify-center w-full p-4 mt-8 hover:scale-105 transition-transform duration-200">加好友</Button>
+    <Button v-if="isFriend" class="flex flex-col items-center justify-center w-full p-4 mt-8 hover:scale-105 transition-transform duration-200">发消息</Button>
+    <Button v-else @click="openSendFriendRequest" class="flex flex-col items-center justify-center w-full p-4 mt-8 hover:scale-105 transition-transform duration-200">加好友</Button>
   </div>
   <div v-else class="loading">
     加载中...
   </div>
+
+  <SendFriendRequest
+      v-if="showSendFriendRequest && selectedUserForFriendRequest"
+      @close="closeSendFriendRequest"
+      :user="user"
+      class="fixed inset-0 m-auto w-1/2 h-1/2 z-[9999]"
+  />
 </template>
 
 <style scoped>
 .user-profile {
   padding: 20px;
-  max-width: 400px;
-  max-height: 600px;
+  min-width: 400px;
+  min-height: 350px;
   overflow: auto;
 }
 .user-header {
@@ -206,6 +231,7 @@ async function handleGroupChange(newGroupId: string) {
   height: 100px;
   border-radius: 50%;  /* 这行代码确保头像显示为圆形 */
   margin-bottom: 10px;
+  overflow:hidden;
 }
 .info-item {
   margin: 16px 0;

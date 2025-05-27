@@ -13,7 +13,7 @@ import GroupInfoCard from '@/components/independent/group/GroupInfoCard.vue'
 import { onClickOutside } from '@vueuse/core'
 import { useUserStore } from '@/stores/user.ts';
 import { GroupSettingService } from "@/services/groupsetting.service";
-import GroupAvatarWithMenu from "@/components/MainPart/GroupAvatarWithMenu.vue";
+import GroupAvatarWithMenu from "@/components/independent/group/GroupAvatarWithMenu.vue";
 import {useOtherStore} from "@/stores/otherStore.ts";
 import {conversationService} from "@/services/conversation.service.ts";
 import type {Conversation} from "@/type/Conversation.ts";
