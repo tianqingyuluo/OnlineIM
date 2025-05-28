@@ -179,6 +179,18 @@ export const useListStore = defineStore('list', {
             blacklist: this.blacklist
           });
 
+          // 如果用户分组为空则创建默认分组
+          if (this.userGroups.length === 0) {
+            try {
+              const defaultGroup = await friendGroupsService.createFriendGroup('我的好友');
+              this.userGroups.push(defaultGroup);
+              await dbService.bulkPut(STORES.USER_GROUPS, this.userGroups);
+            } catch (error) {
+              console.error('创建默认好友分组失败:', error);
+              toast.error('初始化默认分组失败');
+            }
+          }
+          
           // 同步到IndexedDB
           try {
             // 序列化数据，确保所有属性可克隆

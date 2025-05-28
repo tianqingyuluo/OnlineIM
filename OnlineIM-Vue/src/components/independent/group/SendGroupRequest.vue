@@ -37,9 +37,10 @@ const loading = ref(false)
 const sendRequest = handleSubmit(async (values) => {
   try {
     loading.value = true
-    console.log('提交数据:', values) // 调试用
+    console.log('提交数据:', values)
 
-    await groupService.requestToJoinGroup(props.group.id, values.message || '')
+    // 使用joinGroup方法发送请求
+    await groupService.joinGroup(props.group.id, values.message || '')
     emit('success')
     emit('close')
   } catch (error) {
@@ -51,7 +52,7 @@ const sendRequest = handleSubmit(async (values) => {
 </script>
 
 <template>
-  <div class="flex flex-col bg-white p-6 rounded-lg shadow-sm max-w-lg mx-auto border-[2px] shadow-2xl">
+  <div class="flex flex-col bg-white p-6 rounded-lg  max-w-lg mx-auto border-[2px] shadow-2xl">
     <!-- 群组信息区域 -->
     <div class="flex items-center mb-6">
       <img

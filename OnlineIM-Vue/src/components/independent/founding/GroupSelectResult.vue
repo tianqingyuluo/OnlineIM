@@ -4,7 +4,10 @@ import { onMounted, onUnmounted, ref, watch } from 'vue'
 import GroupProfile from "@/components/independent/profile/GroupProfile.vue"
 import { type GroupSearchResult } from '@/type/group.ts'
 import { debounce } from 'lodash';
-import { useListStore } from '@/stores/list'; // 引入 listStore
+import { useListStore } from '@/stores/list';
+import type {UserSearchResult} from "@/type/User.ts";
+import SendGroupRequest from "@/components/independent/group/SendGroupRequest.vue";
+import SendFriendRequest from "@/components/independent/friends/SendFriendRequest.vue"; // 引入 listStore
 
 const listStore = useListStore(); // 使用 listStore
 
@@ -105,16 +108,24 @@ const getGroupStatus = (group: GroupSearchResult) => {
   }
   return 'stranger'; // 未加入
 };
-
+const showGroupRequest = ref(false)
+const selectedGroup = ref({} as GroupSearchResult)
 // 添加群组的占位函数
 function handleAddGroup(group: GroupSearchResult) {
   console.log('添加群组:', group.name);
-  // TODO: 实现添加群组的逻辑
+  selectedGroup.value=group
+  showGroupRequest.value = true
+
 }
 
 </script>
 
 <template>
+  <send-group-request
+      v-if="showGroupRequest"
+      @close="showGroupRequest = false"
+      :group="selectedGroup"
+      class="fixed inset-0 m-auto w-1/2 h-1/2 z-[9999]"/>
   <div class="flex flex-col space-y-2 p-2">
     <template v-if="searchResults.length > 0">
       <div 

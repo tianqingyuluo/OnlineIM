@@ -174,10 +174,8 @@ export const groupService = {
     action: string,
   ) {
     try {
-      const response = await api.post(`/groups/${groupId}/join-requests/${requestId}`, {
-        action,
-      });
-      return response.data.success;
+      const response = await api.post(`/groups/${groupId}/join-requests/${requestId}/${action}`, );
+      return response.data;
     } catch (error) {
       console.error('处理加群请求失败:', error);
       throw error;
@@ -224,5 +222,15 @@ export const groupService = {
         console.error('更新群组信息失败:', error);
         return null;
     }
-}
+  },
+  async joinGroup(groupId: string, request: string): Promise<string> {
+      try {
+          const response = await api.post<string>(`/groups/${groupId}/join`, {message: request});
+          return response.data
+      }catch(error) {
+          console.error('<UNK>:', error);
+          throw error;
+      }
+
+  }
 };

@@ -2,6 +2,8 @@
 import { ref, onMounted} from 'vue'
 import type { FriendRequest } from '@/type/Friends'
 import { useListStore } from '@/stores/list';
+import { friendsService } from '@/services/friends.service';
+import { toast } from 'vue-sonner';
 
 const listStore = useListStore();
 const requests = ref<FriendRequest[]>([])
@@ -15,6 +17,29 @@ onMounted(() => {
 })
 
 
+const handleRequest = async (isAccept: boolean, requestId: string) => {
+  try {
+    const friendid=await friendsService.handelFriendRequest(requestId, isAccept ? 'accept' : 'reject');
+    
+    if (isAccept) {
+      // 查找默认分组
+      const defaultGroup = listStore.userGroups.find(g => g.name === '我的好友');
+      if (defaultGroup) {
+        await friendsService.setFriendGroup(friendid, defaultGroup.group_id);
+        listStore.updateFriendGroup(friendid, defaultGroup.group_id);
+      }
+    }
+    
+    // 更新请求状态
+    const index = requests.value.findIndex(r => r.request_id === requestId);
+    if (index !== -1) {
+      requests.value[index].status = isAccept ? '1' : '2';
+    }
+  } catch (error) {
+    console.error('处理请求失败:', error);
+    toast.error(isAccept ? '添加好友失败' : '拒绝请求失败');
+  }
+}
 </script>
 
 <template>
@@ -34,8 +59,8 @@ onMounted(() => {
         </div>
         <div class="action-buttons">
           <template v-if="request.status === '0'">
-            <button class="accept-btn">同意</button>
-            <button class="reject-btn">拒绝</button>
+            <button class="accept-btn" @click="handleRequest(true, request.request_id)">同意</button>
+            <button class="reject-btn" @click="handleRequest(false, request.request_id)">拒绝</button>
           </template>
           <span v-else-if="request.status === '1'" class="status-text p-2">已同意</span>
           <span v-else class="status-text p-2">已拒绝</span>
@@ -150,3 +175,4 @@ onMounted(() => {
   }
 }
 </style>
+

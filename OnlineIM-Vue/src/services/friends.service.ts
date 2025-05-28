@@ -1,7 +1,7 @@
 import api from './api.service';
 import type { FormContext } from 'vee-validate';
 import { useListStore } from '@/stores/list';
-import {type FriendRequest, type FriendRequestsResponse, type FriendsResponse} from "@/type/Friends.ts";
+import {type FriendRequest,  type FriendsResponse} from "@/type/Friends.ts";
 
 
 export const friendsService = {
@@ -80,5 +80,14 @@ export const friendsService = {
       throw error;
     }
   },
+  async handelFriendRequest(requestId: string,request:string):Promise<string> {
+    try {
+      const response = await api.post<string>(`/friends/${requestId}/handle`,{type:request});
+      return response.data;
+    }
+    catch (error) {
+      throw error;
+    }
+  }
 
 };
