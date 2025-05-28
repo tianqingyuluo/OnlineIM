@@ -46,12 +46,13 @@ const unpinnedConversations = computed(() => {
 const hasConversations = computed(() => pinnedConversations.value.length > 0 || unpinnedConversations.value.length > 0);
 
 function handleChatClick(conversation: Conversation) {
-  activeId.value = conversation.conversation_id
-  emits('chatSelected', conversation)
+  activeId.value = conversation.conversation_id;
+  emits('chatSelected', conversation);
+  listStore.setConversationFieldsToNull(conversation.conversation_id);
   if (conversation.type=='private')
-    router.push(`/main/chat/private/${conversation.conversation_id}`)
+    router.push(`/main/chat/private/${conversation.conversation_id}`);
   else
-    router.push(`/main/chat/group/${conversation.conversation_id}`)
+    router.push(`/main/chat/group/${conversation.conversation_id}`);
 }
 </script>
 
@@ -97,13 +98,17 @@ function handleChatClick(conversation: Conversation) {
                         class="w-full h-full object-cover"
                       />
                     </div>
-                    <div class="flex flex-col flex-grow space-y-1">
+                    <div class="flex flex-col flex-grow space-y-1 relative">
                       <span class="text-[18px] font-bold">
                         {{ conversation.target_info?.name || 'Unknown' }}
                       </span>
                       <span class="text-[13px] text-gray-500 truncate">
+                        <span v-if="conversation.is_at" class="text-red-500">[有人@我]</span>
                         {{ conversation.last_message?.content_preview || '无消息' }}
                       </span>
+                      <span v-if="conversation.notreadednumber && conversation.notreadednumber !== 0" :class="{'absolute top-0 right-0 text-white text-xs rounded-full px-2 py-1': true, 'bg-red-500': !conversation.is_muted, 'bg-gray-50': conversation.is_muted}">
+                          {{ conversation.notreadednumber >= 100 ? '99+' : conversation.notreadednumber }}
+                        </span>
                     </div>
                   </div>
                 </SidebarMenuButton>

@@ -215,25 +215,25 @@ export const dbService = {
     const userStore = useUserStore();
     const userId = userStore.loggedInUser.user_id;
     const db = await initDB();
+    // 开启事务
     const tx = db.transaction(HISTORY_STORE, 'readwrite');
+    const store = tx.objectStore(HISTORY_STORE);
 
-    // 获取现有消息ID集合（一次性读取优化性能）
+    // 在事务内部获取现有消息ID集合
     const existingIds = new Set(
-        await db.getAllKeys(HISTORY_STORE)
+        await store.getAllKeys()
     );
 
     // 过滤并处理需要插入的项
-    await Promise.all([
-      ...items.map(item => {
-        if (!existingIds.has(item.message_id)) {
-          const clonedItem = JSON.parse(JSON.stringify(item));
-          clonedItem.user_id = userId;
-          return tx.store.put(clonedItem);
-        }
-        return Promise.resolve(); // 已存在的跳过
-      }),
-      tx.done
-    ]);
+    for (const item of items) {
+      if (!existingIds.has(item.message_id)) {
+        const clonedItem = JSON.parse(JSON.stringify(item));
+        clonedItem.user_id = userId;
+        store.put(clonedItem); // 注意：这里不需要 await，因为我们会在最后 await tx.done
+      }
+    }
+    // 等待事务完成
+    await tx.done;
   },
 
   // 新增的多段区间支持方法

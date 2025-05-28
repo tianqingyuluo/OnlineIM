@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
+import { toast } from 'vue-sonner'
 import { useRoute } from 'vue-router'
 import { userService } from '@/services/user.service'
 import { useListStore } from '@/stores/list'
@@ -16,8 +18,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { conversationService } from '@/services/conversation.service'
 
 const route = useRoute()
+const router = useRouter()
 const listStore = useListStore()
 const user = ref<User | null>(null)
 const friendInfo = ref<Friend | null>(null)
@@ -116,6 +120,35 @@ async function handleGroupChange(newGroupId: string) {
     }
   }
 }
+async function handleSendMessage() {
+  if (!user.value) return;
+
+  try {
+    // 查找现有私聊会话
+    const privateChat = listStore.conversations.find(c => 
+      c.type === 'private' && c.target_info.id === user.value?.user_id
+    );
+
+    if (privateChat) {
+      router.push(`/main/chat/private/${privateChat.conversation_id}`);
+      return;
+    }
+
+    // 创建新会话
+    const newConversation = await conversationService.createConversation(
+      user.value.user_id,
+      'private'
+    );
+    
+    // 更新会话列表
+    listStore.conversations.push(newConversation);
+    router.push(`/main/chat/private/${newConversation.conversation_id}`);
+    
+  } catch (error) {
+    console.error('创建会话失败:', error);
+    toast.error('会话创建失败');
+  }
+}
 </script>
 
 <template>
@@ -176,7 +209,12 @@ async function handleGroupChange(newGroupId: string) {
         </Select>
       </div>
     </div>
-    <Button class="flex flex-col items-center justify-center w-full p-4 mt-8 hover:scale-105 transition-transform duration-200">发消息</Button>
+    <Button 
+  class="flex flex-col items-center justify-center w-full p-4 mt-8 hover:scale-105 transition-transform duration-200"
+  @click="handleSendMessage"
+>
+  发消息
+</Button>
   </div>
   <div v-else class="loading">
     加载中...
@@ -220,4 +258,6 @@ async function handleGroupChange(newGroupId: string) {
 .nickname {
   font-weight: bold;
 }
+
+
 </style>

@@ -42,7 +42,7 @@ onMounted(() => {
         </div>
       </div>
 
-      <div v-if="!hasMore && requests.length > 0" class="no-more">没有更多好友请求了</div>
+
     </div>
 
   </div>

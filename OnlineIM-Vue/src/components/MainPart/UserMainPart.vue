@@ -331,8 +331,9 @@ async function handleResendMessage(message: MessageResponse) {
       <Textarea
           id="message-2"
           ref="messageInputRef"
-          class="h-full w-full resize-none pr-20 rounded-none focus:ring-0 focus:shadow-none"
-          style="outline: none;box-shadow: none; font-size: 24px"
+          class="h-full w-full resize-none pr-20 rounded-none focus:ring-0 focus:shadow-none whitespace-pre-wrap"
+          style="outline: none; box-shadow: none; font-size: 24px; word-break: break-all"
+          :placeholder=" '输入消息...'"
       />
       <Button
           class="absolute bottom-4 right-4 transition-all duration-200 active:scale-95 hover:bg-primary/90 hover:scale-125"

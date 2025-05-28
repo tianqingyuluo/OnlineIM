@@ -68,5 +68,14 @@ export const conversationService = {
     }catch(error: any) {
       throw error;
     }
+  },
+  async createConversation(target_id: string, type: string): Promise<Conversation> {
+    try {
+      const response = await api.post<Conversation>(`/conversations/create`, {target_id:target_id,type:type})
+      return response.data
+    }
+    catch(error: any) {
+      throw error;
+    }
   }
 };

@@ -8,7 +8,6 @@ import Tools from "@/components/MainPart/tools.vue";
 import UserTextArea from "@/components/MainPart/UserTextArea.vue";
 import { groupService } from '@/services/group.service'
 import type { GroupResponse } from '@/type/group'
-import { onActivated } from 'vue'
 import GroupInfoCard from '@/components/independent/group/GroupInfoCard.vue'
 import { onClickOutside } from '@vueuse/core'
 import { useUserStore } from '@/stores/user.ts';
@@ -57,7 +56,7 @@ const groupId = computed(() => {
   const id = route.params.id
   return Array.isArray(id) ? id[0] : id
 })
-
+const mutedTime = ref(0);
 const historyStore = useHistoryStore();
 
 onMounted(async () => {
@@ -216,10 +215,6 @@ async function handleSendClick() {
   }
 }
 
-onActivated(async () => {
-  console.log('组件被激活')
-  // 可以在这里添加数据刷新逻辑
-})
 const showMenu = ref(false)
 
 function toggleMenu() {
@@ -321,7 +316,7 @@ async function handleResendMessage(message: MessageResponse) {
 
             <!-- 自己的消息 -->
             <template v-else>
-              <div class="flex items-start">
+              <div class="flex items-start max-w-[80%]:">
                 <div class="relative">
                   <CircleEllipsis
                       v-if="historyStore.isMessagePending(msg.client_message_id) &&!historyStore.isMessageTimeout(msg.client_message_id)"
@@ -349,20 +344,25 @@ async function handleResendMessage(message: MessageResponse) {
     </div>
     <Tools @select="handleEmojiSelect" />
     <!-- 输入区域 -->
-    <div class="relative h-1/4 border-t">
-      <Textarea
-          id="message-2"
-          ref="messageInputRef"
-          class="h-full w-full resize-none pr-20 rounded-none focus:ring-0 focus:shadow-none"
-          style="outline: none;box-shadow: none; font-size: 24px"
-      />
-      <Button
-        class="absolute bottom-4 right-4 transition-all duration-200 active:scale-95 hover:bg-primary/90 hover:scale-125"
-        @click="handleSendClick"
-      >
-        发送
-      </Button>
-    </div>
+    
+    <div class="relative h-1/4 border-t" :class="{'ismuted': mutedTime > 0}">
+    <Textarea
+        id="message-2"
+        ref="messageInputRef"
+        class="h-full w-full resize-none pr-20 rounded-none focus:ring-0 focus:shadow-none whitespace-pre-wrap"
+        style="outline: none; box-shadow: none; font-size: 24px; word-break: break-all"
+        :disabled="mutedTime > 0"
+        :placeholder="mutedTime > 0 ? `您已被禁言，剩余禁言时间为${mutedTime}` : '输入消息...'"
+    />
+    <Button
+      class="absolute bottom-4 right-4 transition-all duration-200 active:scale-95 hover:bg-primary/90 hover:scale-125"
+      :disabled="mutedTime > 0"
+      :style="mutedTime > 0 ? 'background-color: gray; cursor: not-allowed;' : ''"
+      @click="handleSendClick"
+    >
+      发送
+    </Button>
+  </div>
   </div>
   <div v-else class="flex items-center justify-center h-full">
     加载中...

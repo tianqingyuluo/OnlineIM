@@ -214,5 +214,15 @@ export const groupService = {
       console.error('申请加入群组失败:', error);
       throw error;
     }
-  }
+  },
+  
+  async updateGroupByID(groupId: string, request: any): Promise<GroupResponse | null> {
+    try {
+        const response = await api.put<GroupResponse>(`/groups/${groupId}`, request);
+        return response.data;
+    } catch (error) {
+        console.error('更新群组信息失败:', error);
+        return null;
+    }
+}
 };

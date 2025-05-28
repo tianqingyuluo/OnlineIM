@@ -37,14 +37,12 @@ export const useListStore = defineStore('list', {
         return;
       }
       const notificationStore = useNotificationStore();
-
-      
       await useUserStore().updateToken();
 
 
 
       if (!this.hasInit) {
-        this.hasInit = false
+        this.hasInit =true
         console.log('开始初始化用户数据...')
         console.log('当前用户ID:', userStore.loggedInUser.user_id)
 
@@ -67,6 +65,7 @@ export const useListStore = defineStore('list', {
             dbService.getAll(STORES.USER_GROUPS, userId),
             dbService.getAll(STORES.BLACKLIST, userId)
           ]);
+          console.log('IndexedDB加载完成')
           if (dbConvs){
             if (dbConvs.length) {
               this.conversations = dbConvs;
@@ -127,11 +126,11 @@ export const useListStore = defineStore('list', {
               console.error(`${serviceNames[index]}加载失败:`, result.reason);
             }
           });
-          
+          console.log('所有服务加载完成,开始同步到indexdb');
           // 更新成功返回的数据
           if (userGroupsResult.status === 'fulfilled') {
             this.userGroups = userGroupsResult.value;
-            await dbService.bulkPut(STORES.USER_GROUPS, this.userGroups);
+
             for (const group of this.userGroups) {
               for (const friend of group.friends) {
                 const url = friend.avatar_url;
@@ -154,7 +153,7 @@ export const useListStore = defineStore('list', {
           }
           if (groupsResult.status === 'fulfilled') {
             this.groups = groupsResult.value;
-            await dbService.bulkPut(STORES.GROUPS, this.groups);
+
             const groupAvatars = this.groups.map(group => group.avatar_url);
             for (const url of groupAvatars) {
               if (url) {
@@ -185,17 +184,12 @@ export const useListStore = defineStore('list', {
             // 序列化数据，确保所有属性可克隆
             const serializeData = (data: any) => JSON.parse(JSON.stringify(data));
             
-            // 验证数据有效性
-            const isValidData = (data: any) => {
-              return data !== undefined && data !== null && (Array.isArray(data) ? data.length > 0 : true);
-            };
-            
             await Promise.allSettled([
-              isValidData(this.conversations) && dbService.bulkPut(STORES.CONVERSATIONS, serializeData(this.conversations)),
-              isValidData(this.friends) && dbService.bulkPut(STORES.FRIENDS, serializeData(this.friends)),
-              isValidData(this.groups) && dbService.bulkPut(STORES.GROUPS, serializeData(this.groups)),
-              isValidData(this.userGroups) && dbService.bulkPut(STORES.USER_GROUPS, serializeData(this.userGroups)),
-              isValidData(this.blacklist) && dbService.bulkPut(STORES.BLACKLIST, serializeData(this.blacklist))
+              dbService.bulkPut(STORES.CONVERSATIONS, serializeData(this.conversations)),
+              dbService.bulkPut(STORES.FRIENDS, serializeData(this.friends)),
+              dbService.bulkPut(STORES.GROUPS, serializeData(this.groups)),
+              dbService.bulkPut(STORES.USER_GROUPS, serializeData(this.userGroups)),
+              dbService.bulkPut(STORES.BLACKLIST, serializeData(this.blacklist))
             ]);
           } catch (error) {
             console.error('IndexedDB存储失败:', error);
@@ -312,7 +306,13 @@ async getGroupJoinRequestList() {
     console.error('获取加群请求列表失败:', error);
     throw error;
     }
-  },
+  },async setConversationFieldsToNull(conversationId: string) {
+      const conversation = this.conversations.find(c => c.conversation_id === conversationId);
+      if (conversation) {
+        conversation.is_at = undefined;
+        conversation.notreadednumber = 0;
+      }
+    }
 },
   persist: true,
 });

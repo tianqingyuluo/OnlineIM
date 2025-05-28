@@ -7,6 +7,9 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
+  ContextMenuSub,
+  ContextMenuSubTrigger,
+  ContextMenuSubContent,
 } from '@/components/ui/context-menu'
 import { useUserStore } from '@/stores/user';
 import { groupMembersService } from '@/services/groupmembers.service';
@@ -17,17 +20,20 @@ const props = defineProps<{
   myRole: string
 }>()
 
-
 const members = ref<GroupMemberAll[]>([])
 const offset = ref(0)
 const loading = ref(false)
 const hasMore = ref(true)
-const userStore=useUserStore()
+const userStore = useUserStore()
 const otherStore = useOtherStore()
-
+const subMenuOpenStates = ref<Record<string, boolean>>({})
 
 function onContextMenuOpenChange(value: boolean) {
   otherStore.setContextMenuOpen(value)
+  if (!value) {
+    // 当一级菜单关闭时，关闭所有子菜单
+    subMenuOpenStates.value = {}
+  }
 }
 
 async function handleKick(member: GroupMemberAll) {
@@ -51,9 +57,9 @@ async function handleSetAdmin(member: GroupMemberAll) {
   }
 }
 
-async function handleRemoveAdmin(member: GroupMemberAll) { // 参数类型已修改
+async function handleRemoveAdmin(member: GroupMemberAll) {
   try {
-    await groupMembersService.removeAdmin(props.groupId, member.user_info.user_id) // 调整属性访问
+    await groupMembersService.removeAdmin(props.groupId, member.user_info.user_id)
     const index = members.value.findIndex(m => m.user_info.user_id === member.user_info.user_id)
     if (index !== -1) {
       members.value[index].role = 'member'
@@ -63,29 +69,29 @@ async function handleRemoveAdmin(member: GroupMemberAll) { // 参数类型已修
   }
 }
 
-async function handleMute(member: GroupMemberAll) { // 参数类型已修改
+async function handleMute(member: GroupMemberAll, time:number) {
   try {
-    await groupMembersService.muteMember(props.groupId, member.user_info.user_id, 3600) // 调整属性访问
+    await groupMembersService.muteMember(props.groupId, member.user_info.user_id, time)
   } catch (error) {
     console.error('禁言失败:', error)
   }
 }
 
-async function handleUnmute(member: GroupMemberAll) { // 参数类型已修改
+async function handleUnmute(member: GroupMemberAll) {
   try {
-    await groupMembersService.unmuteMember(props.groupId, member.user_info.user_id) // 调整属性访问
+    await groupMembersService.unmuteMember(props.groupId, member.user_info.user_id)
     const index = members.value.findIndex(m => m.user_info.user_id === member.user_info.user_id)
     if (index !== -1) {
-      members.value[index].is_muted = false // 根据 GroupMemberAll 结构调整
+      members.value[index].is_muted = false
     }
   } catch (error) {
     console.error('取消禁言失败:', error)
   }
 }
 
-async function handleTransferOwner(member: GroupMemberAll) { // 参数类型已修改
+async function handleTransferOwner(member: GroupMemberAll) {
   try {
-    await groupMembersService.transferOwnership(props.groupId, member.user_info.user_id) // 调整属性访问
+    await groupMembersService.transferOwnership(props.groupId, member.user_info.user_id)
     const index = members.value.findIndex(m => m.user_info.user_id === member.user_info.user_id)
     if (index !== -1) {
       members.value[index].role = 'owner'
@@ -100,13 +106,13 @@ async function handleTransferOwner(member: GroupMemberAll) { // 参数类型已�
 }
 
 async function handleUpdateNickname(member: GroupMemberAll) {
-  const newNickname = prompt('请输入新的昵称', member.user_info.nickname) // 调整属性访问
+  const newNickname = prompt('请输入新的昵称', member.user_info.nickname)
   if (newNickname && newNickname !== member.user_info.nickname) {
     try {
       await groupMembersService.updateNickname(props.groupId, member.user_info.user_id, newNickname)
       const index = members.value.findIndex(m => m.user_info.user_id === member.user_info.user_id)
       if (index !== -1) {
-        members.value[index].user_info.nickname = newNickname // 更新 nickname 字段
+        members.value[index].user_info.nickname = newNickname
       }
     } catch (error) {
       console.error('更新昵称失败:', error)
@@ -116,7 +122,6 @@ async function handleUpdateNickname(member: GroupMemberAll) {
 
 async function loadMembers() {
   if (loading.value || !hasMore.value) return
-
   loading.value = true
   try {
     const response = await groupService.getGroupMembers(props.groupId, {
@@ -156,8 +161,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-
-  <div class="members-list-container " @click.stop>
+  <div class="members-list-container" @click.stop>
     <div class="list-header flex items-center">
       <button
           class="mr-2 p-1 rounded-full hover:bg-gray-100 transition-colors"
@@ -173,7 +177,6 @@ onUnmounted(() => {
       暂无群成员
     </div>
     <div v-else>
-      <!-- 将上下文菜单移到循环内部 -->
       <div v-for="member in members" :key="member.user_info.user_id">
         <ContextMenu @update:open="onContextMenuOpenChange">
           <ContextMenuTrigger>
@@ -199,9 +202,16 @@ onUnmounted(() => {
               <ContextMenuItem @click="handleRemoveAdmin(member)" v-if="member.role === 'admin'">
                 取消管理员
               </ContextMenuItem>
-              <ContextMenuItem @click="handleMute(member)" v-if="!member.is_muted">
-                禁言
-              </ContextMenuItem>
+              <ContextMenuSub v-model:open="subMenuOpenStates[member.user_info.user_id]">
+                <ContextMenuSubTrigger inset>
+                  禁言
+                </ContextMenuSubTrigger>
+                <ContextMenuSubContent class="origin-left left-full ml-1">
+                  <ContextMenuItem @click="handleMute(member, 600)">禁言10分钟</ContextMenuItem>
+                  <ContextMenuItem @click="handleMute(member, 1800)">禁言半小时</ContextMenuItem>
+                  <ContextMenuItem @click="handleMute(member, 3600)">禁言一小时</ContextMenuItem>
+                </ContextMenuSubContent>
+              </ContextMenuSub>
               <ContextMenuItem @click="handleUnmute(member)" v-if="member.is_muted">
                 取消禁言
               </ContextMenuItem>
@@ -216,12 +226,19 @@ onUnmounted(() => {
               <ContextMenuItem @click="handleKick(member)" v-if="member.role === 'member'">
                 踢出群聊
               </ContextMenuItem>
-              <!-- <ContextMenuItem @click="handleMute(member)" v-if="member.role !== 'muted'">
-                禁言
-              </ContextMenuItem>
-              <ContextMenuItem @click="handleUnmute(member)" v-if="member.role === 'muted'">
+              <ContextMenuSub v-model:open="subMenuOpenStates[member.user_info.user_id]">
+                <ContextMenuSubTrigger inset>
+                  禁言
+                </ContextMenuSubTrigger>
+                <ContextMenuSubContent class="origin-left left-full ml-1">
+                  <ContextMenuItem @click="handleMute(member, 600)">禁言10分钟</ContextMenuItem>
+                  <ContextMenuItem @click="handleMute(member, 1800)">禁言半小时</ContextMenuItem>
+                  <ContextMenuItem @click="handleMute(member, 3600)">禁言一小时</ContextMenuItem>
+                </ContextMenuSubContent>
+              </ContextMenuSub>
+              <ContextMenuItem @click="handleUnmute(member)" v-if="member.is_muted">
                 取消禁言
-              </ContextMenuItem> -->
+              </ContextMenuItem>
             </template>
           </ContextMenuContent>
         </ContextMenu>
@@ -241,24 +258,20 @@ onUnmounted(() => {
   position: absolute;
   background: white;
 }
-
 .list-header {
   padding-bottom: 10px;
   border-bottom: 1px solid #eee;
   margin-bottom: 10px;
 }
-
 .list-header h3 {
   font-size: 16px;
   font-weight: 500;
 }
-
 .empty-message {
   text-align: center;
   padding: 20px;
   color: #999;
 }
-
 .member-item {
   display: flex;
   align-items: center;
@@ -266,33 +279,27 @@ onUnmounted(() => {
   cursor: pointer;
   transition: background-color 0.2s ease;
 }
-
 .member-item:hover {
   background-color: #f5f5f5;
   border-radius: 6px;
 }
-
 .avatar {
   width: 40px;
   height: 40px;
   border-radius: 50%;
   margin-right: 10px;
 }
-
 .member-info {
   display: flex;
   flex-direction: column;
 }
-
 .nickname {
   font-weight: bold;
 }
-
 .role {
   color: #666;
   font-size: 0.8em;
 }
-
 .loading, .no-more {
   text-align: center;
   padding: 10px;

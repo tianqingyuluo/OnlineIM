@@ -12,6 +12,7 @@ import {toast} from 'vue-sonner';
 import AddFriendModal from '@/components/independent/group/AddFriendModal.vue';
 import {conversationService} from "@/services/conversation.service.ts";
 import GroupMemberProfileModal from '@/components/independent/group/GroupMemberProfileModal.vue'; // 引入成员资料模态框组件
+import GroupSettings from './GroupSettings.vue';
 
 const showAddFriendModal = ref(false);
 const showMemberProfileModal = ref(false); // 控制成员资料模态框显示状态
@@ -29,6 +30,11 @@ const groupMembersListRef = shallowRef<{
 } | null>(null)
 const showMembersList = ref(false)
 const showAnnouncement = ref(false); // 控制公告组件显示状态
+const showSettings = ref(false);
+
+const showGroupSettings = () => {
+  showSettings.value = true;
+};
 
 // 添加监听确保子组件加载
 watch(() => showMembersList.value, (newVal) => {
@@ -119,32 +125,6 @@ const handleDissolveGroup = async () => {
   }
 }
 
-const changeAvatar = () => {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'image/png, image/jpeg';
-  
-  input.onchange = async (e) => {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (!file) return;
-    
-    // 验证文件类型
-    if (!['image/png', 'image/jpeg'].includes(file.type)) {
-      toast.error('请选择PNG或JPG格式的图片');
-      return;
-    }
-    try {
-      // 上传群头像
-      props.group.avatar_url = await groupService.uploadGroupAvatar(props.group.group_id, file);
-      toast.success('群头像更新成功');
-    } catch (error) {
-      console.error('群头像上传失败:', error);
-      toast.error('群头像上传失败，请重试');
-    }
-  };
-  
-  input.click();
-}
 // 获取群成员
 const fetchMembers = async () => {
   try {
@@ -183,15 +163,15 @@ onMounted(() => {
           <div class="relative flex-shrink-0">
             <img
                 :src="group.avatar_url || '/images/default-group-avatar.png'"
-                class="w-20 h-20 rounded-full mr-5"
+                class="w-20 h-20 rounded-full mr-5"                
                 alt="群头像"
             >
             <div
                 v-if="myRole === 'owner' || myRole === 'admin'"
                 class="absolute inset-0 flex items-center justify-center w-20 h-20 rounded-full mr-5 bg-black/80 opacity-0 hover:opacity-100 transition-opacity duration-200 cursor-pointer"
-                @click="changeAvatar"
+                @click.stop="showGroupSettings"
             >
-              <span class="text-white text-xs">更改头像</span>
+              <span class="text-white text-xs">更改群信息</span>
             </div>
           </div>
           <div class="flex-1 min-w-0">
@@ -362,6 +342,13 @@ onMounted(() => {
         :member="selectedMember"
         @close="showMemberProfileModal = false"
     />
+    <Transition name="fade-slide" mode="out-in">
+    <GroupSettings
+      v-if="showSettings"
+      :groupId="group.group_id"
+      @close="showSettings = false"
+    />
+    </Transition>
   </div>
 
 </template>

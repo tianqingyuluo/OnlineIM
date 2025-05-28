@@ -79,6 +79,7 @@ import * as z from 'zod'
 import FriendSelection from '@/components/independent/group/FriendSelection.vue'
 import { meService } from '@/services/me.service'
 import {useUserStore} from "@/stores/user.ts";
+import {conversationService} from "@/services/conversation.service.ts";
 
 const router = useRouter()
 const listStore = useListStore()
@@ -126,7 +127,10 @@ const saveGroup = handleSubmit(async (values) => {
     })
 
     listStore.groups = [...listStore.groups, response]
-    router.push({
+    const targetId=response.group_id
+    const conversationResponse = await conversationService.createConversation(targetId,'group')
+    listStore.conversations.push(conversationResponse)
+    await router.push({
       name: 'chat',
       params: {
         type: 'group',

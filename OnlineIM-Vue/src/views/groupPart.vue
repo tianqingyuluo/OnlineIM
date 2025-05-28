@@ -4,6 +4,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { groupService } from '@/services/group.service'
 import type { GroupResponse } from '@/type/group'
 import {Button} from "@/components/ui/button";
+import { useListStore } from '@/stores/list'
+import { conversationService } from '@/services/conversation.service'
+import { toast } from 'vue-sonner'
 
 const route = useRoute()
 const group = ref<GroupResponse | null>(null)
@@ -30,6 +33,37 @@ const fetchGroupInfo = async () => {
 onMounted(fetchGroupInfo)
 
 const router = useRouter()
+const listStore = useListStore()
+
+async function handleSendMessage() {
+  if (!group.value) return;
+
+  try {
+    // 查找现有群聊会话
+    const groupChat = listStore.conversations.find(c => 
+      c.type === 'group' && c.target_info.id === group.value?.group_id
+    );
+
+    if (groupChat) {
+      router.push(`/main/chat/group/${groupChat.conversation_id}`);
+      return;
+    }
+
+    // 创建新会话
+    const newConversation = await conversationService.createConversation(
+      group.value.group_id,
+      'group'
+    );
+    
+    // 更新会话列表
+    listStore.conversations.push(newConversation);
+    router.push(`/main/chat/group/${newConversation.conversation_id}`);
+    
+  } catch (error) {
+    console.error('创建会话失败:', error);
+    toast.error('会话创建失败');
+  }
+}
 </script>
 
 <template>
@@ -65,12 +99,12 @@ const router = useRouter()
       </div>
       <div class="info-item">
         <span class="label">创建时间:</span>
-        <span>{{ group.created_at }}</span>
+        <span>{{ group.create_at }}</span>
       </div>
     </div>
     <Button 
   class="flex flex-col items-center justify-center w-full p-4 mt-8 hover:scale-105 transition-transform duration-200"
-  @click="router.push(`/main/chat/group/${groupId}`)"
+  @click="handleSendMessage"
 >
   发消息
 </Button>
