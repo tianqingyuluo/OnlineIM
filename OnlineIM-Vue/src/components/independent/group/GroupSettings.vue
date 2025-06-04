@@ -123,7 +123,7 @@ const saveSettings = handleSubmit(async (values) => {
     const updatedGroup = await groupService.updateGroupByID(props.groupId, {
       name: values.name,
       description: values.description,
-      avatar_url: previewAvatarUrl.value || groupInfo.value.avatar_url
+      avatar_url:  groupInfo.value.avatar_url ||previewAvatarUrl.value
     });
     
     // 更新本地数据

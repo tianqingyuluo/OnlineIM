@@ -76,10 +76,19 @@ function handleScroll(e: Event) {
 
 onMounted(async () => {
   try {
-    currentUser.value = await userService.getUserById(userId.value)
+    
+    const id = route.params.id
+    let conversationId = Array.isArray(id) ? id[0] : id
+    let conversation = listStore.conversations.find(c => c.conversation_id === conversationId)
+    const currentUserId=conversation?.target_info.id || ''
+    console.log("拉取私聊数据", conversation, currentUserId)
+    currentUser.value = await userService.getUserById(currentUserId)
+    console.log("拉取对方消息：",currentUser.value )
     // 改为调用 historyStore 的初始化和加载方法
     await historyStore.init(); // 初始化 store 状态
-    await historyStore.loadInitialHistory(userStore.loggedInUser.user_id, userId.value, false); // 加载初始历史，isGroup 为 false
+    console.log("拉取私聊数据", conversationId)
+    
+    await historyStore.loadInitialHistory(userStore.loggedInUser.user_id, conversationId, false); // 加载初始历史，isGroup 为 false
 
     const chatContainer = document.querySelector('.overflow-y-auto')
     if (chatContainer) {
@@ -94,8 +103,6 @@ onMounted(async () => {
     if (textarea) {
       textarea.addEventListener('keydown', handleKeyDown)
     }
-
-
 
   } catch (error) {
     console.error('初始化失败:', error)
@@ -221,6 +228,7 @@ async function handleResendMessage(message: MessageResponse) {
     
     // 直接通过WebSocket重新发送消息
     const websocketMessage = {
+      sender_id: userStore.loggedInUser?.user_id,
       conversation_id: message.conversation_id,
       receiver_id: userId.value,
       message_type: 'text',

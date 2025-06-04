@@ -7,7 +7,8 @@ import { debounce } from 'lodash';
 import { useListStore } from '@/stores/list';
 import type {UserSearchResult} from "@/type/User.ts";
 import SendGroupRequest from "@/components/independent/group/SendGroupRequest.vue";
-import SendFriendRequest from "@/components/independent/friends/SendFriendRequest.vue"; // 引入 listStore
+import SendFriendRequest from "@/components/independent/friends/SendFriendRequest.vue";
+import {Button} from "@/components/ui/button"; // 引入 listStore
 
 const listStore = useListStore(); // 使用 listStore
 
@@ -141,7 +142,7 @@ function handleAddGroup(group: GroupSearchResult) {
         >
         <div class="flex flex-col">
           <span class="text-sm font-medium">{{ result.name }}</span>
-          <span class="text-xs text-gray-500">成员: {{ result.member_count }}</span>
+          <span class="text-xs text-gray-500">群描述: {{ result.description }}</span>
         </div>
         
         <!-- 根据群组状态显示不同内容 -->

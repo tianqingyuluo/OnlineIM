@@ -37,17 +37,22 @@ export const useListStore = defineStore('list', {
         return;
       }
       const notificationStore = useNotificationStore();
-      await useUserStore().updateToken();
+
 
 
 
       if (!this.hasInit) {
-        this.hasInit =true
+        this.hasInit =false
         console.log('开始初始化用户数据...')
         console.log('当前用户ID:', userStore.loggedInUser.user_id)
 
+        try {
+          this.FriendRequestsList=await friendsService.getReceivedFriendRequests();
+        }
+        catch (error) {
+          console.log(error);
+        }
 
-        this.FriendRequestsList=await friendsService.getReceivedFriendRequests();
         if (this.FriendRequestsList.length > 0) {
           notificationStore.hasnewfriend = true;
         }
@@ -178,9 +183,9 @@ export const useListStore = defineStore('list', {
             groups: this.groups,
             blacklist: this.blacklist
           });
-
+          const friendGroup = this.userGroups.find(g=>g.name==="我的好友")
           // 如果用户分组为空则创建默认分组
-          if (this.userGroups.length === 0) {
+          if (!friendGroup) {
             try {
               const defaultGroup = await friendGroupsService.createFriendGroup('我的好友');
               this.userGroups.push(defaultGroup);
@@ -190,7 +195,30 @@ export const useListStore = defineStore('list', {
               toast.error('初始化默认分组失败');
             }
           }
-          
+          let defaultGroup = this.userGroups.find(g => g.name === '我的好友');
+          const friendsWithNoGroup = this.friends
+              .filter(friend => friend.friend_info.friend_group_id == null)
+              .map(friend => friend.friend_info);
+          const friendIds = friendsWithNoGroup.map(friend => friend.user_id);
+          if (friendIds.length > 0) {
+            try {
+
+              for (const friendId of friendIds) {
+
+                await friendsService.setFriendGroup(friendId, defaultGroup.group_id);
+
+
+                await this.updateFriendGroup(friendId, defaultGroup.group_id);
+              }
+
+              toast.success(`已将 ${friendIds.length} 个好友移动到默认分组`);
+            } catch (error) {
+              console.error("更新好友分组失败:", error);
+              toast.error("移动好友失败");
+            }
+          } else {
+            console.log("没有未分组的好友");
+          }
           // 同步到IndexedDB
           try {
             // 序列化数据，确保所有属性可克隆
@@ -242,16 +270,9 @@ export const useListStore = defineStore('list', {
 
     // 更新好友分组信息
     async updateFriendGroup(friendshipId: string, newGroupId: string) {
-      // 更新friends数组中的好友分组信息
-      const friendIndex = this.friends.findIndex(friend => friend.friendship_id === friendshipId);
-      if (friendIndex !== -1) {
-        this.friends[friendIndex].friend_info.friend_group_id = newGroupId;
-      }
-
       // 更新userGroups数组中的好友分组信息
       const friend = this.friends.find(f => f.friendship_id === friendshipId);
       if (!friend) return;
-
       // 从原分组中移除好友
       for (const group of this.userGroups) {
         const index = group.friends.findIndex(f => f.friendship_id === friendshipId);
@@ -259,6 +280,12 @@ export const useListStore = defineStore('list', {
           group.friends.splice(index, 1);
           break;
         }
+      }
+      // 更新friends数组中的好友分组信息
+      const friendIndex = this.friends.findIndex(friend => friend.friendship_id === friendshipId);
+
+      if (friendIndex !== -1) {
+        this.friends[friendIndex].friend_info.friend_group_id = newGroupId;
       }
 
       // 将好友添加到新分组
@@ -293,7 +320,7 @@ async getGroupJoinRequestList() {
     // 遍历用户的所有群组
     for (const group of this.groups) {
       // 只处理角色不是 'member' 的群组（管理员或群主）
-      if (group.my_role && group.my_role !== 'member') {
+      if (group.my_role && group.my_role !== '0') {
         try {
           // 获取该群组的加群请求
           const requests = await groupService.getGroupJoinRequests(group.group_id);

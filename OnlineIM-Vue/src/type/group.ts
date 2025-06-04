@@ -46,6 +46,7 @@ export interface GroupMemberAll {
         "nickname": string
         "avatar_url": string
     }
+    group_member_id:string
     group_nickname: string
     "role": string;
     "is_muted" : boolean
@@ -61,7 +62,7 @@ export interface GroupJoinRequestResponse {
     requestID:string
     groupID:string
     groupName:string
-    userInfo:
+    user_info:
         {
             username:string
             nickname:string

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import {onMounted, ref} from 'vue'
 import { groupService } from '@/services/group.service'
 import { toTypedSchema } from '@vee-validate/zod'
 import { useForm } from 'vee-validate'
@@ -17,20 +17,25 @@ const props = defineProps({
     })
   }
 })
+onMounted(() => {
+  console.log(props.group)
+})
 
 const emit = defineEmits(['close', 'success'])
 
-// 添加 initialValues 和 errors
-const { handleSubmit, errors } = useForm({
+const { handleSubmit, errors, defineField } = useForm({
   validationSchema: toTypedSchema(
       z.object({
         message: z.string().max(50, '消息长度不能超过50字').optional()
       })
   ),
   initialValues: {
-    message: ''  // 初始化消息字段
+    message: ''
   }
 })
+
+// 使用 defineField 创建双向绑定
+const [messageValue, messageAttrs] = defineField('message')
 
 const loading = ref(false)
 
@@ -39,8 +44,7 @@ const sendRequest = handleSubmit(async (values) => {
     loading.value = true
     console.log('提交数据:', values)
 
-    // 使用joinGroup方法发送请求
-    await groupService.joinGroup(props.group.id, values.message || '')
+    await groupService.joinGroup(props.group.group_id, values.message || '')
     emit('success')
     emit('close')
   } catch (error) {
@@ -52,7 +56,7 @@ const sendRequest = handleSubmit(async (values) => {
 </script>
 
 <template>
-  <div class="flex flex-col bg-white p-6 rounded-lg  max-w-lg mx-auto border-[2px] shadow-2xl">
+  <div class="flex flex-col bg-white p-6 rounded-lg max-w-lg mx-auto border-[2px] shadow-2xl">
     <!-- 群组信息区域 -->
     <div class="flex items-center mb-6">
       <img
@@ -70,21 +74,20 @@ const sendRequest = handleSubmit(async (values) => {
       </div>
     </div>
 
-    <!-- 修复后的消息输入区域 -->
+    <!-- 修改后的消息输入区域（不使用FormField） -->
     <div class="mb-4">
       <label class="block text-sm font-medium text-gray-700 mb-1">验证消息</label>
-      <FormField v-slot="{ field, errorMessage }" name="message">
-        <textarea
-            v-bind="field"
-            rows="3"
-            placeholder="请输入验证消息（可选）"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
-            :class="{ 'border-red-500': errors.message }"
-        ></textarea>
-        <p v-if="errorMessage" class="text-red-500 text-sm mt-1">
-          {{ errorMessage }}
-        </p>
-      </FormField>
+      <textarea
+          v-model="messageValue"
+          v-bind="messageAttrs"
+          rows="3"
+          placeholder="请输入验证消息（可选）"
+          class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
+          :class="{ 'border-red-500': errors.message }"
+      ></textarea>
+      <p v-if="errors.message" class="mt-1 text-sm text-red-600">
+        {{ errors.message }}
+      </p>
     </div>
 
     <!-- 操作按钮 -->

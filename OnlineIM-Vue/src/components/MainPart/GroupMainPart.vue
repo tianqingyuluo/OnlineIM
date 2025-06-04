@@ -62,7 +62,7 @@ const historyStore = useHistoryStore();
 onMounted(async () => {
   try {
     console.log("当前群组ID:", groupId.value);
-    const [groupInfo, groupSettings, Conversation] = await Promise.all([
+    const [groupInfo, groupSettings, Conversation] = await Promise.allSettled([
       groupService.getGroupInfo(groupId.value),
       GroupSettingService.getGroupSetting(groupId.value),
       conversationService.getConversationById(groupId.value)
@@ -70,7 +70,9 @@ onMounted(async () => {
     currentGroup.value = groupInfo;
     currentGroupSettings.value = groupSettings;
     conversation.value = Conversation;
-
+    console.log("当前群组信息:", currentGroup.value);
+    console.log("当前群组设置:", currentGroupSettings.value);
+    console.log("当前会话信息:", conversation.value)   
     // 确保组件渲染完成
     await nextTick();
 
@@ -192,7 +194,7 @@ async function handleSendClick() {
   if (messageContent) {
     try {
       if (conversation.value){
-        const conversationId = conversation.value.conversation_id || '';
+        const conversationId = groupId.value || '';
         const receiverId = groupId.value;
         const messageType = 'text';
         historyStore.sendMessage(conversationId, receiverId, messageType, messageContent,true);
@@ -232,6 +234,7 @@ async function handleResendMessage(message: MessageResponse) {
     
     // 直接通过WebSocket重新发送消息
     const websocketMessage : any = {
+      sender_id: currentUser.user_id,
       conversation_id: message.conversation_id,
       receiver_id: groupId.value,
       message_type: 'text',
@@ -251,13 +254,15 @@ async function handleResendMessage(message: MessageResponse) {
     console.error('重新发送消息失败:', error);
   }
 }
+
 </script>
 
 <template>
+
   <div v-if="currentGroup" class="flex flex-col h-full">
     <!-- 顶栏 -->
     <div class="flex items-center justify-between w-full p-4 border-b relative">
-      <span class="text-lg font-semibold">{{ currentGroup.name }}</span>
+      <span class="text-lg font-semibold">{{ currentGroup.value.name }}</span>
       <button @click="toggleMenu" ref="menuButtonRef">
         <a href="#" class="flex items-center">
           <Ellipsis class="w-5 h-5" />
@@ -272,10 +277,11 @@ async function handleResendMessage(message: MessageResponse) {
             class="absolute right-0 top-full w-80 bg-white shadow-lg z-50 h-[calc(100vh-60px)]"
         >
           <GroupInfoCard
-  :group="currentGroup" 
-  :group-settings="currentGroupSettings" 
-  :myRole="currentGroup.my_role"
-  :conversation="conversation"
+          v-if="currentGroup"
+  :group="currentGroup.value"
+  :group-settings="currentGroupSettings.value"
+  :myRole="currentGroup.value.my_role"
+  :conversation="conversation.value"
   class="h-full overflow-y-auto"
   @click.stop
 />
@@ -302,7 +308,7 @@ async function handleResendMessage(message: MessageResponse) {
             <!-- 对方消息 -->
             <template v-if="msg.sender_info.user_id !== currentUser.user_id">
               <div class="flex items-start max-w-[80%]">
-                <GroupAvatarWithMenu :avatar-url="currentGroup.avatar_url || '/images/group.png'" :alt-text="msg.sender_info.user_id"
+                <GroupAvatarWithMenu :avatar-url="msg.sender_info.avatar_url || '/images/group.png'" :alt-text="msg.sender_info.user_id"
                 :message="msg"/>
                 <div class="flex flex-col">
                   <span class="text-xs text-gray-500 mb-1">{{ msg.sender_info.nickname }}</span>

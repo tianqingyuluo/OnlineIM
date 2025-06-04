@@ -62,6 +62,7 @@ export const useHistoryStore = defineStore('history', {
     },
 
     async loadInitialHistory(userId: string, conversationId: string, isGroup: boolean = false) {
+      console.log("开始初始化历史记录");
       const ranges = await dbService.getPendingRanges(userId, conversationId);
       console.log("initial history", ranges);
       const pendingRanges = ranges.map(r => ({
@@ -115,10 +116,13 @@ export const useHistoryStore = defineStore('history', {
                 before_message_id
             );
           }
-          console.log("服务器返回数据", response.messages,response.has_more_before);
-          messages = response.messages;
-          has_more = response.has_more_before;
-
+          console.log("服务器返回数据", response);
+          messages = response;
+          if (before_message_id!==undefined)
+          {has_more = before_message_id.localeCompare(messages[messages.length - 1].seq_id) > 0;}
+          else{
+            has_more = true;
+          }
           if (messages.length > 0) {
             // 注意：updatePendingRanges 和 putHistory 可能需要根据消息类型调整
             await this.updatePendingRanges(conversationId, messages as any[]);
@@ -170,54 +174,65 @@ export const useHistoryStore = defineStore('history', {
     },
 
     async updatePendingRanges(conversationId: string, newMessages: MessageResponse[]) {
-      if (newMessages.length === 0) return;
-
-      // 1. 获取当前最新记录
+      if (!newMessages || newMessages.length === 0) return;
+      
+      // 1. 获取当前最新记录 - 添加空值检查
       const lastSeq = await dbService.getLastHistorySeq(
-          this.pendingMessages[conversationId]?.userId || '',
-          conversationId
+        this.pendingMessages[conversationId]?.userId || '',
+        conversationId
       );
-
-      // 2. 对新消息排序（升序）
-      const sortedMessages = [...newMessages].sort((a, b) =>
-          a.seq_id.localeCompare(b.seq_id)
-      );
-      const newEarliest = sortedMessages[0].seq_id;
-
-      // 3. 判断是否需要创建顶部空洞
-      if (lastSeq && newEarliest.localeCompare(lastSeq) > 0) {
+      
+      // 2. 对新消息排序（升序）- 添加防御性检查
+      const sortedMessages = [...newMessages].sort((a, b) => {
+        // 确保 seq_id 存在
+        const aSeq = a?.seq_id || '0';
+        const bSeq = b?.seq_id || '0';
+        return aSeq.localeCompare(bSeq);
+      });
+      
+      // 检查排序后数组是否为空
+      if (sortedMessages.length === 0) return;
+      
+      // 3. 判断是否需要创建顶部空洞 - 添加防御性检查
+      const newEarliest = sortedMessages[0]?.seq_id;
+      if (newEarliest && lastSeq && newEarliest.localeCompare(lastSeq) > 0) {
         await this.addPendingRange(
-            this.pendingMessages[conversationId].userId,
-            conversationId,
-            lastSeq,    // 空洞开始（已知最后一条）
-            newEarliest // 空洞结束（新数据的第一条）
+          this.pendingMessages[conversationId]?.userId || '',
+          conversationId,
+          lastSeq,
+          newEarliest
         );
       }
-
-      // 4. 原有区间填补逻辑（保持不变）
+      
+      // 4. 原有区间填补逻辑 - 添加空值检查
       const pendingInfo = this.pendingMessages[conversationId];
-      if (!pendingInfo) return;
-      const newMin = sortedMessages[0].seq_id;
-      const newMax = sortedMessages[sortedMessages.length - 1].seq_id;
-
-      for (const range of [...pendingInfo.ranges]) {
+      if (!pendingInfo || !pendingInfo.ranges) return;
+      
+      const newMin = sortedMessages[0]?.seq_id || '0';
+      const newMax = sortedMessages[sortedMessages.length - 1]?.seq_id || '0';
+      
+      // 使用数组副本来避免修改原数组时的迭代问题
+      const rangesCopy = [...pendingInfo.ranges];
+      for (const range of rangesCopy) {
+        if (!range?.minSeqId || !range?.maxSeqId) continue;
+        
         if (
-            newMin.localeCompare(range.minSeqId) <= 0 &&
-            newMax.localeCompare(range.maxSeqId) >= 0
+          newMin.localeCompare(range.minSeqId) <= 0 &&
+          newMax.localeCompare(range.maxSeqId) >= 0
         ) {
           // 完全填补，删除区间
-          await dbService.deletePendingRange(range.id!);
+          if (range.id) await dbService.deletePendingRange(range.id);
         } else if (
-            newMax.localeCompare(range.minSeqId) >= 0 &&
-            newMin.localeCompare(range.maxSeqId) <= 0
+          newMax.localeCompare(range.minSeqId) >= 0 &&
+          newMin.localeCompare(range.maxSeqId) <= 0
         ) {
           // 部分填补，分割区间
           await this.splitPendingRange(
-              pendingInfo.userId,
-              conversationId,
-              range,
-              newMin,
-              newMax
+            pendingInfo.userId,
+            conversationId,
+            range,
+            newMin,
+            newMax
           );
         }
       }
@@ -253,30 +268,53 @@ export const useHistoryStore = defineStore('history', {
     },
 
     processMessages(messages: MessageResponse[], isGroup: boolean, beforeSeqId?: string) {
-
-      if (messages.length === 0) return;
-
-      const sorted = messages.sort((a, b) => a.seq_id.localeCompare(b.seq_id));
-
-      if (isGroup) {
-        this.groupMessages = beforeSeqId ? [...sorted, ...this.groupMessages] : sorted;
-      } else {
-        this.chatMessages = beforeSeqId ? [...sorted, ...this.chatMessages] : sorted;
+      // 1. 空值检查
+      if (!messages || messages.length === 0) return;
+    
+      // 2. 安全排序 - 添加防御性检查
+      const sorted = [...messages].sort((a, b) => {
+        // 确保 seq_id 存在，不存在则放到最后
+        const aSeq = a?.seq_id || '999999999999'; // 使用一个很大的值作为默认
+        const bSeq = b?.seq_id || '999999999999';
+        return aSeq.localeCompare(bSeq);
+      }).filter(msg => msg?.seq_id); // 过滤掉无效消息
+    
+      // 3. 检查排序后是否还有有效消息
+      if (sorted.length === 0) {
+        console.warn('processMessages: 排序后没有有效消息');
+        return;
       }
-      console.log("当前历史记录",this.groupMessages);
-
-      // 缓存头像到 IndexedDB
-      messages.forEach(async (msg) => {
-        const avatarUrl = msg.sender_info?.avatar_url;
-        if (avatarUrl) {
-          try {
-            await dbService.addImageFromUrl(avatarUrl);
-          } catch (error) {
-            console.error('缓存消息发送者头像失败:', error);
-            console.error('错误的头像URL:', avatarUrl);
-          }
+    
+      try {
+        // 4. 更新消息列表 - 添加类型安全
+        if (isGroup) {
+          this.groupMessages = beforeSeqId 
+            ? [...sorted, ...(this.groupMessages || [])] 
+            : sorted;
+        } else {
+          this.chatMessages = beforeSeqId 
+            ? [...sorted, ...(this.chatMessages || [])] 
+            : sorted;
         }
-      });
+    
+        console.log("当前历史记录", this.groupMessages);
+    
+        // 5. 缓存头像 - 改进异步处理
+        const cachePromises = messages.map(msg => {
+          if (!msg?.sender_info?.avatar_url) return Promise.resolve();
+          
+          const avatarUrl = msg.sender_info.avatar_url;
+          return dbService.addImageFromUrl(avatarUrl).catch(error => {
+            console.error('缓存头像失败:', error, 'URL:', avatarUrl);
+          });
+        });
+    
+        // 可以等待所有缓存完成（可选）
+        // await Promise.all(cachePromises);
+        
+      } catch (error) {
+        console.error('处理消息时发生错误:', error);
+      }
     },
 
     updateLoadState(has_more: boolean) {
@@ -401,7 +439,8 @@ export const useHistoryStore = defineStore('history', {
       const index = this.pendingMessagesInfo.findIndex(
           item => item.clientId === message.client_message_id
       );
-
+      console.log('找到的索引:', index);
+      console.log('找到的消息:', this.pendingMessagesInfo);
       if (index !== -1) {
         if (this.pendingMessagesInfo[index].timeoutId) {
           clearTimeout(this.pendingMessagesInfo[index].timeoutId);
@@ -417,6 +456,35 @@ export const useHistoryStore = defineStore('history', {
         }
       } else {
         this.chatMessages.push(message);
+      }
+    },
+    handleGroupWebSocketMessage(message: MessageResponse) {
+
+      console.log('处理WebSocket消息 - 收到消息:', {
+        clientId: message.client_message_id,
+        content: message.content
+      });
+
+      const index = this.pendingMessagesInfo.findIndex(
+          item => item.clientId === message.client_message_id
+      );
+      console.log('找到的索引:', index);
+      console.log('找到的消息:', this.pendingMessagesInfo);
+      if (index !== -1) {
+        if (this.pendingMessagesInfo[index].timeoutId) {
+          clearTimeout(this.pendingMessagesInfo[index].timeoutId);
+        }
+        this.pendingMessagesInfo.splice(index, 1);
+
+        // 更新正式消息
+        const tempIndex = this.groupMessages.findIndex(
+            msg => msg.client_message_id === message.client_message_id
+        );
+        if (tempIndex !== -1) {
+          this.groupMessages[tempIndex] = message;
+        }
+      } else {
+        this.groupMessages.push(message);
       }
     },
     sendMessage(conversationId: string, receiverId: string,
@@ -442,20 +510,31 @@ export const useHistoryStore = defineStore('history', {
         this.chatMessages.push(tempMessage);
       }
 
+
       const websocketMessage: any = {
         conversation_id: tempMessage.conversation_id,
+        sender_id: useUserStore().loggedInUser?.user_id || '',
         receiver_id: receiverId,
         message_type: messageType,
         content: content,
         client_message_id: clientId
       };
-
+      if (isGroup){
+        websocketMessage.group_id=conversationId
+      }
+      console.log(JSON.stringify(websocketMessage));
       if (atUsers) {
         websocketMessage.at_users = atUsers;
       }
 
       console.log('发送消息 - 临时消息时间戳:', tempMessage.timestamp);
-      websocketService.sendMessage({ type: 'PRIVATE_MESSAGE_REQUEST', message: websocketMessage });
+      if (!isGroup) {
+        websocketService.sendMessage({type: 'PRIVATE_MESSAGE_REQUEST', message: websocketMessage})
+      }
+      else {
+        websocketService.sendMessage({type: 'GROUP_MESSAGE_REQUEST', message: websocketMessage})
+      }
+
     }
   },
 

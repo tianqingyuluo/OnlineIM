@@ -12,7 +12,8 @@ const requests = ref<FriendRequest[]>([])
 
 onMounted(() => {
   // 直接从 store 获取数据
-  requests.value = listStore.FriendRequestsList;
+  requests.value = listStore.FriendRequestsList.requests;
+  console.log("拿到的消息内容",requests.value)
 
 })
 
@@ -54,7 +55,7 @@ const handleRequest = async (isAccept: boolean, requestId: string) => {
           class="avatar"
         >
         <div class="request-info">
-          <span class="nickname">{{ request.sender_info.nickname }}</span>
+          <span class="nickname">{{request.sender_info?.username ||request.sender_info?.nickname  }}</span>
           <span v-if="request.message" class="message">{{ request.message }}</span>
         </div>
         <div class="action-buttons">

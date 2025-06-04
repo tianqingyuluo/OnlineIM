@@ -99,8 +99,8 @@ function handleCreateGroup() {
                     />
                   </div>
                   <div class="flex flex-col flex-grow space-y-1">
-                    <span class="text-[18px] font-bold">{{ group.name }}</span>
-                    <span class="text-[13px] text-gray-500">{{ group?.description || '暂无群描述' }}</span>
+                    <span class="text-[18px] font-bold truncate">{{ group.name }}</span>
+                    <span class="text-[13px] text-gray-500 truncate">{{ group?.description || '暂无群描述' }}</span>
                   </div>
                 </div>
               </SidebarMenuButton>

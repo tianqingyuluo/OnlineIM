@@ -167,7 +167,7 @@ function handleUserClick(user: FriendInFriendGroup) {
                         :class="[isGroupMenuOpen && currentGroupId === group.group_id ? 'bg-gray-100' : ''] "
                         style="font-size: 15px"
                     >
-                      {{ group.name }} ({{  group.friends.length }})
+                        {{ group.name }} ({{ group.friends.length }})
                       <ChevronDown
                           v-if="isGroupExpanded(group.group_id)"
                           class="w-5 h-5 transition-transform duration-200"
@@ -215,8 +215,10 @@ function handleUserClick(user: FriendInFriendGroup) {
                                 class="w-full h-full object-cover"
                             />
                           </div>
-                          <div class="flex flex-col flex-grow space-y-1">
-                            <span class="text-[18px] font-bold">{{ friend.remark || friend.nickname }}</span>
+                          <div class="flex flex-col flex-grow space-y-1 w-full">
+                            <span class="text-[18px] font-bold truncate">
+                              {{ friend.remark || friend.nickname }}
+                            </span>
                             <span class="text-[13px] text-gray-500">
                               {{ friend.online_status === 'online' ? '在线' : '离线' }}
                             </span>

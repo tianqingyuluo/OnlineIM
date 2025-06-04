@@ -7,6 +7,9 @@ import {
     type GroupSearchResponse,
 } from '@/type/group.ts'
 import { useListStore } from '@/stores/list';
+import { useUserStore } from '@/stores/user';
+import axios from 'axios';
+import { API_BASE_URL } from '../../shared/config.ts';
 export const groupService = {
   // 创建群组
   async createGroup(
@@ -49,7 +52,7 @@ export const groupService = {
         formContext?: FormContext
     ): Promise<GroupSearchResponse> {
         try {
-            const response = await api.get<GroupSearchResponse>(`/groups/search/${encodeURIComponent(query)}/${page}`, {
+            const response = await api.get<GroupSearchResponse>(`/groups/search/${encodeURIComponent(query)}`, {
                 params
             });
 
@@ -141,9 +144,17 @@ export const groupService = {
     avatar: File,
   ) {
     const formData = new FormData();
-    formData.append('avatar', avatar);
+    formData.append('file', avatar);
+    
     try {
-      const response = await api.post(`/groups/${groupId}/avatar`,formData);
+      const userStore = useUserStore();
+      const instance = axios.create({
+        baseURL: API_BASE_URL,
+        headers: {
+                  'Authorization': `Bearer ${userStore.token}`,
+                }
+        });
+      const response = await instance.post(`/groups/${groupId}/avatar`,formData);
       return response.data.avatarUrl;
     } catch (error) {
       console.error('上传群头像失败:', error);
@@ -216,6 +227,9 @@ export const groupService = {
   
   async updateGroupByID(groupId: string, request: any): Promise<GroupResponse | null> {
     try {
+      if (request.avatar_url && typeof request.avatar_url === 'object') {
+        request.avatar_url = request.avatar_url.avatar_url;
+    }
         const response = await api.put<GroupResponse>(`/groups/${groupId}`, request);
         return response.data;
     } catch (error) {

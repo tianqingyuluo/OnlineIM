@@ -53,6 +53,7 @@ export const useUserStore = defineStore('user', {
       listStore.groupJoinRequestList=[]
       listStore.hasInit = false
       listStore.blacklist=[]
+      listStore.FriendRequestsList=[]
       TokenService.clear()
 
     },
@@ -60,10 +61,11 @@ export const useUserStore = defineStore('user', {
       return !!this.token
     },
     async fetchUserData() {
-      // if (this.loggedInUser.user_id==='') {
-         await meService.me();
-      // }
+      if (this.loggedInUser.user_id==='') {
 
+         await this.updateToken();
+      }
+      await meService.me();
 
       const avatarUrl = this.loggedInUser.avatar_url;
       await dbService.addImageFromUrl(avatarUrl);

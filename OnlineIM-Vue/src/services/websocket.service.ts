@@ -23,7 +23,7 @@ class WebSocketService {
     const token = userStore.token;
 
     // Assuming token is passed as a query parameter. Adjust if backend uses headers.
-    const url = `${WS_API_URL}?token=${token}`;
+    const url = `${WS_API_URL}?token=Bearer ${token}`;
 
     this.ws = new WebSocket(url);
 
@@ -36,17 +36,22 @@ class WebSocketService {
     this.ws.onmessage = (event) => {
       console.log('WebSocket message received:', event.data);
       try {
-        const message = JSON.parse(event.data) ;
+        const message = JSON.parse(event.data);
+        console.log('Received message:', message);
         // 检查消息类型，只将 PRIVATE_MESSAGE_RESPONSE 转发给 historyStore 处理
-        if (message.type === 'PRIVATE_MESSAGE_RESPONSE') {
-          const historyStore = useHistoryStore(); // 在这里获取 store 实例
-          historyStore.handleWebSocketMessage(message);
-        } else {
-          console.log('Received unhandled message type:', message.type, message);
+      if (message.type === 'PRIVATE_MESSAGE_RESPONSE' ) {
+          const historyStore = useHistoryStore();
+          historyStore.handleWebSocketMessage(message.message);
         }
+        if (message.type === 'GROUP_MESSAGE_RESPONSE' ) {
+          const historyStore = useHistoryStore();
+          historyStore.handleGroupWebSocketMessage(message.message);
+        }
+
       } catch (error) {
         console.error('处理 WebSocket 消息失败:', error);
       }
+
       // 仍然触发通用的 messageHandlers，如果需要的话
       this.messageHandlers.forEach(handler => handler(event));
     };

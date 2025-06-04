@@ -82,7 +82,7 @@ export const friendsService = {
   },
   async handelFriendRequest(requestId: string,request:string):Promise<string> {
     try {
-      const response = await api.post<string>(`/friends/${requestId}/handle`,{type:request});
+      const response = await api.post<string>(`/friends/request/${requestId}/handle`,{type:request});
       return response.data;
     }
     catch (error) {

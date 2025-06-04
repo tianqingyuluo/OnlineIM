@@ -21,7 +21,7 @@ const selectedMember = ref<GroupMemberAll | null>(null); // 存储选中的成�
 const props = defineProps<{
   group: GroupResponse
   myRole?: string
-  groupSettings: GroupSetting
+  groupSettings?: GroupSetting
   conversation: any
 }>()
 
@@ -45,9 +45,9 @@ watch(() => showMembersList.value, (newVal) => {
   }
 })
 const roleTranslations = {
-  owner: '群主',
-  admin: '管理员',
-  member: '成员'
+  2: '群主',
+  1: '管理员',
+  0: '成员'
 }
 const isMute = ref(props.conversation?.is_mute || false)
 const isPinned = ref(props.conversation?.is_pinned || false)
@@ -142,7 +142,7 @@ const fetchMembers = async () => {
 
 // 初始化获取成员
 onMounted(() => {
-  console.log( "父组件传进来的",props.group,props.conversation)
+  console.log( "父组件传进来的",props.group,props.conversation,props.myRole)
   fetchMembers()
 
 })
@@ -167,7 +167,7 @@ onMounted(() => {
                 alt="群头像"
             >
             <div
-                v-if="myRole === 'owner' || myRole === 'admin'"
+                v-if="props.myRole === '1' || props.myRole === '2'"
                 class="absolute inset-0 flex items-center justify-center w-20 h-20 rounded-full mr-5 bg-black/80 opacity-0 hover:opacity-100 transition-opacity duration-200 cursor-pointer"
                 @click.stop="showGroupSettings"
             >
@@ -175,18 +175,18 @@ onMounted(() => {
             </div>
           </div>
           <div class="flex-1 min-w-0">
-            <h2 class="text-xl font-semibold text-gray-800 truncate">{{ group.name }}</h2>
-            <p class="text-gray-500 text-sm mt-1">创建时间: {{ group.create_at }}</p>
-            <p class="text-gray-500 text-sm mt-1">我的角色: {{ roleTranslations[group.my_role] }}</p>
+            <h2 class="text-xl font-semibold text-gray-800 truncate">{{ props.group.name }}</h2>
+            <p class="text-gray-500 text-sm mt-1">创建时间: {{ props.group.create_at }}</p>
+            <p class="text-gray-500 text-sm mt-1">我的角色: {{ roleTranslations[props.group.my_role] }}</p>
           </div>
         </div>
 
         <!-- 群详情内容区域 -->
         <div class="flex-1 overflow-y-auto space-y-4 pr-2 -mr-2">
           <!-- 群描述 -->
-          <div v-if="group.description" class="bg-gray-50 p-3 rounded-lg">
+          <div v-if="props.group.description" class="bg-gray-50 p-3 rounded-lg">
             <h3 class="text-gray-500 text-sm font-medium mb-1">群描述</h3>
-            <p class="text-gray-700">{{ group.description }}</p>
+            <p class="text-gray-700">{{ props.group.description }}</p>
           </div>
 
           <!-- 群公告 -->
@@ -196,7 +196,7 @@ onMounted(() => {
                 class="w-full text-left text-gray-700 bg-white hover:text-primary transition-colors hover:bg-gray-50"
                 @click="handleViewAnnouncement"
             >
-              {{ group.announcement || '暂无公告' }}
+              {{ props.group.announcement || '暂无公告' }}
             </button>
           </div>
 
@@ -208,7 +208,7 @@ onMounted(() => {
                   class="ml-2 px-3 py-1 text-sm rounded bg-gray-100 hover:bg-gray-200 transition-colors"
                   @click="handleViewMembers"
               >
-                查看全部 {{ group.member_count }} 人
+                查看全部 {{ props.group.member_count }} 人
               </button>
             </div>
 
@@ -245,7 +245,7 @@ onMounted(() => {
             </div>
           </div>
           <!-- 群组设置 -->
-          <div v-if="myRole === 'owner' || myRole === 'admin'" class="bg-gray-50 p-3 rounded-lg space-y-3">
+          <div v-if="myRole === '1' || myRole === '2'" class="bg-gray-50 p-3 rounded-lg space-y-3">
             <h3 class="text-gray-500 text-sm font-medium">群组设置</h3>
             <div class="space-y-2">
               <div class="flex items-center justify-between py-2">
@@ -294,7 +294,7 @@ onMounted(() => {
             清空聊天记录
           </Button>
           <Button
-              v-if="group?.my_role === 'owner'"
+              v-if="group?.my_role === '2'"
               class="w-full p-3 bg-white text-red-500 border border-red-500 hover:bg-red-50 transition-colors"
               @click="handleDissolveGroup"
           >

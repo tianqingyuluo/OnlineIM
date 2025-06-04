@@ -9,9 +9,10 @@ const requests = ref<GroupJoinRequestResponse[]>([])
 
 const handleRequest = async (request: GroupJoinRequestResponse, action: string) => {
   try {
-    await groupService.handleJoinRequest(request.groupID, request.requestID, action)
+    console.log(request)
+    await groupService.handleJoinRequest(request.group_id, request.request_id, action)
     // 更新请求状态
-    request.status = action === 'accept' ? 'accepted' : 'rejected'
+    request.status = action === 'accept' ? '1' : '2'
   } catch (error) {
     console.error('处理加群请求失败:', error)
   }
@@ -19,6 +20,7 @@ const handleRequest = async (request: GroupJoinRequestResponse, action: string) 
 
 onMounted(() => {
     requests.value = listStore.groupJoinRequestList
+    console.log(requests.value)
 })
 </script>
 
@@ -30,20 +32,20 @@ onMounted(() => {
     <div v-else>
       <div v-for="request in requests" :key="request.requestID" class="request-item">
         <img 
-          :src="request.userInfo?.avatarUrl"
+          :src="request.user_info?.avatarUrl"
           class="avatar"
         >
         <div class="request-info">
-          <span class="nickname">{{ request.userInfo.nickname }}</span>
+          <span class="nickname">{{ request.user_info.nickname }}</span>
           <span v-if="request.message" class="message">{{ request.message }}</span>
-          <span class="group-name">申请加入: {{ request.groupName }}</span>
+          <span class="group-name">申请加入: {{ request.group_name }}</span>
         </div>
         <div class="action-buttons">
-          <template v-if="request.status === 'pending'">
+          <template v-if="request.status === '0'">
             <button class="accept-btn" @click="handleRequest(request, 'accept')">同意</button>
             <button class="reject-btn" @click="handleRequest(request, 'reject')">拒绝</button>
           </template>
-          <span v-else-if="request.status === 'accepted'" class="status-text p-2">已同意</span>
+          <span v-else-if="request.status === '1'" class="status-text p-2">已同意</span>
           <span v-else class="status-text p-2">已拒绝</span>
         </div>
       </div>

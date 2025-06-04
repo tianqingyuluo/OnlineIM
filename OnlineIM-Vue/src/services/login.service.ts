@@ -4,6 +4,7 @@ import { useUserStore } from '@/stores/user';
 import { toast } from 'vue-sonner';
 import router from "@/router";
 import { websocketService } from '@/services/websocket.service';
+import { UAParser } from 'ua-parser-js';
 
 export const LoginService = {
     validationRules: {
@@ -31,8 +32,16 @@ export const LoginService = {
         const userStore = useUserStore();
 
         try {
-            console.log('准备发送请求...');
-             const response = await api.post('/auth/login', credentials);
+            const parser = new UAParser;
+            const uaResult = parser.getResult();
+
+            const deviceId = `web-${uaResult.browser.name}-${uaResult.os.name}-${Date.now()}`;
+            const requestBody = {
+                ...credentials,
+                device_id: deviceId
+            };
+            const response = await api.post('/auth/login', requestBody);
+
             if (response.data.access_token) {
                 // 更新用户状态
 

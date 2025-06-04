@@ -102,10 +102,10 @@ api.interceptors.response.use(
       //     description: '您没有执行此操作的权限'
       //   });
       //   break;
-
-      case 404:
-        toast.error( data.message ||"我们的服务出了点问题，网页错误代码：404");
-        break;
+      //
+      // case 404:
+      //   toast.error( data.message ||"我们的服务出了点问题，网页错误代码：404");
+      //   break;
 
       // case 429:
       //   toast.error('请求过于频繁', {
@@ -123,8 +123,8 @@ api.interceptors.response.use(
       //   if (status >= 500) {
       //     toast.error(`服务器错误 (${status})`);
       //   }
-      default:
-        toast.error(  data.message ||"我们的服务出了点问题");
+      // default:
+      //   toast.error(  data.message ||"我们的服务出了点问题");
     }
     return Promise.reject(normalizedError);
   }

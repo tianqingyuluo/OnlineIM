@@ -38,8 +38,8 @@ function onContextMenuOpenChange(value: boolean) {
 
 async function handleKick(member: GroupMemberAll) {
   try {
-    await groupMembersService.removeMember(props.groupId, member.user_info.user_id)
-    members.value = members.value.filter(m => m.user_info.user_id !== member.user_info.user_id)
+    await groupMembersService.removeMember(props.groupId, member.group_member_id)
+    members.value = members.value.filter(m => m.group_member_id !== member.group_member_id)
   } catch (error) {
     console.error('踢出群聊失败:', error)
   }
@@ -47,10 +47,10 @@ async function handleKick(member: GroupMemberAll) {
 
 async function handleSetAdmin(member: GroupMemberAll) {
   try {
-    await groupMembersService.setAdmin(props.groupId, member.user_info.user_id)
-    const index = members.value.findIndex(m => m.user_info.user_id === member.user_info.user_id)
+    await groupMembersService.setAdmin(props.groupId, member.group_member_id)
+    const index = members.value.findIndex(m => m.group_member_id === member.group_member_id)
     if (index !== -1) {
-      members.value[index].role = 'admin'
+      members.value[index].role = '管理员'
     }
   } catch (error) {
     console.error('设为管理员失败:', error)
@@ -59,10 +59,10 @@ async function handleSetAdmin(member: GroupMemberAll) {
 
 async function handleRemoveAdmin(member: GroupMemberAll) {
   try {
-    await groupMembersService.removeAdmin(props.groupId, member.user_info.user_id)
-    const index = members.value.findIndex(m => m.user_info.user_id === member.user_info.user_id)
+    await groupMembersService.removeAdmin(props.groupId, member.group_member_id)
+    const index = members.value.findIndex(m => m.group_member_id === member.group_member_id)
     if (index !== -1) {
-      members.value[index].role = 'member'
+      members.value[index].role = '成员'
     }
   } catch (error) {
     console.error('取消管理员失败:', error)
@@ -71,7 +71,7 @@ async function handleRemoveAdmin(member: GroupMemberAll) {
 
 async function handleMute(member: GroupMemberAll, time:number) {
   try {
-    await groupMembersService.muteMember(props.groupId, member.user_info.user_id, time)
+    await groupMembersService.muteMember(props.groupId, member.group_member_id ,time)
   } catch (error) {
     console.error('禁言失败:', error)
   }
@@ -79,8 +79,8 @@ async function handleMute(member: GroupMemberAll, time:number) {
 
 async function handleUnmute(member: GroupMemberAll) {
   try {
-    await groupMembersService.unmuteMember(props.groupId, member.user_info.user_id)
-    const index = members.value.findIndex(m => m.user_info.user_id === member.user_info.user_id)
+    await groupMembersService.unmuteMember(props.groupId, member.group_member_id)
+    const index = members.value.findIndex(m => m.group_member_id === member.group_member_id)
     if (index !== -1) {
       members.value[index].is_muted = false
     }
@@ -91,13 +91,13 @@ async function handleUnmute(member: GroupMemberAll) {
 
 async function handleTransferOwner(member: GroupMemberAll) {
   try {
-    await groupMembersService.transferOwnership(props.groupId, member.user_info.user_id)
-    const index = members.value.findIndex(m => m.user_info.user_id === member.user_info.user_id)
+    await groupMembersService.transferOwnership(props.groupId, member.group_member_id)
+    const index = members.value.findIndex(m => m.group_member_id === member.group_member_id)
     if (index !== -1) {
-      members.value[index].role = 'owner'
+      members.value[index].role = '群主'
       const myIndex = members.value.findIndex(m => m.user_info.user_id === userStore.loggedInUser.user_id)
       if (myIndex !== -1) {
-        members.value[myIndex].role = 'admin'
+        members.value[myIndex].role = '管理员'
       }
     }
   } catch (error) {
@@ -119,7 +119,18 @@ async function handleUpdateNickname(member: GroupMemberAll) {
     }
   }
 }
-
+function getRoleText(role: string): string {
+  switch (role) {
+    case '0':
+      return '成员';
+    case '1':
+      return '管理员';
+    case '2':
+      return '群主';
+    default:
+      return '未知角色';
+  }
+}
 async function loadMembers() {
   if (loading.value || !hasMore.value) return
   loading.value = true
@@ -127,7 +138,11 @@ async function loadMembers() {
     const response = await groupService.getGroupMembers(props.groupId, {
       offset: offset.value
     })
+    response.members.forEach(member => {
+      member.role = getRoleText(member.role);
+    });
     members.value = [...members.value, ...response.members]
+
     hasMore.value = response.members.length >= 20
     offset.value += 20
   } catch (error) {
@@ -192,14 +207,14 @@ onUnmounted(() => {
             </div>
           </ContextMenuTrigger>
           <ContextMenuContent>
-            <template v-if="myRole === 'owner'">
+            <template v-if="myRole === 'owner' ||myRole ==='2'">
               <ContextMenuItem @click="handleKick(member)">
                 踢出群聊
               </ContextMenuItem>
-              <ContextMenuItem @click="handleSetAdmin(member)" v-if="member.role !== 'admin'">
+              <ContextMenuItem @click="handleSetAdmin(member)" v-if="member.role !== '管理员'">
                 设为管理员
               </ContextMenuItem>
-              <ContextMenuItem @click="handleRemoveAdmin(member)" v-if="member.role === 'admin'">
+              <ContextMenuItem @click="handleRemoveAdmin(member)" v-if="member.role === '管理员'">
                 取消管理员
               </ContextMenuItem>
               <ContextMenuSub v-model:open="subMenuOpenStates[member.user_info.user_id]">
@@ -222,8 +237,8 @@ onUnmounted(() => {
                 更新昵称
               </ContextMenuItem>
             </template>
-            <template v-else-if="myRole === 'admin'">
-              <ContextMenuItem @click="handleKick(member)" v-if="member.role === 'member'">
+            <template v-else-if="myRole === 'admin' || myRole==='1' ">
+              <ContextMenuItem @click="handleKick(member)" v-if="member.role === '成员'">
                 踢出群聊
               </ContextMenuItem>
               <ContextMenuSub v-model:open="subMenuOpenStates[member.user_info.user_id]">

@@ -99,14 +99,14 @@ function handleChatClick(conversation: Conversation) {
                       />
                     </div>
                     <div class="flex flex-col flex-grow space-y-1 relative">
-                      <span class="text-[18px] font-bold">
+                      <span class="text-[18px] font-bold truncate">
                         {{ conversation.target_info?.name || 'Unknown' }}
                       </span>
-                      <span class="text-[13px] text-gray-500 truncate">
+                      <span class="text-[13px] text-gray-500 truncate truncate">
                         <span v-if="conversation.is_at" class="text-red-500">[有人@我]</span>
                         {{ conversation.last_message?.content_preview || '无消息' }}
                       </span>
-                      <span v-if="conversation.notreadednumber && conversation.notreadednumber !== 0" :class="{'absolute top-0 right-0 text-white text-xs rounded-full px-2 py-1': true, 'bg-red-500': !conversation.is_muted, 'bg-gray-50': conversation.is_muted}">
+                      <span v-if="conversation.notreadednumber && conversation.notreadednumber !== 0" :class="{'absolute top-0 right-0 text-white text-xs rounded-full px-2 py-1 truncate': true, 'bg-red-500': !conversation.is_muted, 'bg-gray-50': conversation.is_muted}">
                           {{ conversation.notreadednumber >= 100 ? '99+' : conversation.notreadednumber }}
                         </span>
                     </div>
