@@ -54,7 +54,7 @@ public class MessageResponse {
     private List<String> mentionedUserIds;
     
     /**
-     * 消息状态：sending, delivered, read, recalled
+     * 消息状态：sending, delivered, recalled
      */
     private String status;
     
@@ -63,15 +63,22 @@ public class MessageResponse {
      */
     @JsonProperty("is_recalled")
     private Boolean isRecalled;
-    
+
+    /**
+     * 消息序列id
+     */
+    @JsonProperty("seq_id")
+    private String seqId;
+
+    /**
+     * 客户端发送的去重ID
+     */
+    @JsonProperty("client_message_id")
+    private String clientMessageId;
+
     /**
      * 发送时间
      */
     private String timestamp;
-    
-    /**
-     * 客户端消息ID
-     */
-    @JsonProperty("client_message_id")
-    private String clientMessageId;
+
 } 

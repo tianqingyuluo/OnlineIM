@@ -10,6 +10,7 @@ import icu.tianqingyuluo.onlineim.pojo.dto.response.GroupJoinRequestResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.GroupMemberResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.GroupResponse;
 import icu.tianqingyuluo.onlineim.pojo.entity.GroupJoinRequest;
+import icu.tianqingyuluo.onlineim.service.FileStorageService;
 import icu.tianqingyuluo.onlineim.service.GroupService;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
@@ -29,8 +30,9 @@ public class GroupServiceImpl implements GroupService {
     private final GroupJoinRequestMapper groupJoinRequestMapper;
     private final GroupBriefResponseMapper groupBriefResponseMapper;
     private final GroupJoinRequestResponseMapper groupJoinRequestResponseMapper;
+    private final FileStorageService fileStorageService;
 
-    public GroupServiceImpl(GroupMapper groupMapper, GroupResponseMapper groupResponseMapper, GroupMemberMapper groupMemberMapper, GroupSettingMapper groupSettingMapper, UserMapper userMapper, GroupJoinRequestMapper groupJoinRequestMapper, GroupBriefResponseMapper groupBriefResponseMapper,GroupJoinRequestResponseMapper groupJoinRequestResponseMapper) {
+    public GroupServiceImpl(GroupMapper groupMapper, GroupResponseMapper groupResponseMapper, GroupMemberMapper groupMemberMapper, GroupSettingMapper groupSettingMapper, UserMapper userMapper, GroupJoinRequestMapper groupJoinRequestMapper, GroupBriefResponseMapper groupBriefResponseMapper, GroupJoinRequestResponseMapper groupJoinRequestResponseMapper, FileStorageService fileStorageService) {
         this.groupMapper = groupMapper;
         this.groupResponseMapper = groupResponseMapper;
         this.groupMemberMapper = groupMemberMapper;
@@ -39,6 +41,7 @@ public class GroupServiceImpl implements GroupService {
         this.groupJoinRequestMapper = groupJoinRequestMapper;
         this.groupBriefResponseMapper = groupBriefResponseMapper;
         this.groupJoinRequestResponseMapper = groupJoinRequestResponseMapper;
+        this.fileStorageService = fileStorageService;
     }
 
     @Override
@@ -90,12 +93,16 @@ public class GroupServiceImpl implements GroupService {
 
     @Override
     public boolean isUserAdminOrOwner(String groupId, String userid) {
-        return groupMapper.isGroupOwner(groupId,userid);
+        return groupMapper.isGroupOwner(groupId,userid) || groupMapper.isAdmin(groupId, userid);
     }
 
     @Override
     public String uploadGroupAvatar(String groupId, MultipartFile avatar, String userid) {
-        return "";
+        try {
+            return fileStorageService.uploadGroupAvatar(avatar, groupId);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
@@ -197,6 +204,7 @@ public class GroupServiceImpl implements GroupService {
                         .groupId(groupId)
                         .userId(applicantId)
                         .message(message)
+                        .status(0)
                         .build();
                 groupJoinRequestMapper.insert(groupJoinRequest);
                 return "申请已提交";
@@ -260,7 +268,7 @@ public class GroupServiceImpl implements GroupService {
     @Transactional
     public boolean handleJoinRequest(String groupId, String requestId, String action, String operatorId) {
         try {
-            if(groupMapper.isAdmin(groupId,operatorId)&&groupJoinRequestMapper.isPendingByRequestId(requestId)){
+            if(groupMapper.isAdmin(groupId,operatorId) && groupJoinRequestMapper.isPendingByRequestId(requestId)){
                 if(action.equals("accept")){
                     String mid="mem_"+ IdUtil.getSnowflakeNextIdStr();
                     String userid=groupJoinRequestMapper.getUseridById(requestId);

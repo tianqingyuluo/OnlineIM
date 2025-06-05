@@ -1,11 +1,15 @@
 package icu.tianqingyuluo.onlineim.controller;
 
+import cn.hutool.core.util.IdUtil;
+import icu.tianqingyuluo.onlineim.mapper.FriendRequestMapper;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.FriendRequestCreateRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.FriendRequestRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.FriendRequestResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.FriendResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
 import icu.tianqingyuluo.onlineim.pojo.entity.User;
+import icu.tianqingyuluo.onlineim.pojo.entity.UserFriend;
+import icu.tianqingyuluo.onlineim.service.FriendGroupService;
 import icu.tianqingyuluo.onlineim.service.FriendService;
 import icu.tianqingyuluo.onlineim.service.UserService;
 import icu.tianqingyuluo.onlineim.util.ErrorCodeUtil;
@@ -18,6 +22,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.sql.SQLIntegrityConstraintViolationException;
+import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
 import java.util.*;
 
 /**
@@ -32,11 +38,15 @@ public class FriendController {
 
     private final FriendService friendService;
     private final UserService userService;
+    private final FriendGroupService friendGroupService;
+    private final FriendRequestMapper friendRequestMapper;
 
-    public FriendController(FriendService friendService, JwtUtil jwtUtil, UserService userService) {
+    public FriendController(FriendService friendService, JwtUtil jwtUtil, UserService userService, FriendGroupService friendGroupService, FriendRequestMapper friendRequestMapper) {
         this.friendService = friendService;
         this.jwtUtil = jwtUtil;
         this.userService = userService;
+        this.friendGroupService = friendGroupService;
+        this.friendRequestMapper = friendRequestMapper;
     }
 
     /**
@@ -267,5 +277,46 @@ public class FriendController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "好友申请已存在"));
         }
         return ResponseEntity.status(HttpStatus.CREATED).build();
+    }
+
+    @PostMapping("/request/{requestId}/handle")
+    public ResponseEntity<?> handleFriendRequest(
+            @RequestHeader("Authorization") String token,
+            @PathVariable String requestId,
+            @RequestBody Map<String,String> request
+    ) {
+        String userId = jwtUtil.getUserIDFromToken(token);
+        String friendId = friendRequestMapper.getById(requestId).getFromUserId();
+        SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+
+        if (userId.compareTo(friendId) > 0) {
+            String temp = userId;
+            userId = friendId;
+            friendId = temp;
+        }
+
+        String status = request.get("type");
+        if (status.equals("accept")) { // 同意
+            UserFriend friend = new UserFriend();
+            String id = "rel_" + IdUtil.getSnowflakeNextIdStr();
+            friend.setId(id);
+            friend.setUserId(userId);
+            friend.setFriendId(friendId);
+            friend.setStatus(1);
+            friend.setGroupId(null);
+            friend.setRemark(null);
+            friend.setCreatedAt(LocalDateTime.now());
+            friend.setUpdatedAt(LocalDateTime.now());
+
+            friendService.createFriend(friend, requestId, 1, format.format(new Date()));
+            Map<String,Object> response = new HashMap<>();
+            response.put("friend_id", id);
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        }
+        else if (status.equals("refuse")) { // 拒绝
+            friendRequestMapper.updateStatus(requestId, 2, format.format(new Date()));
+            return ResponseEntity.status(HttpStatus.OK).build();
+        }
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "啊哦，发生了些问题"));
     }
 }

@@ -25,7 +25,13 @@ public class GroupMemberResponse {
      * 角色：owner, admin, member
      */
     private String role;
-    
+
+    /**
+     * 群组成员ID
+     */
+    @JsonProperty("group_member_id")
+    private String groupMemberId;
+
     /**
      * 群昵称
      */

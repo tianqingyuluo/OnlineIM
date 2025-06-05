@@ -1,6 +1,9 @@
 package icu.tianqingyuluo.onlineim.controller;
 
+import icu.tianqingyuluo.onlineim.pojo.document.Conversation;
+import icu.tianqingyuluo.onlineim.pojo.dto.request.ConversationCreateRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.ConversationResponse;
+import icu.tianqingyuluo.onlineim.repository.ConversationRepository;
 import icu.tianqingyuluo.onlineim.service.ConversationService;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -8,9 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * 会话管理接口
@@ -21,11 +22,13 @@ public class ConversationController {
 
     private final ConversationService conversationService;
     private final JwtUtil jwtUtil;
+    private final ConversationRepository conversationRepository;
 
     @Autowired
-    public ConversationController(ConversationService conversationService, JwtUtil jwtUtil) {
+    public ConversationController(ConversationService conversationService, JwtUtil jwtUtil, ConversationRepository conversationRepository) {
         this.conversationService = conversationService;
         this.jwtUtil = jwtUtil;
+        this.conversationRepository = conversationRepository;
     }
 
     /**
@@ -90,7 +93,49 @@ public class ConversationController {
         result.put("message", "会话已删除");
         return ResponseEntity.ok(result);
     }
-    
+
+    @PostMapping("/create")
+    public ResponseEntity<?> createConversation(
+            @RequestHeader("Authorization") String token,
+            @RequestBody ConversationCreateRequest request
+    ) {
+        String userId = jwtUtil.getUserIDFromToken(token);
+
+        Conversation conversation = new Conversation();
+        Conversation.LastMessage lastMessage = new Conversation.LastMessage();
+        if (request.getType().equals("group")) {
+            conversation.setId(request.getTargetId());  // coversationId 此时就等于 群id
+            conversation.setUserId(userId);
+            conversation.setTargetId(request.getTargetId());
+            conversation.setConversationType(request.getType());
+            conversation.setUnreadCount(0);
+            conversation.setLastMessage(lastMessage);
+            conversation.setTop(false);
+            conversation.setMute(false);
+            conversation.setStatus(1);
+            conversation.setUpdatedAt(new Date());
+        }
+        else {
+            conversation.setId("conv_" + ( (userId.compareTo(request.getTargetId())) < 0
+                    ? userId + request.getTargetId() :
+                    request.getTargetId() + userId) ); // 谁id字典序小谁在前面
+            conversation.setUserId(userId);
+            conversation.setTargetId(request.getTargetId());
+            conversation.setConversationType(request.getType());
+            conversation.setUnreadCount(0);
+            conversation.setLastMessage(lastMessage);
+            conversation.setTop(false);
+            conversation.setMute(false);
+            conversation.setStatus(1);
+            conversation.setUpdatedAt(new Date());
+        }
+        conversationRepository.save(conversation);
+
+        ConversationResponse conversationResponse = conversationService.convertToConversationResponse(conversation, userId);
+
+        return ResponseEntity.ok(conversationResponse);
+    }
+
     /**
      * 置顶会话
      * @param conversationId 会话ID
@@ -220,15 +265,19 @@ public class ConversationController {
      * 获取未读消息数
      * @return 未读消息数信息
      */
-    @GetMapping("/unread-count")
+    @GetMapping("/{conversationId}/unread-count/{seqId}")
     public ResponseEntity<Map<String, Object>> getUnreadCount(
-            @RequestHeader("Authorization") String token) {
-        String userId = jwtUtil.getUserIDFromToken(token);
-        if (userId == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-        
-        Map<String, Object> result = conversationService.getUnreadCount(userId);
-        return ResponseEntity.ok(result);
+            @RequestHeader("Authorization") String token,
+            @PathVariable String conversationId,
+            @PathVariable String seqId) {
+//        String userId = jwtUtil.getUserIDFromToken(token);
+//        if (userId == null) {
+//            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+//        }
+//
+//        Map<String, Object> result = conversationService.getUnreadCount(userId);
+//        return ResponseEntity.ok(result);
+        return null;
+        // 需要修改成根据seqId拿到该conversation的seqId后面的消息数统计
     }
 }

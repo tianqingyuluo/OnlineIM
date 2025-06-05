@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import icu.tianqingyuluo.onlineim.exception.ForbiddenException;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.GroupCreateRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.GroupJoinRequest;
@@ -33,11 +34,13 @@ public class GroupController {
     private final JwtUtil jwtUtil;
     private final UserService userService;
     private final GroupService groupService;
+    private final ObjectMapper objectMapper;
 
-    public GroupController(JwtUtil jwtUtil, UserService userService, GroupService groupService) {
+    public GroupController(JwtUtil jwtUtil, UserService userService, GroupService groupService, ObjectMapper objectMapper) {
         this.jwtUtil = jwtUtil;
         this.userService = userService;
         this.groupService = groupService;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -268,7 +271,7 @@ public class GroupController {
         String message = (request != null) ? request.getMessage() : null;
 
         try {
-            groupService.requestToJoinGroup(groupId,applicantId,message);
+            // groupService.requestToJoinGroup(groupId,applicantId,message);
             // 该方法应负责处理用户加群申请：
             // 1. 校验群组是否存在，加群方式（join_type）。
             // 2. 校验用户是否已是成员或已在申请中。
@@ -330,16 +333,19 @@ public class GroupController {
      * @param keyword 关键词 (可以按群名或群ID搜索)
      * @return 群组列表
      */
-    @GetMapping("/search")
-    public ResponseEntity<?> searchGroups(@RequestParam String keyword) {
+    @GetMapping("/search/{keyword}")
+    public ResponseEntity<?> searchGroups(@PathVariable String keyword) {
         if (keyword == null || keyword.trim().isEmpty()) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "搜索关键词不能为空"));
         }
         try {
             groupService.searchGroups(keyword);
             // 该方法应负责根据关键词搜索群组（如按群名、群ID模糊匹配），并返回 List<GroupResponse>。
+            Map<String, Object> response = new HashMap<>();
             List<GroupResponse> groups = groupService.searchGroups(keyword.trim());
-            return ResponseEntity.ok(groups);
+            response.put("groups", groups);
+            response.put("total", groups.size());
+            return ResponseEntity.ok(response);
         }
         catch (Exception e) {
             log.error("搜索群组失败: keyword={}", keyword, e);
@@ -383,13 +389,12 @@ public class GroupController {
      * @param action 操作："accept" 或 "reject"
      * @return 处理结果
      */
-    @PostMapping("/{groupId}/join-requests/{requestId}")
+    @PostMapping("/{groupId}/join-requests/{requestId}/{action}")
     public ResponseEntity<?> handleJoinRequest(
             @RequestHeader("Authorization") String token,
             @PathVariable String groupId,
             @PathVariable String requestId,
-            @RequestParam String action) {
-        String username = jwtUtil.getUsernameFromToken(token);
+            @PathVariable String action) {
         String operatorId = jwtUtil.getUserIDFromToken(token);
 
         if (!"accept".equalsIgnoreCase(action) && !"reject".equalsIgnoreCase(action)) {
@@ -403,7 +408,7 @@ public class GroupController {
          }
 
         try {
-            groupService.handleJoinRequest(groupId, requestId, action, operatorId);
+//            groupService.handleJoinRequest(groupId, requestId, action, operatorId);
             // 该方法应负责处理加群请求：
             // 1. 校验操作者权限。
             // 2. 校验请求是否存在且状态为待处理。

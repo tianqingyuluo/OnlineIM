@@ -1,9 +1,11 @@
 package icu.tianqingyuluo.onlineim.scheduler;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+@Slf4j
 @Component
 public class RedisCleanupScheduler {
 
@@ -19,5 +21,6 @@ public class RedisCleanupScheduler {
     @Scheduled(fixedRate = 60 * 60 * 1000)
     public void cleanupInvalidJWTInBlacklist() {
         redisTemplate.opsForZSet().removeRangeByScore(JWT_BLACKLIST_PREFIX, 0, System.currentTimeMillis());
+        log.info("【定时任务】 清除过期的JWT token");
     }
 }

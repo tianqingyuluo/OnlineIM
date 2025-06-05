@@ -3,6 +3,7 @@ package icu.tianqingyuluo.onlineim.controller;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.MessageSendRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageResponse;
 import icu.tianqingyuluo.onlineim.service.MessageService;
+import icu.tianqingyuluo.onlineim.util.ErrorCodeUtil;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -24,21 +25,20 @@ public class MessageController {
     private final MessageService messageService;
     private final JwtUtil jwtUtil;
 
-    @Autowired
     public MessageController(MessageService messageService, JwtUtil jwtUtil) {
         this.messageService = messageService;
         this.jwtUtil = jwtUtil;
     }
 
     /**
-     * 获取向上滚动的历史消息
-     * @param conversationId 会话ID
+     * 获取会话历史消息，支持群聊和单聊
+     * @param conversationId 会话ID（可以是群聊ID或单聊ID）
      * @param seqId 消息序列号 (可选)
      * @param size 消息数量（可选）
      * @return 消息列表
      */
-    @GetMapping("/private/{conversationId}")
-    public ResponseEntity<List<MessageResponse>> getPrivateHistory(
+    @GetMapping("/{conversationId}")
+    public ResponseEntity<?> getHistory(
             @PathVariable String conversationId,
             @RequestParam(name = "seq_id", required = false) String seqId,
             @RequestParam(required = false, defaultValue = "20") Integer size,
@@ -46,33 +46,10 @@ public class MessageController {
         
         String userId = jwtUtil.getUserIDFromToken(token);
         if (userId == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ErrorCodeUtil.getErrorOutput("401", "权限不足"));
         }
         
-        List<MessageResponse> messages = messageService.getPrivateHistory(conversationId, seqId, size, userId);
-        return ResponseEntity.ok(messages);
-    }
-    
-    /**
-     * 获取群聊历史消息
-     * @param groupId 群组ID
-     * @param seqId 消息序列号（可选）
-     * @param size 消息数量（可选）
-     * @return 消息列表
-     */
-    @GetMapping("/group/{groupId}")
-    public ResponseEntity<List<MessageResponse>> getGroupHistory(
-            @PathVariable String groupId,
-            @RequestParam(required = false) String seqId,
-            @RequestParam(required = false, defaultValue = "20") Integer size,
-            @RequestHeader("Authorization") String token) {
-        
-        String userId = jwtUtil.getUserIDFromToken(token);
-        if (userId == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-        
-        List<MessageResponse> messages = messageService.getGroupHistory(groupId, seqId, size, userId);
+        List<MessageResponse> messages = messageService.getHistory(conversationId, seqId, size, userId);
         return ResponseEntity.ok(messages);
     }
     
@@ -88,12 +65,12 @@ public class MessageController {
         
         String userId = jwtUtil.getUserIDFromToken(token);
         if (userId == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ErrorCodeUtil.getErrorOutput("401", "权限不足"));
         }
         
         boolean success = messageService.recallMessage(messageId, userId);
         if (!success) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorCodeUtil.getErrorOutput("403", "权限不足"));
         }
         
         Map<String, String> result = new HashMap<>();
@@ -102,26 +79,28 @@ public class MessageController {
         return ResponseEntity.ok(result);
     }
     
+    // 已删除标记消息已读功能
+    
     /**
-     * 标记消息已读
-     * @param messageIds 消息ID列表
-     * @return 标记结果
+     * 获取需要撤回的消息序列号列表
+     * @param conversationId 会话ID
+     * @param seqId 客户端当前序列号
+     * @return 需要撤回的消息序列号列表
      */
-    @PostMapping("/read")
-    public ResponseEntity<Map<String, String>> markAsRead(
-            @RequestBody List<String> messageIds,
+    @GetMapping("/recalls/{conversationId}")
+    public ResponseEntity<?> getRecallList(
+            @PathVariable String conversationId,
+            @RequestParam("seq_id") String seqId,
             @RequestHeader("Authorization") String token) {
         
         String userId = jwtUtil.getUserIDFromToken(token);
         if (userId == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ErrorCodeUtil.getErrorOutput("401", "权限不足"));
         }
         
-        boolean success = messageService.markAsRead(messageIds, userId);
-        
-        Map<String, String> result = new HashMap<>();
-        result.put("status", "success");
-        result.put("message", "消息已标记为已读");
+        List<String> recalls = messageService.getRecallList(conversationId, seqId);
+        Map<String, List<String>> result = new HashMap<>();
+        result.put("recalls", recalls);
         return ResponseEntity.ok(result);
     }
     
@@ -139,7 +118,7 @@ public class MessageController {
         
         String userId = jwtUtil.getUserIDFromToken(token);
         if (userId == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ErrorCodeUtil.getErrorOutput("401", "权限不足"));
         }
         
         Map<String, String> result = messageService.uploadFile(userId, type, file);
@@ -155,17 +134,18 @@ public class MessageController {
      * @param seqId 客户端当前序列号
      * @return 增量消息列表
      */
-    @GetMapping("/sync")
-    public ResponseEntity<List<MessageResponse>> syncMessages(
+    @GetMapping("/sync/{conversationId}")
+    public ResponseEntity<?> syncMessages(
+            @PathVariable String conversationId,
             @RequestParam("seq_id") String seqId,
             @RequestHeader("Authorization") String token) {
         
         String userId = jwtUtil.getUserIDFromToken(token);
         if (userId == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ErrorCodeUtil.getErrorOutput("401", "权限不足"));
         }
         
-        List<MessageResponse> messages = messageService.syncMessages(seqId, userId);
+        List<MessageResponse> messages = messageService.syncMessages(conversationId, seqId, userId);
         return ResponseEntity.ok(messages);
     }
     

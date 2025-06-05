@@ -36,7 +36,7 @@ public interface PrivateMessageRepository extends MongoRepository<PrivateMessage
     /**
      * 根据客户端消息ID查询消息
      */
-    PrivateMessage findByClientMsgId(String clientMsgId);
+    PrivateMessage findByClientMessageId(String clientMessageId);
     
     /**
      * 根据消息ID查询
@@ -52,4 +52,9 @@ public interface PrivateMessageRepository extends MongoRepository<PrivateMessage
      * 查询用户接收的消息
      */
     Page<PrivateMessage> findByReceiverIdOrderByTimestampDesc(String receiverId, Pageable pageable);
-} 
+    
+    /**
+     * 查询序列号大于指定值的消息，用于增量同步
+     */
+    List<PrivateMessage> findByConversationIdAndSeqIdGreaterThanOrderBySeqIdAsc(String conversationId, Long seqId);
+}

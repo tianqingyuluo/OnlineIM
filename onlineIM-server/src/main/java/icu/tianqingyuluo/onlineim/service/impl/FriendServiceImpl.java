@@ -1,18 +1,19 @@
 package icu.tianqingyuluo.onlineim.service.impl;
 
 import cn.hutool.core.util.IdUtil;
-import icu.tianqingyuluo.onlineim.mapper.FriendRequestResponseMapper;
-import icu.tianqingyuluo.onlineim.mapper.FriendResponseMapper;
-import icu.tianqingyuluo.onlineim.mapper.UserBriefResponseMapper;
+import icu.tianqingyuluo.onlineim.mapper.*;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.FriendRequestRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.FriendRequestResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.FriendResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
+import icu.tianqingyuluo.onlineim.pojo.entity.UserFriend;
 import icu.tianqingyuluo.onlineim.service.FriendService;
 import lombok.SneakyThrows;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.SQLIntegrityConstraintViolationException;
+import java.util.Date;
 import java.util.List;
 
 @Service
@@ -20,17 +21,23 @@ public class FriendServiceImpl implements FriendService {
     private final FriendResponseMapper friendResponseMapper;
     private final UserBriefResponseMapper userBriefResponseMapper;
     private final FriendRequestResponseMapper friendRequestResponseMapper;
+    private final UserFriendMapper userFriendMapper;
+    private final FriendRequestMapper friendRequestMapper;
 
-    public FriendServiceImpl(FriendResponseMapper friendResponseMapper,UserBriefResponseMapper userBriefResponseMapper,FriendRequestResponseMapper friendRequestResponseMapper) {
+    public FriendServiceImpl(FriendResponseMapper friendResponseMapper, UserBriefResponseMapper userBriefResponseMapper, FriendRequestResponseMapper friendRequestResponseMapper, UserFriendMapper userFriendMapper, FriendRequestMapper friendRequestMapper) {
         this.friendResponseMapper=friendResponseMapper;
         this.userBriefResponseMapper=userBriefResponseMapper;
         this.friendRequestResponseMapper=friendRequestResponseMapper;
+        this.userFriendMapper = userFriendMapper;
+        this.friendRequestMapper = friendRequestMapper;
     }
 
     @Override
     public List<FriendResponse> fetchFriendsByUsername(String username) {
         return friendResponseMapper.getFriendListByUsername(username);
     }
+
+
 
     @Override
     public FriendResponse getByID(String id) {
@@ -55,6 +62,18 @@ public class FriendServiceImpl implements FriendService {
     @Override
     public boolean existFriendByID(String friendId,String userid) {
         return friendRequestResponseMapper.existFriendByID(friendId,userid);
+    }
+
+    @Override
+    @Transactional
+    public void createFriend(UserFriend userFriend, String friendRequestId, int requestStatus, String updatedAt) {
+        friendRequestMapper.updateStatus(friendRequestId, requestStatus, updatedAt);
+        userFriendMapper.insert(userFriend);
+        String temp = userFriend.getUserId();
+        userFriend.setUserId(userFriend.getFriendId());
+        userFriend.setFriendId(temp);
+        userFriend.setId("rel_" + IdUtil.getSnowflakeNextIdStr());
+        userFriendMapper.insert(userFriend);
     }
 
     @Override

@@ -4,6 +4,7 @@ import icu.tianqingyuluo.onlineim.pojo.dto.request.FriendRequestRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.FriendRequestResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.FriendResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
+import icu.tianqingyuluo.onlineim.pojo.entity.UserFriend;
 import org.springframework.stereotype.Service;
 
 import java.sql.SQLIntegrityConstraintViolationException;
@@ -17,6 +18,7 @@ public interface FriendService {
     List<FriendRequestResponse> getFriendRequestListByUserID(String id);
     List<FriendRequestResponse> getSendFriendRequestListByUserID(String id);
     boolean existFriendByID(String friendId,String userid);
+    void createFriend(UserFriend userFriend, String friendRequestId, int requestStatus, String updatedAt);
     void updateRemarkByID(String id,String remark);
     void updateGroupByID(String id,String groupId);
     void updateStatusByID(String id,String status);

@@ -39,4 +39,7 @@ public interface UserFriendMapper {
     
     @Select("SELECT * FROM user_friends WHERE user_id = #{userId} AND status = 2")
     List<UserFriend> getBlacklist(String userId);
-} 
+    
+    @Select("SELECT remark FROM user_friends WHERE user_id = #{userId} AND friend_id = #{friendId} AND status = 1")
+    String getRemarkByUserIdAndFriendId(@Param("userId") String userId, @Param("friendId") String friendId);
+}

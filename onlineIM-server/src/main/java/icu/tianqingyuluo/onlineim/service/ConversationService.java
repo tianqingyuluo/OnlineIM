@@ -86,5 +86,5 @@ public interface ConversationService {
      * @param conversation 会话实体
      * @return 会话响应DTO
      */
-    ConversationResponse convertToConversationResponse(Conversation conversation);
+    ConversationResponse convertToConversationResponse(Conversation conversation, String userId);
 }

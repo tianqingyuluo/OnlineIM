@@ -7,6 +7,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -15,5 +17,5 @@ public class WebSocketMessageEvent {
     private String type;
     private String senderID;
     private String message;
-    private String senderChannelID;
+    private List<String> receiverIDs;
 }

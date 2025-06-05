@@ -11,6 +11,12 @@ import java.util.List;
 @Mapper
 public interface FriendRequestMapper {
 
+    @Results({
+            @Result(property = "fromUserId", column = "from_user_id"),
+            @Result(property = "toUserId", column = "to_user_id"),
+            @Result(property = "createAt", column = "create_at"),
+            @Result(property = "updateAt", column = "update_at")
+    })
     @Select("SELECT * FROM friend_requests WHERE id = #{id}")
     FriendRequest getById(String id);
     

@@ -85,6 +85,7 @@ public class FriendGroupController {
         try {
             String userId = jwtUtil.getUserIDFromToken(token);
             FriendGroupResponse response = friendGroupService.createFriendGroup(userId, request);
+            response.setFriends(List.of());
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
         } catch (IllegalArgumentException e) {
             log.warn("创建好友分组参数错误: {}", e.getMessage());

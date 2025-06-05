@@ -51,6 +51,7 @@ public class GroupMemberController {
         try {
             // 该方法应负责查询指定群组的所有成员列表，并返回 List<GroupMemberResponse>。
             List<GroupMemberResponse> members = groupMemberService.getGroupMembers(groupId);
+
             Map<String, Object> response = new HashMap<>();
             response.put("members", members);
             response.put("total", members.size());

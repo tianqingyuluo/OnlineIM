@@ -1,11 +1,14 @@
 package icu.tianqingyuluo.onlineim.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import icu.tianqingyuluo.onlineim.service.RedisStreamService;
 import icu.tianqingyuluo.onlineim.service.UserSessionService;
 import icu.tianqingyuluo.onlineim.service.impl.UserDetailsServiceImpl;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
 import icu.tianqingyuluo.onlineim.websocket.NettyWebSocketServer;
 import icu.tianqingyuluo.onlineim.websocket.WebSocketAuthHandler;
 import icu.tianqingyuluo.onlineim.websocket.WebSocketMessageDispatchHandler;
+import icu.tianqingyuluo.onlineim.websocket.listener.handler.MessageTypeSenderRegistry;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,15 +24,12 @@ public class WebSocketConfig {
     private final UserDetailsServiceImpl userDetailsService;
     private final JwtUtil jwtUtil;
     private final UserSessionService userSessionService;
-    private final ApplicationEventPublisher applicationEventPublisher;
 
     public WebSocketConfig(UserDetailsServiceImpl userDetailsService,
-                           JwtUtil jwtUtil, UserSessionService userSessionService,
-                           ApplicationEventPublisher applicationEventPublisher) {
+                           JwtUtil jwtUtil, UserSessionService userSessionService) {
         this.userDetailsService = userDetailsService;
         this.jwtUtil = jwtUtil;
         this.userSessionService = userSessionService;
-        this.applicationEventPublisher = applicationEventPublisher;
     }
 
     /**
@@ -44,8 +44,11 @@ public class WebSocketConfig {
      * 注册WebSocket消息处理器
      */
     @Bean
-    public WebSocketMessageDispatchHandler webSocketMessageHandler() {
-        return new WebSocketMessageDispatchHandler(jwtUtil, applicationEventPublisher);
+    public WebSocketMessageDispatchHandler webSocketMessageHandler(JwtUtil jwtUtil,
+                                                                   ObjectMapper objectMapper,
+                                                                   RedisStreamService redisStreamService,
+                                                                   MessageTypeSenderRegistry messageTypeSenderRegistry) {
+        return new WebSocketMessageDispatchHandler(jwtUtil, objectMapper, redisStreamService, messageTypeSenderRegistry);
     }
 
     /**

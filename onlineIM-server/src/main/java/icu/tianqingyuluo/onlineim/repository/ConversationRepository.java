@@ -21,7 +21,7 @@ public interface ConversationRepository extends MongoRepository<Conversation, St
     /**
      * 查询用户的所有会话
      */
-    @Query("{'userId': ?0, 'status': 1}")
+    @Query("{ 'status': 1, '$or': [ { 'userId': ?0 }, { 'targetId': ?0 } ] }")
     List<Conversation> findUserConversations(String userId, Sort sort);
     
     /**
@@ -33,7 +33,9 @@ public interface ConversationRepository extends MongoRepository<Conversation, St
      * 查询指定的会话
      */
     Conversation findByIdAndUserId(String id, String userId);
-    
+
+    @Query("{ '_id': ?0, '$or': [ { 'userId': ?1 }, { 'targetId': ?1 } ] }")
+    Conversation findByIdAndUserIDOrTargetId(String id, String userId);
     /**
      * 根据用户ID和目标ID查询会话（针对单聊）
      */

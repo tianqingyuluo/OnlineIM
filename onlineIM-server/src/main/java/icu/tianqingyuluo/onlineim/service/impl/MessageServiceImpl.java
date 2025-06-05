@@ -1,13 +1,21 @@
 package icu.tianqingyuluo.onlineim.service.impl;
 
+import cn.hutool.core.util.IdUtil;
 import icu.tianqingyuluo.onlineim.pojo.document.GroupMessage;
 import icu.tianqingyuluo.onlineim.pojo.document.PrivateMessage;
+import icu.tianqingyuluo.onlineim.pojo.document.RecallLog;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.MessageSendRequest;
+import icu.tianqingyuluo.onlineim.pojo.dto.response.GroupMemberResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
+import icu.tianqingyuluo.onlineim.pojo.entity.GroupMember;
 import icu.tianqingyuluo.onlineim.repository.GroupMessageRepository;
 import icu.tianqingyuluo.onlineim.repository.PrivateMessageRepository;
+import icu.tianqingyuluo.onlineim.repository.RecallLogRepository;
+import icu.tianqingyuluo.onlineim.service.GroupMemberService;
 import icu.tianqingyuluo.onlineim.service.MessageService;
+import icu.tianqingyuluo.onlineim.service.UserService;
+import icu.tianqingyuluo.onlineim.util.LocalChannelRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -27,15 +35,34 @@ public class MessageServiceImpl implements MessageService {
 
     private final PrivateMessageRepository privateMessageRepository;
     private final GroupMessageRepository groupMessageRepository;
+    private final RecallLogRepository recallLogRepository;
     private final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    private final GroupMemberService groupMemberService;
+    private final UserService userService;
 
     @Autowired
     public MessageServiceImpl(PrivateMessageRepository privateMessageRepository,
-                             GroupMessageRepository groupMessageRepository) {
+                              GroupMessageRepository groupMessageRepository,
+                              RecallLogRepository recallLogRepository, GroupMemberService groupMemberService, UserService userService) {
         this.privateMessageRepository = privateMessageRepository;
         this.groupMessageRepository = groupMessageRepository;
+        this.recallLogRepository = recallLogRepository;
+        this.groupMemberService = groupMemberService;
+        this.userService = userService;
     }
 
+    @Override
+    public List<MessageResponse> getHistory(String conversationId, String seqId, Integer size, String userId) {
+        // 根据会话ID的前缀判断是群聊还是单聊
+        if (conversationId.startsWith("grp_")) {
+            // 群聊消息
+            return getGroupHistory(conversationId, seqId, size, userId);
+        } else {
+            // 单聊消息
+            return getPrivateHistory(conversationId, seqId, size, userId);
+        }
+    }
+    
     @Override
     public List<MessageResponse> getPrivateHistory(String conversationId, String seqId, Integer size, String userId) {
         List<PrivateMessage> messages;
@@ -102,10 +129,20 @@ public class MessageServiceImpl implements MessageService {
                 return false;
             }
             
-            // 设置消息状态为已撤回(4)
-            privateMessage.setStatus(4);
+            // 设置消息状态为已撤回(3)
+            privateMessage.setStatus(3);
             privateMessage.setUpdatedAt(new Date());
             privateMessageRepository.save(privateMessage);
+            
+            // 创建撤回日志记录
+            RecallLog recallLog = RecallLog.builder()
+                    .conversationId(privateMessage.getConversationId())
+                    .seqId(privateMessage.getSeqId())
+                    .messageId(messageId)
+                    .operatorId(userId)
+                    .recallTime(new Date())
+                    .build();
+            recallLogRepository.save(recallLog);
             
             // TODO: 使用redisEventPublisher向redis stream推送一个redisStreamEvent
             // event中包装拟定包装了消息撤回通知
@@ -121,10 +158,20 @@ public class MessageServiceImpl implements MessageService {
                 return false;
             }
             
-            // 设置消息状态为已撤回(4)
-            groupMessage.setStatus(4);
+            // 设置消息状态为已撤回(3)
+            groupMessage.setStatus(3);
             groupMessage.setUpdatedAt(new Date());
             groupMessageRepository.save(groupMessage);
+            
+            // 创建撤回日志记录
+            RecallLog recallLog = RecallLog.builder()
+                    .conversationId(groupMessage.getGroupId())
+                    .seqId(groupMessage.getSeqId())
+                    .messageId(messageId)
+                    .operatorId(userId)
+                    .recallTime(new Date())
+                    .build();
+            recallLogRepository.save(recallLog);
             
             // TODO: 使用redisEventPublisher向redis stream推送一个redisStreamEvent
             // event中包装拟定包装了消息撤回通知
@@ -135,25 +182,7 @@ public class MessageServiceImpl implements MessageService {
         return false;
     }
 
-    @Override
-    public boolean markAsRead(List<String> messageIds, String userId) {
-        // 处理私聊消息
-        List<PrivateMessage> privateMessages = privateMessageRepository.findAllById(messageIds);
-        for (PrivateMessage message : privateMessages) {
-            // 只有接收者才能标记消息为已读
-            if (message.getReceiverId().equals(userId)) {
-                message.setStatus(2); // 已读状态
-                message.setUpdatedAt(new Date());
-                privateMessageRepository.save(message);
-                
-                // TODO: 可以考虑使用WebSocket通知发送者消息已读
-            }
-        }
-        
-        // 注意：群聊消息的已读状态处理可能需要更复杂的逻辑，这里简化处理
-        
-        return true;
-    }
+    // 已删除标记消息已读功能
 
     @Override
     public Map<String, String> uploadFile(String userId, String type, MultipartFile file) {
@@ -181,17 +210,40 @@ public class MessageServiceImpl implements MessageService {
     }
 
     @Override
-    public List<MessageResponse> syncMessages(String seqId, String userId) {
-        // 这里需要根据用户ID和序列号查询新消息
-        // 实际实现可能需要更复杂的逻辑，这里简化处理
+    public List<MessageResponse> syncMessages(String conversationId, String seqId, String userId) {
+        // 根据会话ID的前缀判断是群聊还是单聊
+        List<MessageResponse> messages = new ArrayList<>();
+        long seqIdLong;
+        try {
+            seqIdLong = Long.parseLong(seqId);
+        } catch (NumberFormatException e) {
+            // 如果 seqId 不是有效的数字，返回空列表
+            return messages;
+        }
         
-        // TODO: 实现增量同步消息逻辑
-        // 1. 查询用户的所有会话
-        // 2. 对每个会话，查询序列号大于seqId的消息
-        // 3. 合并所有消息并按时间排序
+        if (conversationId.startsWith("grp_")) {
+            // 群聊消息
+            // 查询序列号大于 seqIdLong 的群聊消息
+            List<GroupMessage> groupMessages = groupMessageRepository.findByGroupIdAndSeqIdGreaterThanOrderBySeqIdAsc(
+                    conversationId, seqIdLong);
+            
+            // 转换为响应对象
+            messages = groupMessages.stream()
+                    .map(this::convertGroupMessageToResponse)
+                    .collect(Collectors.toList());
+        } else {
+            // 单聊消息
+            // 查询序列号大于 seqIdLong 的单聊消息
+            List<PrivateMessage> privateMessages = privateMessageRepository.findByConversationIdAndSeqIdGreaterThanOrderBySeqIdAsc(
+                    conversationId, seqIdLong);
+            
+            // 转换为响应对象
+            messages = privateMessages.stream()
+                    .map(this::convertPrivateMessageToResponse)
+                    .collect(Collectors.toList());
+        }
         
-        // 这里返回一个空列表作为示例
-        return new ArrayList<>();
+        return messages;
     }
 
     @Override
@@ -202,7 +254,7 @@ public class MessageServiceImpl implements MessageService {
         if (targetId.startsWith("usr_")) {
             // 私聊消息
             PrivateMessage message = new PrivateMessage();
-            message.setId("msg_" + UUID.randomUUID().toString());
+            message.setId("msg_" + IdUtil.getSnowflakeNextIdStr());
             message.setSenderId(userId);
             message.setReceiverId(targetId);
             
@@ -215,8 +267,7 @@ public class MessageServiceImpl implements MessageService {
             message.setMessageType(request.getMessageType());
             message.setContent(request.getContent());
             message.setStatus(0); // 发送中
-            message.setClientMsgId(request.getClientMsgId());
-            message.setSeqId(System.currentTimeMillis()); // 使用时间戳作为序列号
+            message.setSeqId(IdUtil.getSnowflakeNextIdStr()); // 使用雪花ID作为序列号
             message.setTimestamp(new Date());
             message.setCreatedAt(new Date());
             message.setUpdatedAt(new Date());
@@ -232,14 +283,13 @@ public class MessageServiceImpl implements MessageService {
         } else if (targetId.startsWith("grp_")) {
             // 群聊消息
             GroupMessage message = new GroupMessage();
-            message.setId("msg_" + UUID.randomUUID().toString());
+            message.setId("msg_" + IdUtil.getSnowflakeNextIdStr());
             message.setGroupId(targetId);
             message.setSenderId(userId);
             message.setMessageType(request.getMessageType());
             message.setContent(request.getContent());
             message.setStatus(0); // 发送中
-            message.setClientMsgId(request.getClientMsgId());
-            message.setSeqId(System.currentTimeMillis()); // 使用时间戳作为序列号
+            message.setSeqId(IdUtil.getSnowflakeNextIdStr()); // 使用雪花ID作为消息序列号
             
             // 处理@用户
             if (request.getAtUserIds() != null && !request.getAtUserIds().isEmpty()) {
@@ -273,15 +323,14 @@ public class MessageServiceImpl implements MessageService {
                 .build();
         
         // 消息状态映射
-        String status;
-        switch (message.getStatus()) {
-            case 0: status = "sending"; break;
-            case 1: status = "delivered"; break;
-            case 2: status = "read"; break;
-            case 3: status = "failed"; break;
-            case 4: status = "recalled"; break;
-            default: status = "unknown";
-        }
+        String status = message.getStatus() == 0 ? "1" : String.valueOf(message.getStatus());
+//        switch (message.getStatus()) {
+//            case 0: status = "0"; break; // sending
+//            case 1: status = "1"; break; // delivered
+//            case 2: status = "2"; break; // failed
+//            case 3: status = "3"; break; // recalled
+//            default: status = "unknown";
+//        }
         
         // 构建消息响应对象
         return MessageResponse.builder()
@@ -291,32 +340,27 @@ public class MessageServiceImpl implements MessageService {
                 .messageType(message.getMessageType())
                 .content(message.getContent())
                 .status(status)
-                .isRecalled(message.getStatus() == 4)
+                .seqId(message.getSeqId())
+                .clientMessageId(message.getClientMessageId())
+                .isRecalled(message.getStatus() == 3)
                 .timestamp(dateFormat.format(message.getTimestamp()))
-                .clientMessageId(message.getClientMsgId())
                 .build();
     }
 
     @Override
     public MessageResponse convertGroupMessageToResponse(GroupMessage message) {
         // 创建发送者信息
-        UserBriefResponse senderInfo = UserBriefResponse.builder()
-                .userId(message.getSenderId())
-                // 这里需要根据senderId查询用户信息，补充name和avatar等字段
-                .username("用户" + message.getSenderId())
-                .avatarUrl("https://example.com/avatar.jpg")
-                .build();
+        UserBriefResponse senderInfo = userService.getUserBriefInfoByID(message.getSenderId());
         
         // 消息状态映射
-        String status;
-        switch (message.getStatus()) {
-            case 0: status = "sending"; break;
-            case 1: status = "delivered"; break;
-            case 2: status = "read"; break;
-            case 3: status = "failed"; break;
-            case 4: status = "recalled"; break;
-            default: status = "unknown";
-        }
+        String status = message.getStatus() == 0 ? "1" : String.valueOf(message.getStatus());
+//        switch (message.getStatus()) {
+//            case 0: status = "sending"; break;
+//            case 1: status = "delivered"; break;
+//            case 2: status = "failed"; break;
+//            case 3: status = "recalled"; break;
+//            default: status = "unknown";
+//        }
         
         // 构建消息响应对象
         return MessageResponse.builder()
@@ -327,9 +371,48 @@ public class MessageServiceImpl implements MessageService {
                 .content(message.getContent())
                 .mentionedUserIds(message.getAtUsers())
                 .status(status)
-                .isRecalled(message.getStatus() == 4)
+                .seqId(message.getSeqId())
+                .clientMessageId(message.getClientMessageId())
+                .isRecalled(message.getStatus() == 3)
                 .timestamp(dateFormat.format(message.getTimestamp()))
-                .clientMessageId(message.getClientMsgId())
                 .build();
     }
+    
+    @Override
+    public List<String> getRecallList(String conversationId, String seqId) {
+        // 查询指定会话中序列号大于客户端当前序列号的所有撤回记录
+        List<RecallLog> recallLogs = recallLogRepository.findByConversationIdAndSeqIdGreaterThanOrderBySeqIdAsc(
+                conversationId, seqId);
+        
+        // 提取被撤回消息的序列号列表
+        return recallLogs.stream()
+                .map(RecallLog::getSeqId)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public void saveGroupMessage(GroupMessage groupMessage) {
+        if (groupMessageRepository.findByIdAndGroupId(groupMessage.getId(), groupMessage.getGroupId()) == null) {
+            groupMessageRepository.save(groupMessage);
+        }
+    }
+
+    @Override
+    public void savePrivateMessage(PrivateMessage privateMessage) {
+        if (privateMessageRepository.findByIdAndConversationId(privateMessage.getId(), privateMessage.getConversationId()) == null) {
+            privateMessageRepository.save(privateMessage);
+        }
+    }
+
+    @Override
+    public void saveRecallLog(RecallLog recallLog) {
+        recallLogRepository.save(recallLog);
+    }
+
+//    @Override
+//    public List<String> getOnlineGroupMembers(String conversationId) {
+//        List<GroupMemberResponse> members = groupMemberService.getGroupMembers(conversationId);
+//        members.stream().forEach(  member -> {
+//        });
+//    }
 }

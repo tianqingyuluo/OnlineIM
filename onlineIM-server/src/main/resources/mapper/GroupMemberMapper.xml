@@ -6,6 +6,7 @@
 <mapper namespace="icu.tianqingyuluo.onlineim.mapper.GroupMemberMapper">
     <!-- 群成员结果映射 -->
     <resultMap id="GroupMemberResultMap" type="icu.tianqingyuluo.onlineim.pojo.dto.response.GroupMemberResponse">
+        <result property="groupMemberId" column="id"/>
         <result property="role" column="role"/>
         <result property="groupNickname" column="group_nickname"/>
         <result property="isMuted" column="is_muted"/>

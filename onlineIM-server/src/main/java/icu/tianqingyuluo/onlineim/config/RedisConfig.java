@@ -10,11 +10,13 @@ import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.stream.ObjectRecord;
+import org.springframework.data.redis.connection.stream.StreamOffset;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.data.redis.stream.StreamMessageListenerContainer;
+import icu.tianqingyuluo.onlineim.websocket.listener.RedisEventListener;
 
 import java.time.Duration;
 import java.util.Arrays;
@@ -81,14 +83,27 @@ public class RedisConfig implements CachingConfigurer {
         return template;
     }
 
-//    @Bean
-//    public StreamMessageListenerContainer<String, ObjectRecord<String, String>> streamContainer(
-//            RedisConnectionFactory factory) {
-//        StreamMessageListenerContainer.StreamMessageListenerContainerOptions<String, ObjectRecord<String, String>> options =
-//                StreamMessageListenerContainer.StreamMessageListenerContainerOptions
-//                        .builder()
-//                        .pollTimeout(Duration.ofSeconds(1))
-//                        .build();
-//        return StreamMessageListenerContainer.create(factory, options);
-//    }
+    @Bean
+    public StreamMessageListenerContainer<String, ObjectRecord<String, String>> streamContainer(
+            RedisConnectionFactory connectionFactory, RedisEventListener redisEventListener) {
+        StreamMessageListenerContainer.StreamMessageListenerContainerOptions<String, ObjectRecord<String, String>> options =
+                StreamMessageListenerContainer.StreamMessageListenerContainerOptions
+                        .builder()
+                        .pollTimeout(Duration.ofMillis(100))
+                        .targetType(String.class)
+                        .build();
+        StreamMessageListenerContainer<String, ObjectRecord<String, String>> container =
+                StreamMessageListenerContainer.create(connectionFactory, options);
+        
+        // 注册监听器到指定的 Stream
+        container.receive(
+            StreamOffset.fromStart("im:message:stream"),
+            redisEventListener
+        );
+        
+        // 启动容器
+        container.start();
+        
+        return container;
+    }
 }

@@ -49,8 +49,8 @@ public class GroupMemberServiceImpl implements GroupMemberService {
     @Override
     public boolean setAdmin(String groupId, String memberId, String operatorId) {
         if(groupMapper.isGroupOwner(groupId,operatorId)){
-            int role=1;
-            return groupMemberMapper.updateRole(memberId,role)==1;
+            int role = 1;
+            return groupMemberMapper.updateRole(memberId,role) == 1;
         }
         else
             return false;

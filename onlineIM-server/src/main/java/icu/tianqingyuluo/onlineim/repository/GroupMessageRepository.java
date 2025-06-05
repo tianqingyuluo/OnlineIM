@@ -36,7 +36,7 @@ public interface GroupMessageRepository extends MongoRepository<GroupMessage, St
     /**
      * 根据客户端消息ID查询消息
      */
-    GroupMessage findByClientMsgId(String clientMsgId);
+    GroupMessage findByClientMessageId(String clientMsgId);
     
     /**
      * 根据消息ID查询
@@ -53,4 +53,9 @@ public interface GroupMessageRepository extends MongoRepository<GroupMessage, St
      */
     @Query("{'groupId': ?0, 'atUsers': ?1}")
     List<GroupMessage> findByGroupIdAndAtUsers(String groupId, String userId, Pageable pageable);
-} 
+    
+    /**
+     * 查询序列号大于指定值的消息，用于增量同步
+     */
+    List<GroupMessage> findByGroupIdAndSeqIdGreaterThanOrderBySeqIdAsc(String groupId, Long seqId);
+}

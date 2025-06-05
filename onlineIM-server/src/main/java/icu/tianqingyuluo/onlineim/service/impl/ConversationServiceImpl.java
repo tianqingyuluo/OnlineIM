@@ -1,20 +1,21 @@
 package icu.tianqingyuluo.onlineim.service.impl;
 
+import icu.tianqingyuluo.onlineim.mapper.UserFriendMapper;
 import icu.tianqingyuluo.onlineim.pojo.document.Conversation;
-import icu.tianqingyuluo.onlineim.pojo.dto.response.ConversationResponse;
-import icu.tianqingyuluo.onlineim.pojo.dto.response.MessagePreviewResponse;
-import icu.tianqingyuluo.onlineim.pojo.dto.response.TargetInfoResponse;
+import icu.tianqingyuluo.onlineim.pojo.dto.response.*;
+import icu.tianqingyuluo.onlineim.pojo.entity.Group;
+import icu.tianqingyuluo.onlineim.pojo.entity.User;
 import icu.tianqingyuluo.onlineim.repository.ConversationRepository;
 import icu.tianqingyuluo.onlineim.service.ConversationService;
+import icu.tianqingyuluo.onlineim.service.FriendService;
+import icu.tianqingyuluo.onlineim.service.GroupService;
+import icu.tianqingyuluo.onlineim.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -25,10 +26,18 @@ public class ConversationServiceImpl implements ConversationService {
 
     private final ConversationRepository conversationRepository;
     private final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    private final GroupService groupService;
+    private final UserService userService;
+    private final FriendService friendService;
+    private final UserFriendMapper userFriendMapper;
 
     @Autowired
-    public ConversationServiceImpl(ConversationRepository conversationRepository) {
+    public ConversationServiceImpl(ConversationRepository conversationRepository, GroupService groupService, UserService userService, FriendService friendService, UserFriendMapper userFriendMapper) {
         this.conversationRepository = conversationRepository;
+        this.groupService = groupService;
+        this.userService = userService;
+        this.friendService = friendService;
+        this.userFriendMapper = userFriendMapper;
     }
 
     @Override
@@ -36,20 +45,31 @@ public class ConversationServiceImpl implements ConversationService {
         // 按更新时间降序排序，置顶的会话排在前面
         Sort sort = Sort.by(Sort.Direction.DESC, "top", "updatedAt");
         List<Conversation> conversations = conversationRepository.findUserConversations(userId, sort);
+        List<ConversationResponse> conversationResponses = new ArrayList<>();
+        for (Conversation conversation : conversations) {
+            if (userId.equals(conversation.getUserId())) {
+                conversationResponses.add(convertToConversationResponse(conversation, userId));
+            }
+            else {
+                conversationResponses.add(convertToConversationResponse(conversation, conversation.getTargetId()));
+            }
+
+        }
         
-        return conversations.stream()
-                .map(this::convertToConversationResponse)
-                .collect(Collectors.toList());
+//        return conversations.stream()
+//                .map(this::convertToConversationResponse)
+//                .collect(Collectors.toList());
+        return conversationResponses;
     }
 
     @Override
     public ConversationResponse getConversation(String conversationId, String userId) {
-        Conversation conversation = conversationRepository.findByIdAndUserId(conversationId, userId);
+        Conversation conversation = conversationRepository.findByIdAndUserIDOrTargetId(conversationId, userId);
         if (conversation == null) {
             return null;
         }
         
-        return convertToConversationResponse(conversation);
+        return convertToConversationResponse(conversation, userId);
     }
 
     @Override
@@ -160,18 +180,69 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     @Override
-    public ConversationResponse convertToConversationResponse(Conversation conversation) {
+    public ConversationResponse convertToConversationResponse(Conversation conversation, String userId) {
+
+        String id = conversation.getId();
+        String name;
+        String avatarUrl = "https://img.ixintu.com/download/jpg/20200901/3e9ce3813b7199ea9588eeb920f41208_512_512.jpg!bg"; // TODO: 后期头像要换
+
+        if (id.contains("grp_")) {
+            GroupBriefResponse group = groupService.getGroupByID(id);
+            name = group.getName();
+            if (group.getAvatar() != null) {
+                avatarUrl = group.getAvatar();
+            }
+        }
+        else {
+
+            String withoutPrefix = id.substring("conv_".length());
+
+            // 按 "usr_" 拆分
+            String[] parts = withoutPrefix.split("usr_");
+
+            // 过滤掉空字符串（第一个元素是空字符串）
+            String user1 = "usr_" + parts[1]; // "1231231"
+            String user2 = "usr_" + parts[2]; // "456"
+            String remark = userFriendMapper.getRemarkByUserIdAndFriendId(user1, user2);
+            if (user1.equals(userId)) {
+                id = user2;
+                UserResponse user = userService.getUserInfoByUserID(user2);
+                if (user.getAvatarUrl() != null) {
+                    avatarUrl = user.getAvatarUrl();
+                }
+                if (remark != null) {
+                    name = remark;
+                }
+                else {
+                name = userService.getUserInfoByUserID(user2).getNickname();
+                }
+            }
+            else {
+                id = user1;
+                UserResponse user = userService.getUserInfoByUserID(user1);
+                if (user.getAvatarUrl() != null) {
+                    avatarUrl = user.getAvatarUrl();
+                }
+                if (userFriendMapper.getRemarkByUserIdAndFriendId(user2, user1) != null) {
+                    name = remark;
+                }
+                else  {
+                    name = userService.getUserInfoByUserID(user1).getNickname();
+                }
+            }
+        }
+
         // 创建目标信息（用户或群组）
         TargetInfoResponse targetInfo = TargetInfoResponse.builder()
-                .id(conversation.getTargetId())
+                .id(id)
                 // 这里需要根据targetId查询用户或群组信息，补充name和avatar等字段
-                .name("用户" + conversation.getTargetId())
-                .avatarUrl("https://example.com/avatar.jpg")
+                .name(name)
+                .avatarUrl(avatarUrl)
                 .build();
         
         // 创建最后一条消息的预览
         MessagePreviewResponse lastMessage = null;
-        if (conversation.getLastMessage() != null) {
+        if (conversation.getLastMessage() != null && conversation.getLastMessage().getMessageId() != null) {
             lastMessage = MessagePreviewResponse.builder()
                     .messageId(conversation.getLastMessage().getMessageId())
                     .contentPreview(conversation.getLastMessage().getContent())
