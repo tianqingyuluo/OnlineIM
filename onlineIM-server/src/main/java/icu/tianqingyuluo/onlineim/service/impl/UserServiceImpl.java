@@ -68,17 +68,11 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public UserBriefResponse getUserBriefInfoByUsername(String username) {
-        User user = userMapper.getByUsername(username);
-        return UserBriefResponse
-                .builder()
-                .userId(user.getId())
-                .avatarUrl(user.getAvatar())
-                .userId(user.getId())
-                .nickname(user.getNickname())
-                .build();
+        return userBriefResponseMapper.getUserBriefInfoByUsername(username);
     }
 
-    public List<User> TestGetList(String name) {
-        return userMapper.getList(name,5,0,0);
+    @Override
+    public UserBriefResponse getUserBriefInfoByID(String id){
+        return  userBriefResponseMapper.getUserBriefInfoByID(id);
     }
 }

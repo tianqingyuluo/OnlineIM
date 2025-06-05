@@ -1,6 +1,8 @@
 package icu.tianqingyuluo.onlineim.pojo.dto.request;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -8,6 +10,7 @@ import lombok.NoArgsConstructor;
  * 用户信息更新请求体
  */
 @Data
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class UserUpdateRequest {
@@ -20,6 +23,7 @@ public class UserUpdateRequest {
     /**
      * 头像URL
      */
+    @JsonProperty("avatar_url")
     private String avatarUrl;
     
     /**

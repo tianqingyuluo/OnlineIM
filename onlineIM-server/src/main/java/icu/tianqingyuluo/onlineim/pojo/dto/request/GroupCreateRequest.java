@@ -1,5 +1,7 @@
 package icu.tianqingyuluo.onlineim.pojo.dto.request;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -28,6 +30,7 @@ public class GroupCreateRequest {
     /**
      * 群组头像URL
      */
+    @JsonProperty("avatar_url")
     private String avatar;
     
     /**
@@ -39,15 +42,12 @@ public class GroupCreateRequest {
     /**
      * 初始成员ID列表
      */
+    @JsonProperty("initial_members")
     private List<String> memberIDs;
-    
-    /**
-     * 加入方式：0-需要验证，1-无需验证，2-禁止加入
-     */
-    private Integer joinType;
     
     /**
      * 最大成员数
      */
+    @JsonProperty("max_members")
     private Integer maxMembers;
 } 

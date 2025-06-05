@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import {ref, computed, onMounted} from 'vue';
-import { useUserStore } from "@/stores/user.ts";
-import { meService } from "@/services/me.service.ts";
-import { toTypedSchema } from '@vee-validate/zod';
-import { useForm } from 'vee-validate';
+import {computed, ref, onUnmounted} from 'vue';
+import {useUserStore} from "@/stores/user.ts";
+import {meService} from "@/services/me.service.ts";
+import {toTypedSchema} from '@vee-validate/zod';
+import {useForm} from 'vee-validate';
 import * as z from 'zod';
 import DraggableHeader from "@/components/common/DraggableHeader.vue";
 
@@ -24,7 +24,7 @@ const formSchema = toTypedSchema(
           "请输入有效的邮箱地址"
         ),
       z.null()
-    ]).transform(val => val || ''),
+    ]),
     phone: z.union([
       z.string()
         .refine(
@@ -32,7 +32,7 @@ const formSchema = toTypedSchema(
           "请输入有效的手机号"
         ),
       z.null()
-    ]).transform(val => val || ''),
+    ]),
     region: z.union([
       z.string()
         .max(20, "地区最多20个字符"),
@@ -43,109 +43,141 @@ const formSchema = toTypedSchema(
         .max(100, "个性签名最多100个字符"),
       z.null()
     ]).transform(val => val || ''),
-    gender: z.enum(['male', 'female'])
-      .default('male')
+    gender: z.union([
+      z.string().refine(val => ['0','1','2'].includes(val)),
+      z.null()
+    ]).transform(val => val === null ? '0' : val).default('0')
   })
 )
 
-
 const userStore = useUserStore();
+const previewAvatarUrl = ref<string | null>(null); // 新增：独立的预览URL变量
 
 const tempSettings = computed(() => ({
   ...userStore.loggedInUser,
   nickname: userStore.loggedInUser?.nickname || '',
   email: userStore.loggedInUser?.email || '',
   region: userStore.loggedInUser?.region || '',
-  gender: userStore.loggedInUser?.gender || 'male', // 确保默认值
+  gender: userStore.loggedInUser?.gender || '0',
   phone: userStore.loggedInUser?.phone || '',
   signature: userStore.loggedInUser?.signature || '',
   avatar_url: userStore.loggedInUser?.avatar_url || ''
 }));
+
 const { handleSubmit, errors, defineField } = useForm({
   validationSchema: formSchema,
-  initialValues: tempSettings.value,
-  validateOnBlur: false,  // 禁用blur验证
-  validateOnChange: false, // 禁用change验证
-  validateOnInput: false,  // 禁用input验证
-  validateOnModelUpdate: false // 禁用model更新验证
+  initialValues: tempSettings.value
 })
+
 // 为每个字段添加绑定
 const [nickname] = defineField('nickname');
 const [email] = defineField('email');
 const [phone] = defineField('phone');
 const [region] = defineField('region');
 const [signature] = defineField('signature');
-const [gender] = defineField('gender'); // 确保正确绑定
+const [gender] = defineField('gender');
 
 const saveSettings = handleSubmit(async (values) => {
   try {
     const updatedUser = await meService.updateMe({
-      nickname: values.nickname || undefined,
-      email: values.email || undefined,
-      region: values.region || undefined,
-      gender: values.gender || 'male', // 使用表单中的值
-      phone: values.phone || undefined,
-      signature: values.signature || undefined,
-      avatar_url: tempSettings.value.avatar_url || undefined
+      nickname: values.nickname || '',
+      email: values.email || '',
+      region: values.region || '',
+      gender: values.gender ||'0',
+      phone: values.phone || '',
+      signature: values.signature || '',
+      avatar_url:  tempSettings.value.avatar_url || previewAvatarUrl.value || ''
     });
     userStore.setLoggedInUser(updatedUser);
+    // 上传成功后清除预览URL
+    if (previewAvatarUrl.value) {
+      URL.revokeObjectURL(previewAvatarUrl.value);
+      previewAvatarUrl.value = null;
+    }
     emit('close');
   } catch (error) {
     console.error('更新失败:', error);
   }
 });
-const emit = defineEmits(['close']);
 
+const emit = defineEmits(['close']);
 
 // 更换头像逻辑
 const changeAvatar = () => {
-  // 这里实现更换头像的实际逻辑
-  console.log('更换头像');
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/png, image/jpeg';
+  
+  input.onchange = async (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    
+    // 验证文件类型
+    if (!['image/png', 'image/jpeg'].includes(file.type)) {
+      alert('请选择PNG或JPG格式的图片');
+      return;
+    }
+    // 创建新的预览URL
+    previewAvatarUrl.value = URL.createObjectURL(file);
+    
+    try {
+      const uploadedUrl = await meService.uploadAvatar(file);
+      tempSettings.value.avatar_url = uploadedUrl;
+      console.log('头像上传成功:', uploadedUrl);
+    } catch (error) {
+      console.error('头像上传失败:', error);
+      alert('头像上传失败，请重试');
+    }
+  };
+  
+  input.click();
 };
-// 关闭模态框
+
 const closeModal = () => {
+  // 释放预览URL
+  if (previewAvatarUrl.value) {
+    URL.revokeObjectURL(previewAvatarUrl.value);
+    previewAvatarUrl.value = null;
+  }
   emit('close');
 };
 
-const modalRef = ref<HTMLElement | null>(null)
+// 组件卸载时清理
+onUnmounted(() => {
+  if (previewAvatarUrl.value) {
+    URL.revokeObjectURL(previewAvatarUrl.value);
+  }
+});
+
+const modalRef = ref<HTMLElement | null>(null);
 
 const handleDrag = ({ deltaX, deltaY }: { deltaX: number; deltaY: number }) => {
-  if (!modalRef.value) return
+  if (!modalRef.value) return;
 
-  // 使用 getBoundingClientRect 获取精确位置
-  const rect = modalRef.value.getBoundingClientRect()
-  modalRef.value.style.top = `${rect.top + deltaY}px`
-  modalRef.value.style.left = `${rect.left + deltaX}px`
-}
-
-// 初始化时转换百分比为像素
-onMounted(() => {
-  if (!modalRef.value) return
-  const vw = window.innerWidth
-  const vh = window.innerHeight
-  modalRef.value.style.top = `${vh * 0.1}px`
-  modalRef.value.style.left = `${vw * 0.3}px`
-})
+  const rect = modalRef.value.getBoundingClientRect();
+  modalRef.value.style.top = `${rect.top + deltaY}px`;
+  modalRef.value.style.left = `${rect.left + deltaX}px`;
+};
 </script>
+
 <template>
-  <div ref="modalRef" class="fixed z-50 top-[10%] left-[30%] w-[40%]">
+  <div ref="modalRef" class="fixed z-50 top-[10%] left-[30%] w-[40%] rounded-md">
     <DraggableHeader @drag="handleDrag">
       <h2 class="text-lg font-medium text-gray-800">用户设置</h2>
     </DraggableHeader>
-    <div class="bg-white rounded-lg p-6 w-full shadow-md border border-gray-200">
-
-      <!-- 头像区域 - 居中显示并整合更换功能 -->
+    <div class="bg-white p-6 w-full shadow-md border border-gray-200">
+      <!-- 头像区域 -->
       <div class="mb-5 flex flex-col items-center">
         <div
             class="w-24 h-24 rounded-full overflow-hidden bg-gray-100 border border-gray-200 relative cursor-pointer hover:opacity-90 transition-opacity"
             @click="changeAvatar"
         >
           <img
-              :src="tempSettings.avatar_url || '/images/help.png'"
+              :src="previewAvatarUrl || tempSettings.avatar_url || '/images/help.png'"
               class="w-full h-full object-cover"
               alt="用户头像"
           >
-          <div class="absolute inset-0  hover:bg-black/80 bg-opacity-30 flex items-center justify-center transition-all">
+          <div class="absolute inset-0 hover:bg-black/80 bg-opacity-30 flex items-center justify-center transition-all">
             <span class="text-white opacity-0 hover:opacity-100 text-sm">更换头像</span>
           </div>
         </div>
@@ -156,7 +188,6 @@ onMounted(() => {
         <!-- 昵称字段 -->
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-2">昵称</label>
-          <!-- 昵称字段 -->
           <input
               v-model="nickname"
               type="text"
@@ -164,13 +195,11 @@ onMounted(() => {
               placeholder="请输入昵称"
               :class="{'border-red-500': errors.nickname}"
           >
-          <!-- 其他字段也类似修改v-model绑定 -->
           <p v-if="errors.nickname" class="text-red-500 text-sm mt-1">{{ errors.nickname }}</p>
         </div>
 
-        <!-- 邮箱和手机号并排放置 -->
+        <!-- 邮箱和手机号 -->
         <div class="grid grid-cols-2 gap-4">
-          <!-- 邮箱 -->
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-2">邮箱</label>
             <input
@@ -182,7 +211,6 @@ onMounted(() => {
             >
             <p v-if="errors.email" class="text-red-500 text-sm mt-1">{{ errors.email }}</p>
           </div>
-          <!-- 手机号码 -->
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-2">手机号</label>
             <input
@@ -196,9 +224,8 @@ onMounted(() => {
           </div>
         </div>
 
-        <!-- 地区和性别并排放置 -->
+        <!-- 地区和性别 -->
         <div class="grid grid-cols-2 gap-4">
-          <!-- 地区 -->
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-2">地区</label>
             <input
@@ -210,15 +237,15 @@ onMounted(() => {
             >
             <p v-if="errors.region" class="text-red-500 text-sm mt-1">{{ errors.region }}</p>
           </div>
-          <!-- 性别选择 -->
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-2">性别</label>
             <select
                 v-model="gender"
                 class="w-full p-2.5 border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 bg-white text-gray-800"
             >
-              <option value="male">男</option>
-              <option value="female">女</option>
+              <option :value="'0'">未设置</option>
+              <option :value="'1'">男</option>
+              <option :value="'2'">女</option>
             </select>
           </div>
         </div>
@@ -257,7 +284,6 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* 原有样式保持不变 */
 .modal-enter-active,
 .modal-leave-active {
   transition: opacity 0.3s ease;

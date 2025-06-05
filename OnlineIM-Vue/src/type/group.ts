@@ -1,34 +1,16 @@
 // 基础类型定义
 type UUID = string;  // 格式如: usr_xxx 或 grp_xxx
 type ISO8601DateTime = string;
-type GroupRole = 'owner' | 'admin' | 'member';
+type GroupRole = string;
 
-// 群组成员简略信息
-export interface GroupMemberBrief {
-    user_id: UUID;
-    username: string;
-    avatar_url?: string;
-    role: GroupRole;
-    join_time: ISO8601DateTime;
+export interface GroupMember {
+  user_id: UUID;
+  username: string;
+  avatar_url?: string;
+  role: GroupRole;
+  joined_at: ISO8601DateTime;
 }
 
-// 6.1 创建群组
-export interface CreateGroupRequest {
-    name: string;
-    avatar_url?: string;
-    description?: string;
-    initial_members?: UUID[]; // 初始成员ID列表
-}
-
-export interface CreateGroupResponse {
-    group_id: UUID;
-    name: string;
-    owner_id: UUID;
-    avatar_url?: string;
-    description?: string;
-    created_at: ISO8601DateTime;
-    member_count: number;
-}
 
 // 6.2 搜索群组
 export interface GroupSearchResult {
@@ -44,31 +26,58 @@ export interface GroupSearchResponse {
     total: number;
 }
 
-// 6.3 获取群组详细信息
-export interface GroupDetail {
+export interface GroupResponse {
     group_id: UUID;
     name: string;
     owner_id: UUID;
     avatar_url?: string;
     description?: string;
-    announcement?: string; // 群公告
-    created_at: ISO8601DateTime;
+    announcement?: string;
     member_count: number;
     my_role: GroupRole;
-    members?: GroupMemberBrief[]; // 可选，完整成员列表
-    settings?: {
-        join_approval_required: boolean; // 是否需要加群审批
-        invite_only: boolean; // 是否仅限邀请加入
-        message_history_visible: boolean; // 新成员是否可见历史消息
-    };
+    create_at: string;
 }
 
-// 群组列表项 (用于列表展示)
-export interface GroupListItem {
-    group_id: UUID;
-    name: string;
-    avatar_url?: string;
-    last_message?: string;
-    unread_count?: number;
-    updated_at?: ISO8601DateTime;
+
+export interface GroupMemberAll {
+    "user_info": {
+        "user_id": string
+        "username": string
+        "nickname": string
+        "avatar_url": string
+    }
+    group_member_id:string
+    group_nickname: string
+    "role": string;
+    "is_muted" : boolean
+    "mute_end_time": string
+    "joined_at": string
 }
+export interface GroupMembersResponse {
+    members: GroupMemberAll[];
+    total: number;
+}
+export interface GroupJoinRequestResponse {
+    
+    requestID:string
+    groupID:string
+    groupName:string
+    user_info:
+        {
+            username:string
+            nickname:string
+            avatarUrl:string
+            userID:string
+        }
+    inviterInfo:
+        {
+        username:string
+        nickname:string
+        avatarUrl:string
+        userID:string
+        }
+    message:string
+    status:string
+    createdAt:string
+    
+} 

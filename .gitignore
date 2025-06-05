@@ -32,6 +32,7 @@ build/
 .vscode/
 
 ### Xcode ###
+.xcodemap
 /onlineIM-server/.xcodemap/
 
 ### password ###

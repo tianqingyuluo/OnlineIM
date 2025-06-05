@@ -8,17 +8,11 @@ export const searchService = {
   async searchUsers(
     query: string,
     page: number,
-    params?: {
-      limit?: number;
-      offset?: number;
-    },
     formContext?: FormContext
   ): Promise<UserSearchResponse> {
     try {
 
-      const response = await api.get<UserSearchResponse>(`/users/search/${encodeURIComponent(query)}/${page}`, {
-
-      });
+      const response = await api.get<UserSearchResponse>(`/users/search/${encodeURIComponent(query)}/${page}`);
       return response.data;
     } catch (error: any) {
       if (formContext && error.response?.data?.errors) {

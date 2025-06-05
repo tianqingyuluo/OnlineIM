@@ -32,20 +32,10 @@ public class GroupUpdateRequest {
      */
     @Size(max = 200, message = "群组描述最多200个字符")
     private String description;
-    
-    /**
-     * 群公告
-     */
-    @Size(max = 500, message = "群公告最多500个字符")
-    private String announcement;
-    
+
     /**
      * 加入方式：0-需要验证，1-无需验证，2-禁止加入
      */
     private Integer joinType;
-    
-    /**
-     * 禁言类型：0-不禁言，1-全员禁言（除群主和管理员），2-仅群主和管理员可发言
-     */
-    private Integer muteType;
+
 } 

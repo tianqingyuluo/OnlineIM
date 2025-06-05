@@ -1,43 +1,45 @@
 package icu.tianqingyuluo.onlineim.websocket;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import cn.hutool.core.util.IdUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import icu.tianqingyuluo.onlineim.service.UserSessionService;
 import icu.tianqingyuluo.onlineim.service.impl.UserDetailsServiceImpl;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
+import icu.tianqingyuluo.onlineim.util.LocalChannelRegistry;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.handler.codec.http.FullHttpRequest;
-import io.netty.handler.codec.http.HttpHeaderNames;
-import io.netty.handler.codec.http.HttpHeaders;
-import io.netty.handler.codec.http.HttpResponseStatus;
-import io.netty.handler.codec.http.DefaultFullHttpResponse;
-import io.netty.handler.codec.http.HttpVersion;
-import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
+import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http.websocketx.WebSocketServerHandshaker;
+import io.netty.handler.codec.http.websocketx.WebSocketServerHandshakerFactory;
+import io.netty.util.AttributeKey;
+import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+
+import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 
 /**
  * WebSocket认证处理器
  * 负责验证WebSocket连接请求中的JWT令牌
  */
 @Slf4j
-@Component
+@ChannelHandler.Sharable
 public class WebSocketAuthHandler extends ChannelInboundHandlerAdapter {
 
     private final JwtUtil jwtUtil;
     private final UserDetailsServiceImpl userDetailsService;
     private final ObjectMapper objectMapper;
-    
-    // 存储已认证的用户信息，键为ChannelId，值为用户名
-    private static final ConcurrentHashMap<String, String> authenticatedUsers = new ConcurrentHashMap<>();
+    private final UserSessionService userSessionService;
 
-    public WebSocketAuthHandler(JwtUtil jwtUtil, UserDetailsServiceImpl userDetailsService) {
+    public WebSocketAuthHandler(JwtUtil jwtUtil, UserDetailsServiceImpl userDetailsService, UserSessionService userSessionService) {
         this.jwtUtil = jwtUtil;
         this.userDetailsService = userDetailsService;
         this.objectMapper = new ObjectMapper();
+        this.userSessionService = userSessionService;
     }
 
     @Override
@@ -45,75 +47,37 @@ public class WebSocketAuthHandler extends ChannelInboundHandlerAdapter {
         // 处理HTTP握手请求
         if (msg instanceof FullHttpRequest) {
             FullHttpRequest request = (FullHttpRequest) msg;
-            
-            // 获取请求头中的Authorization
-            HttpHeaders headers = request.headers();
-            String authHeader = headers.get(HttpHeaderNames.AUTHORIZATION);
+
+            QueryStringDecoder queryDecoder = new QueryStringDecoder(request.uri());
+
+            // 优先从 URL 参数中获取 token（例如 ws://host/ws?token=xxx）
+            String token = queryDecoder.parameters().get("token").stream().findFirst().orElse(null);
             
             // 如果请求头中包含有效的JWT令牌，则立即验证
-            if (authHeader != null && authHeader.startsWith("Bearer ")) {
-                String token = authHeader.substring(7);
+            if (token != null && token.startsWith("Bearer ")) {
                 if (authenticateToken(token, ctx)) {
-                    // 认证成功，继续处理请求
-                    ctx.fireChannelRead(msg);
+                    FullHttpRequest cleanRequest = new DefaultFullHttpRequest(
+                            request.protocolVersion(),
+                            request.method(),
+                            request.uri().substring(0, request.uri().indexOf('?')), // 使用干净的路径
+                            request.content().copy(),
+                            request.headers(),
+                            request.trailingHeaders()
+                    );
+
+                    // 认证成功后传递干净的请求
+                    ctx.fireChannelRead(cleanRequest);
                     return;
                 }
             } else {
-                // 如果请求头中没有令牌，允许连接建立，后续通过WebSocket消息进行认证
-                log.info("WebSocket连接请求，等待认证消息");
-                ctx.fireChannelRead(msg);
+                // 如果请求头中没有令牌，直接返回401。
+                log.info("WebSocket没有携带JWT请求头");
+                DefaultFullHttpResponse response = new DefaultFullHttpResponse(
+                        HTTP_1_1, HttpResponseStatus.UNAUTHORIZED);
+                ctx.writeAndFlush(response);
+                ctx.close();
                 return;
             }
-            
-            // 认证失败，返回401响应
-            log.warn("WebSocket认证失败，未提供有效的JWT令牌");
-            DefaultFullHttpResponse response = new DefaultFullHttpResponse(
-                    HttpVersion.HTTP_1_1, HttpResponseStatus.UNAUTHORIZED);
-            ctx.writeAndFlush(response);
-            ctx.close();
-            return;
-        }
-        
-        // 处理WebSocket文本消息中的认证
-        if (msg instanceof TextWebSocketFrame) {
-            TextWebSocketFrame frame = (TextWebSocketFrame) msg;
-            String channelId = ctx.channel().id().asLongText();
-            
-            // 如果用户已认证，直接传递消息
-            if (authenticatedUsers.containsKey(channelId)) {
-                ctx.fireChannelRead(msg);
-                return;
-            }
-            
-            // 尝试从消息中解析认证信息
-            try {
-                JsonNode jsonNode = objectMapper.readTree(frame.text());
-                if (jsonNode.has("type") && "AUTH".equals(jsonNode.get("type").asText()) 
-                        && jsonNode.has("token")) {
-                    String token = jsonNode.get("token").asText();
-                    
-                    if (authenticateToken(token, ctx)) {
-                        // 认证成功，发送成功消息
-                        String username = authenticatedUsers.get(channelId);
-                        ctx.channel().writeAndFlush(new TextWebSocketFrame(
-                                "{\"type\":\"AUTH_SUCCESS\",\"username\":\"" + username + "\"}"));
-                        return;
-                    } else {
-                        // 认证失败，关闭连接
-                        ctx.channel().writeAndFlush(new TextWebSocketFrame(
-                                "{\"type\":\"AUTH_FAILED\",\"message\":\"无效的令牌\"}"));
-                        ctx.close();
-                        return;
-                    }
-                }
-            } catch (Exception e) {
-                log.error("解析认证消息失败: {}", e.getMessage());
-            }
-            
-            // 未认证的消息，要求认证
-            ctx.channel().writeAndFlush(new TextWebSocketFrame(
-                    "{\"type\":\"REQUIRE_AUTH\",\"message\":\"请先进行认证\"}"));
-            return;
         }
         
         // 其他类型的消息，继续处理
@@ -127,6 +91,7 @@ public class WebSocketAuthHandler extends ChannelInboundHandlerAdapter {
         try {
             // 从令牌中获取用户名
             String username = jwtUtil.getUsernameFromToken(token);
+            String userID = jwtUtil.getUserIDFromToken(token);
             
             // 加载用户详情
             UserDetails userDetails = userDetailsService.loadUserByUsername(username);
@@ -134,7 +99,23 @@ public class WebSocketAuthHandler extends ChannelInboundHandlerAdapter {
             // 验证令牌
             if (jwtUtil.validateToken(token, userDetails)) {
                 // 认证成功，将用户信息与通道关联
-                authenticatedUsers.put(ctx.channel().id().asLongText(), username);
+
+                // 生成唯一的连接标识（方便横向扩展）
+                String connectionID = "conn_" + IdUtil.simpleUUID();
+                // 在本地表中构建映射
+                LocalChannelRegistry.add(connectionID, ctx.channel().id().asLongText(), userID, ctx.channel());
+                // 在redis中存储路由信息
+                userSessionService.storeDeviceSession(
+                        token,
+                        jwtUtil.getUserIDFromToken(token),
+                        jwtUtil.getDeviceIDFromToken(token),
+                        connectionID,
+                        jwtUtil.getRemainingValidityTime(token),
+                        TimeUnit.MILLISECONDS
+                );
+                // 往channel的属性里塞一个token方便注销的时候用
+                ctx.channel().attr(AttributeKey.valueOf("jwt_token")).set(token);
+
                 log.info("WebSocket认证成功: {}", username);
                 return true;
             }
@@ -148,17 +129,16 @@ public class WebSocketAuthHandler extends ChannelInboundHandlerAdapter {
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         // 连接关闭时，移除用户信息
         String channelId = ctx.channel().id().asLongText();
-        String username = authenticatedUsers.remove(channelId);
-        if (username != null) {
-            log.info("WebSocket连接关闭，用户: {}", username);
+        String token = ctx.channel().attr(AttributeKey.valueOf("jwt_token")).get().toString();
+        if (token != null) {
+            String userID = jwtUtil.getUserIDFromToken(token);
+            String deviceID = jwtUtil.getDeviceIDFromToken(token);
+            // 删除该device在redis中的连接记录以及删除本地表中的channel对象
+            userSessionService.removeDeviceSession(userID, deviceID, channelId);
+            log.info("WebSocket连接关闭，用户: {}", userID);
         }
+
         super.channelInactive(ctx);
     }
-    
-    /**
-     * 获取通道关联的用户名
-     */
-    public static String getUsernameByChannelId(String channelId) {
-        return authenticatedUsers.get(channelId);
-    }
+
 }

@@ -2,6 +2,8 @@ import api from './api.service';
 import type { FormContext } from 'vee-validate';
 import { useUserStore } from '@/stores/user.ts';
 import {type User}from '@/type/User.ts'
+import axios from 'axios';
+import { API_BASE_URL } from '../../shared/config.ts';
 
 
 
@@ -29,11 +31,14 @@ export const meService = {
      * @returns 更新后的用户信息
      */
     async updateMe(
-
         userData: Partial<Omit<User, 'user_id' | 'created_at' | 'token'>>,
         formContext?: FormContext
     ): Promise<User> {
         try {
+            // 确保avatar_url是字符串而不是嵌套对象
+            if (userData.avatar_url && typeof userData.avatar_url === 'object') {
+                userData.avatar_url = userData.avatar_url.avatar_url;
+            }
             const response = await api.put<User>('/users/me', userData);
             return response.data;
         } catch (error: any) {
@@ -43,5 +48,25 @@ export const meService = {
             throw error;
         }
     },
+
+    async uploadAvatar(file: File) {
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            const userStore = useUserStore();
+            const instance = axios.create({
+                baseURL: API_BASE_URL,
+                headers: {
+                    'Authorization': `Bearer ${userStore.token}`,
+                }
+            });
+            
+            const response = await instance.post<string>('/users/me/avatar', formData);
+            return response.data;
+        } catch (error: any) {
+            throw error;
+        }
+    }
 
 };

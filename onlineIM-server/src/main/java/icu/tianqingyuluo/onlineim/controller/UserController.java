@@ -3,16 +3,22 @@ package icu.tianqingyuluo.onlineim.controller;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.UserUpdateRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserResponse;
+import icu.tianqingyuluo.onlineim.service.FileStorageService;
 import icu.tianqingyuluo.onlineim.service.UserService;
 import icu.tianqingyuluo.onlineim.service.impl.UserDetailsServiceImpl;
+import icu.tianqingyuluo.onlineim.storage.OSSAdapter;
+import icu.tianqingyuluo.onlineim.util.ErrorCodeUtil;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ibatis.exceptions.PersistenceException;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -30,9 +36,17 @@ public class UserController {
 
     private final JwtUtil jwtUtil;
 
-    public UserController(UserDetailsServiceImpl userDetailsService, UserService userService, JwtUtil jwtUtil) {
+    private final FileStorageService fileStorageService;
+
+    @Value("${oss.default-bucket}")
+    private String bucketName;
+
+    public UserController(UserDetailsServiceImpl userDetailsService,
+                          UserService userService, JwtUtil jwtUtil,
+                          FileStorageService fileStorageService) {
         this.userService = userService;
         this.jwtUtil = jwtUtil;
+        this.fileStorageService = fileStorageService;
     }
 
     /**
@@ -42,7 +56,7 @@ public class UserController {
     @GetMapping("/me")
     public ResponseEntity<UserResponse> getCurrentUser(@RequestHeader(value = "Authorization") String token) {
         // TODO: 实现获取当前用户信息逻辑
-        String username = jwtUtil.getUsernameFromToken(token.substring(7));
+        String username = jwtUtil.getUsernameFromToken(token);
         return ResponseEntity.ok(userService.getUserInfoByUsername(username));
     }
     
@@ -52,14 +66,14 @@ public class UserController {
      * @return 用户信息
      */
     @GetMapping("/{userId}")
-    public ResponseEntity<UserResponse> getUserInfo(@PathVariable String userId) {
+    public ResponseEntity<?> getUserInfo(@PathVariable String userId) {
         // TODO: 实现获取指定用户信息逻辑
         try {
             return ResponseEntity.ok(userService.getUserInfoByUserID(userId));
         }
         catch (PersistenceException e) {
             log.error(e.getMessage());
-            return ResponseEntity.notFound().build();
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "啊哦，发生了些小错误"));
         }
     }
     
@@ -69,16 +83,16 @@ public class UserController {
      * @return 更新结果
      */
     @PutMapping("/me")
-    public ResponseEntity<UserResponse> updateUserInfo(@RequestHeader(value = "Authorization") String token, @RequestBody UserUpdateRequest request) {
+    public ResponseEntity<?> updateUserInfo(@RequestHeader(value = "Authorization") String token, @RequestBody UserUpdateRequest request) {
         // TODO: 实现更新用户信息逻辑
-        String username = jwtUtil.getUsernameFromToken(token.substring(7));
+        String username = jwtUtil.getUsernameFromToken(token);
         try {
             userService.updateByUsername(username, request);
             return ResponseEntity.ok(userService.getUserInfoByUsername(username));
         }
         catch (PersistenceException e) {
             log.error(e.getMessage());
-            return ResponseEntity.badRequest().build();
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "啊哦，发生了些小错误"));
         }
     }
     
@@ -88,10 +102,23 @@ public class UserController {
      * @return 更新结果
      */
     @PostMapping("/me/avatar")
-    public ResponseEntity<Map<String, String>> uploadAvatar(@RequestParam("file") MultipartFile avatar) {
+    public ResponseEntity<Map<String, String>> uploadAvatar(
+            @RequestHeader("Authorization") String token,
+            @RequestParam("file") MultipartFile avatar) {
         // TODO: 实现上传头像逻辑
         // UNDO: 使用minio传入数据桶中
-        return null;
+        Map<String, String> response = new HashMap<>();
+        String userID = jwtUtil.getUserIDFromToken(token);
+
+        try {
+            String avatarUrl = fileStorageService.uploadAvatar(avatar, userID);
+            response.put("avatar_url", avatarUrl);
+            return ResponseEntity.ok(response);
+        }
+        catch (Exception e) {
+            log.error(e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "传输文件失败"));
+        }
     }
     
     /**
@@ -113,7 +140,7 @@ public class UserController {
             userService.updatePasswordByUsername(username, passwordEncoder.encode(newPassword));
             return ResponseEntity.ok().build();
         }
-        else return ResponseEntity.badRequest().build();
+        else return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "啊哦，发生了些小错误"));
     }
     
     /**
@@ -147,4 +174,4 @@ public class UserController {
         return ResponseEntity.ok(response);
     }
 
-} 
+}

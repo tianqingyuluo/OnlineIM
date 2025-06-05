@@ -1,10 +1,11 @@
 package icu.tianqingyuluo.onlineim.util;
 
+import icu.tianqingyuluo.onlineim.pojo.entity.UserIDProvider;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
-import org.springframework.beans.factory.annotation.Value;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
@@ -17,6 +18,7 @@ import java.util.function.Function;
 /**
  * JWT工具类，用于生成和验证JWT令牌
  */
+@Slf4j
 @Component
 public class JwtUtil {
 
@@ -26,11 +28,28 @@ public class JwtUtil {
     // 令牌有效期（毫秒）
     private static final long JWT_TOKEN_VALIDITY = 24 * 60 * 60 * 1000; // 24小时
 
+    public static String GET_EXPIRE_TIME() {
+        return JWT_TOKEN_VALIDITY + "";
+    }
+
     /**
      * 从令牌中获取用户名
      */
     public String getUsernameFromToken(String token) {
         return getClaimFromToken(token, Claims::getSubject);
+    }
+
+    /**
+     * 从令牌中获取用户ID
+     * @param token JWT令牌
+     * @return userid
+     */
+    public String getUserIDFromToken(String token) {
+        return getClaimFromToken(token, claims -> claims.get("userid", String.class));
+    }
+
+    public String getDeviceIDFromToken(String token) {
+        return getClaimFromToken(token, claims -> claims.get("deviceid", String.class));
     }
 
     /**
@@ -55,7 +74,7 @@ public class JwtUtil {
         return Jwts.parserBuilder()
                 .setSigningKey(SECRET_KEY)
                 .build()
-                .parseClaimsJws(token)
+                .parseClaimsJws(token.substring(7))
                 .getBody();
     }
 
@@ -70,8 +89,13 @@ public class JwtUtil {
     /**
      * 为指定用户生成令牌
      */
-    public String generateToken(UserDetails userDetails) {
+    public String generateToken(UserDetails userDetails, String deviceId) {
         Map<String, Object> claims = new HashMap<>();
+        if (userDetails instanceof UserIDProvider) {
+            claims.put("userid", ((UserIDProvider)userDetails).getID());
+            claims.put("deviceid", deviceId);
+        }
+        else log.error("UserDetails 未实现 UserIdProvider 接口, userId claim 将不会被添加");
         return doGenerateToken(claims, userDetails.getUsername());
     }
 
@@ -96,7 +120,7 @@ public class JwtUtil {
         return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
     }
 
-    public static String GET_EXPIRE_TIME() {
-        return String.valueOf(JWT_TOKEN_VALIDITY);
+    public long getRemainingValidityTime(String token) {
+        return getExpirationDateFromToken(token).getTime();
     }
 }

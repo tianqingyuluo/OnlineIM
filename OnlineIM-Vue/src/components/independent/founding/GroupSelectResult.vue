@@ -3,6 +3,14 @@ import { groupService } from '@/services/group.service.ts'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import GroupProfile from "@/components/independent/profile/GroupProfile.vue"
 import { type GroupSearchResult } from '@/type/group.ts'
+import { debounce } from 'lodash';
+import { useListStore } from '@/stores/list';
+import type {UserSearchResult} from "@/type/User.ts";
+import SendGroupRequest from "@/components/independent/group/SendGroupRequest.vue";
+import SendFriendRequest from "@/components/independent/friends/SendFriendRequest.vue";
+import {Button} from "@/components/ui/button"; // 引入 listStore
+
+const listStore = useListStore(); // 使用 listStore
 
 const props = defineProps({
   keyword: {
@@ -18,12 +26,18 @@ const page = ref(0)
 const loading = ref(false)
 const hasMore = ref(true)
 
-watch(() => props.keyword, async (newKeyword) => {
-  if (newKeyword) {
-    await searchGroups(newKeyword)
+
+
+const debouncedSearch = debounce(async (keyword: string) => {
+  if (keyword) {
+    await searchGroups(keyword);
   } else {
-    searchResults.value = []
+    searchResults.value = [];
   }
+}, 500);
+
+watch(() => props.keyword, (newKeyword) => {
+  debouncedSearch(newKeyword);
 })
 
 async function handleGroupClick(groupId: string) {
@@ -87,9 +101,32 @@ onUnmounted(() => {
     container.removeEventListener('scroll', handleScroll)
   }
 })
+
+// 判断群组状态
+const getGroupStatus = (group: GroupSearchResult) => {
+  if (listStore.groups.some(g => g.group_id === group.group_id)) {
+    return 'joined'; // 已加入
+  }
+  return 'stranger'; // 未加入
+};
+const showGroupRequest = ref(false)
+const selectedGroup = ref({} as GroupSearchResult)
+// 添加群组的占位函数
+function handleAddGroup(group: GroupSearchResult) {
+  console.log('添加群组:', group.name);
+  selectedGroup.value=group
+  showGroupRequest.value = true
+
+}
+
 </script>
 
 <template>
+  <send-group-request
+      v-if="showGroupRequest"
+      @close="showGroupRequest = false"
+      :group="selectedGroup"
+      class="fixed inset-0 m-auto w-1/2 h-1/2 z-[9999]"/>
   <div class="flex flex-col space-y-2 p-2">
     <template v-if="searchResults.length > 0">
       <div 
@@ -105,8 +142,22 @@ onUnmounted(() => {
         >
         <div class="flex flex-col">
           <span class="text-sm font-medium">{{ result.name }}</span>
-          <span class="text-xs text-gray-500">成员: {{ result.member_count }}</span>
+          <span class="text-xs text-gray-500">群描述: {{ result.description }}</span>
         </div>
+        
+        <!-- 根据群组状态显示不同内容 -->
+        <template v-if="getGroupStatus(result) === 'joined'">
+          <span class="ml-auto text-sm text-gray-500">已加入</span>
+        </template>
+        <template v-else>
+          <Button 
+            class="ml-auto px-3 py-1 text-sm"
+            @click.stop="handleAddGroup(result)"
+          >
+            添加
+          </Button>
+        </template>
+
       </div>
       <div v-if="!hasMore" class="text-center py-4 text-gray-500">
         没有更多数据了

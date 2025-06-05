@@ -1,9 +1,8 @@
 // src/services/api.service.ts
 import axios from 'axios';
-import { API_BASE_URL } from '@/config';
+import { API_BASE_URL } from '../../shared/config.ts';
 import { useUserStore } from '@/stores/user';
 import { toast } from 'vue-sonner';
-import router from '@/router';
 // 定义标准API响应格式
 export type ApiResponse<T = any> = {
   data?: T;
@@ -27,7 +26,6 @@ const api = axios.create({
 // 请求拦截器添加调试日志
 api.interceptors.request.use(
   (config) => {
-    console.log('请求配置:', config) // 添加调试日志
     const userStore=useUserStore();
     // 从 localStorage 获取 token
     const token = userStore.token
@@ -53,9 +51,8 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    const userStore = useUserStore();
-    
-    // 如果请求被取消
+    useUserStore();
+// 如果请求被取消
     if (axios.isCancel(error)) {
       return Promise.reject({
         code: 'REQUEST_CANCELLED',
@@ -67,11 +64,6 @@ api.interceptors.response.use(
     if (!error.response) {
       toast.error('网络错误', {
         description: '请检查网络连接后重试'
-      });
-      return Promise.reject({
-        code: 'NETWORK_ERROR',
-        message: '网络连接异常',
-        isNetworkError: true
       });
     }
 
@@ -88,50 +80,52 @@ api.interceptors.response.use(
       ...data // 保留原始错误数据
     };
 
+
     switch (status) {
-      case 400:
-        // 不需要toast，由调用方处理字段级错误
-        break;
-        
-      case 401:
-        if (userStore.isAuthenticated()) {
-          userStore.clearUser(); // 使用store的统一logout方法
-          toast.error('会话已过期', {
-            description: '请重新登录',
-            duration: 5000
-          });
-          router.push({ name: 'login', query: { redirect: router.currentRoute.value.fullPath } });
-        }
-        break;
+      // case 400:
+      //   // 不需要toast，由调用方处理字段级错误
+      //   break;
+      //
+      // case 401:
+      //   if (userStore.isAuthenticated()) {
+      //     userStore.clearUser(); // 使用store的统一logout方法
+      //     toast.error('会话已过期', {
+      //       description: '请重新登录',
+      //       duration: 5000
+      //     });
+      //     router.push({ name: 'login', query: { redirect: router.currentRoute.value.fullPath } });
+      //   }
+      //   break;
+      //
+      // case 403:
+      //   toast.error('权限不足', {
+      //     description: '您没有执行此操作的权限'
+      //   });
+      //   break;
+      //
+      // case 404:
+      //   toast.error( data.message ||"我们的服务出了点问题，网页错误代码：404");
+      //   break;
 
-      case 403:
-        toast.error('权限不足', {
-          description: '您没有执行此操作的权限'
-        });
-        break;
-
-      case 404:
-        // 由调用方决定如何处理404
-        break;
-
-      case 429:
-        toast.error('请求过于频繁', {
-          description: '请稍后再试'
-        });
-        break;
-
-      case 500:
-        toast.error('服务器错误', {
-          description: '我们的服务暂时遇到问题，请稍后再试'
-        });
-        break;
-
-      default:
-        if (status >= 500) {
-          toast.error(`服务器错误 (${status})`);
-        }
+      // case 429:
+      //   toast.error('请求过于频繁', {
+      //     description: '请稍后再试'
+      //   });
+      //   break;
+      //
+      // case 500:
+      //   toast.error('服务器错误', {
+      //     description: '我们的服务暂时遇到问题，请稍后再试'
+      //   });
+      //   break;
+      //
+      // default:
+      //   if (status >= 500) {
+      //     toast.error(`服务器错误 (${status})`);
+      //   }
+      // default:
+      //   toast.error(  data.message ||"我们的服务出了点问题");
     }
-
     return Promise.reject(normalizedError);
   }
 );

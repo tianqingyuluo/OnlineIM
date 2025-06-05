@@ -1,6 +1,7 @@
 package icu.tianqingyuluo.onlineim.pojo.dto.request;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -10,6 +11,7 @@ import java.util.List;
  * 群组信息请求体
  */
 @Data
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class GroupRequest {

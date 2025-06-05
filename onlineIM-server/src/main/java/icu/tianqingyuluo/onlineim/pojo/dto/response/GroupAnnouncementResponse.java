@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.pojo.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -17,16 +18,19 @@ public class GroupAnnouncementResponse {
     /**
      * 公告ID
      */
+    @JsonProperty("announcement_id")
     private String announcementID;
     
     /**
      * 群组ID
      */
+    @JsonProperty("group_id")
     private String groupID;
     
     /**
      * 发布者信息
      */
+    @JsonProperty("publisher_info")
     private UserBriefResponse publisherInfo;
     
     /**
@@ -47,10 +51,12 @@ public class GroupAnnouncementResponse {
     /**
      * 创建时间
      */
+    @JsonProperty("created_at")
     private String createdAt;
     
     /**
      * 更新时间
      */
+    @JsonProperty("updated_at")
     private String updatedAt;
 } 

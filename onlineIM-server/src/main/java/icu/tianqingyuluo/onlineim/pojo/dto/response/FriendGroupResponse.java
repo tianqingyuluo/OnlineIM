@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.pojo.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -19,6 +20,7 @@ public class FriendGroupResponse {
     /**
      * 分组ID
      */
+    @JsonProperty("group_id")
     private String groupID;
     
     /**
@@ -39,5 +41,6 @@ public class FriendGroupResponse {
     /**
      * 创建时间
      */
+    @JsonProperty("created_at")
     private String createdAt;
 } 

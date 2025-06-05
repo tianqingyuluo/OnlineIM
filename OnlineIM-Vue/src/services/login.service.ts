@@ -2,6 +2,9 @@
 import api from './api.service';
 import { useUserStore } from '@/stores/user';
 import { toast } from 'vue-sonner';
+import router from "@/router";
+import { websocketService } from '@/services/websocket.service';
+import { UAParser } from 'ua-parser-js';
 
 export const LoginService = {
     validationRules: {
@@ -23,22 +26,25 @@ export const LoginService = {
         }
     },
 
-    /**
-     * 登录方法（集成完整错误处理）
-     * @param credentials 登录凭证
-     * @param router
-     */
     async login(
-        credentials: { username: string; password: string },
-        router
+        credentials: { username: string; password: string }
     ) {
         const userStore = useUserStore();
 
         try {
-            console.log('准备发送请求...');
-             const response = await api.post('/auth/login', credentials);
+            const parser = new UAParser;
+            const uaResult = parser.getResult();
+
+            const deviceId = `web-${uaResult.browser.name}-${uaResult.os.name}-${Date.now()}`;
+            const requestBody = {
+                ...credentials,
+                device_id: deviceId
+            };
+            const response = await api.post('/auth/login', requestBody);
+
             if (response.data.access_token) {
                 // 更新用户状态
+
                 userStore.setLoggedInUser({
                     user_id: response.data.user_info.user_id, // 使用 user_id
                     username: response.data.user_info.username,
@@ -47,7 +53,11 @@ export const LoginService = {
                 });
                 userStore.loggedInUser.user_id=response.data.user_info.user_id
                 userStore.token = response.data.access_token
+
                 console.log("token:\n"+response.data.access_token);
+
+                // 连接 WebSocket
+                websocketService.connect();
 
                 // 显示欢迎消息
                 toast.success('登录成功', {
@@ -60,42 +70,6 @@ export const LoginService = {
             }
             return response;
         } catch (error: any) {
-            const errorMsg = error.message;
-            toast.error('登录失败', {
-                description: errorMsg
-            });
-            // // 处理字段级验证错误（400）
-            // if (error.code === 'VALIDATION_ERROR' && formContext) {
-            //     Object.entries(error.details || {}).forEach(([field, message]) => {
-            //         formContext.setFieldError(field, message as string);
-            //     });
-            //     return;
-            // }
-            //
-            // // 处理业务特定错误
-            // switch (error.code) {
-            //     case 'AUTH_FAILED':
-            //         toast.error('登录失败', {
-            //             description: '用户名或密码错误'
-            //         });
-            //         break;
-            //
-            //     case 'ACCOUNT_LOCKED':
-            //         toast.error('账户已锁定', {
-            //             description: '请联系管理员解锁账户'
-            //         });
-            //         break;
-            //
-            //     case 'CONFLICT':
-            //         if (error.conflictField === 'username' && formContext) {
-            //             formContext.setFieldError('username', '该用户名已被注册');
-            //         }
-            //         break;
-            //
-            //     default:
-            //         // 其他错误已在api拦截器统一处理
-            //         throw error;
-            //}
         }
     }
 };

@@ -4,6 +4,7 @@ import icu.tianqingyuluo.onlineim.pojo.document.Conversation;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.mongodb.repository.Aggregation;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;
@@ -20,7 +21,7 @@ public interface ConversationRepository extends MongoRepository<Conversation, St
     /**
      * 查询用户的所有会话
      */
-    @Query("{'userId': ?0, 'status': 1}")
+    @Query("{ 'status': 1, '$or': [ { 'userId': ?0 }, { 'targetId': ?0 } ] }")
     List<Conversation> findUserConversations(String userId, Sort sort);
     
     /**
@@ -32,15 +33,26 @@ public interface ConversationRepository extends MongoRepository<Conversation, St
      * 查询指定的会话
      */
     Conversation findByIdAndUserId(String id, String userId);
-    
+
+    @Query("{ '_id': ?0, '$or': [ { 'userId': ?1 }, { 'targetId': ?1 } ] }")
+    Conversation findByIdAndUserIDOrTargetId(String id, String userId);
     /**
      * 根据用户ID和目标ID查询会话（针对单聊）
      */
     Conversation findByUserIdAndTargetIdAndConversationType(String userId, String targetId, String conversationType);
     
     /**
-     * 查询用户的所有未读消息总数
+     * 查询用户的所有未读消息数
      */
     @Query(value = "{'userId': ?0, 'status': 1}", fields = "{'unreadCount': 1}")
     List<Conversation> findAllUnreadCounts(String userId);
-} 
+    
+    /**
+     * 查询用户的总未读消息数（使用聚合查询优化性能）
+     */
+    @Aggregation(pipeline = {
+            "{ $match: { 'userId': ?0, 'status': 1 } }",
+            "{ $group: { _id: null, total: { $sum: '$unreadCount' } } }"
+    })
+    Integer findTotalUnreadCount(String userId);
+}

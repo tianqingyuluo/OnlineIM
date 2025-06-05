@@ -1,0 +1,337 @@
+<script setup lang="ts">
+import { Ellipsis } from "lucide-vue-next"
+import { ref, provide, onMounted, computed, nextTick, onBeforeUnmount } from "vue"
+import { useRoute } from 'vue-router'
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import Tools from "@/components/MainPart/tools.vue";
+import UserTextArea from "@/components/MainPart/UserTextArea.vue";
+import { groupService } from '@/services/group.service'
+import type { GroupResponse } from '@/type/group'
+import GroupInfoCard from '@/components/independent/group/GroupInfoCard.vue'
+import { onClickOutside } from '@vueuse/core'
+import {MessageService} from "@/services/message.service.ts";
+import { useUserStore } from '@/stores/user.ts';
+import { GroupSettingService } from "@/services/groupsetting.service";
+import { useOtherStore } from "@/stores/otherStore.ts";
+import { dbService } from "@/utils/indexedDB";
+import type {MessageResponse} from "@/type/message.ts";
+
+// 菜单引用
+const menuRef = ref<HTMLElement | null>(null)
+const menuButtonRef = ref<HTMLElement | null>(null)
+
+// 点击外部关闭菜单逻辑
+const setupClickOutside = () => {
+  onClickOutside(
+      menuRef,
+      () => {
+        const otherStore = useOtherStore()
+        if (!otherStore.isContextMenuOpen) {
+          showMenu.value = false
+        }
+      },
+      { ignore: [menuButtonRef] }
+  )
+}
+
+onMounted(() => {
+  setupClickOutside()
+})
+
+const route = useRoute()
+const currentGroup = ref<GroupResponse | null>(null)
+const currentGroupSettings = ref<any>(null)
+const userStore = useUserStore()
+const currentUser = computed(() => userStore.loggedInUser)
+const inMyHistory = ref(false)
+const groupId = computed(() => {
+  const id = route.params.id
+  return Array.isArray(id) ? id[0] : id
+})
+
+// IndexedDB相关
+let lastHistorySeqId: number | null = null
+
+onMounted(async () => {
+  const myHistory = await dbService.getHistory(userStore.loggedInUser.user_id, groupId.value)
+  lastHistorySeqId = myHistory.length > 0 ? myHistory[myHistory.length - 1].seq_id : null
+})
+
+onMounted(async () => {
+  try {
+    const [groupInfo, groupSettings] = await Promise.all([
+      groupService.getGroupInfo(groupId.value),
+      GroupSettingService.getGroupSetting(groupId.value)
+    ])
+
+    // 转换角色标识
+    if (groupInfo.my_role === '0') groupInfo.my_role = 'member'
+    if (groupInfo.my_role === '1') groupInfo.my_role = 'admin'
+    if (groupInfo.my_role === '2') groupInfo.my_role = 'owner'
+
+    currentGroup.value = groupInfo
+    currentGroupSettings.value = groupSettings
+    await loadMessages()
+  } catch (error) {
+    console.error('获取群组信息失败:', error)
+  }
+})
+
+// 消息相关逻辑
+const groupMessages = ref<MessageResponse[]>([])
+const isLoading = ref(false)
+const hasMore = ref(true)
+const noMoreInfo = ref(false)
+
+async function loadMessages() {
+  if (isLoading.value || !hasMore.value) return
+
+  isLoading.value = true
+  try {
+    const before_message_id = groupMessages.value.length > 0
+        ? groupMessages.value[0].seq_id
+        : undefined
+
+    const response = await MessageService.getMessageHistory(
+        groupId.value,
+        before_message_id
+    )
+    const messages = response.messages
+    const has_more_before = response.has_more_before
+
+    if (messages.length > 0) {
+      const sortedMessages = messages.sort((a, b) => a.seq_id - b.seq_id)
+      groupMessages.value = before_message_id
+          ? [...sortedMessages, ...groupMessages.value]
+          : sortedMessages
+
+      // IndexedDB存储
+      const newMessages = sortedMessages.filter(msg =>
+          !groupMessages.value.some(existingMsg => existingMsg.seq_id === msg.seq_id)
+      )
+      await dbService.putHistory(newMessages)
+
+      // 历史记录检测
+      if (sortedMessages.length > 0 && lastHistorySeqId !== null && sortedMessages[0].seq_id < lastHistorySeqId) {
+        inMyHistory.value = true
+      }
+
+      hasMore.value = has_more_before
+      noMoreInfo.value = !has_more_before
+    }
+  } catch (error) {
+    console.error('获取消息历史失败:', error)
+  } finally {
+    isLoading.value = false
+  }
+}
+
+// 滚动加载
+function handleScroll(e: Event) {
+  const target = e.target as HTMLElement
+  const scrollThreshold = 100
+  if (target.scrollTop <= scrollThreshold && hasMore.value && !isLoading.value) {
+    loadMessages()
+  }
+}
+
+// 生命周期钩子
+onMounted(() => {
+  const chatContainer = document.querySelector('.overflow-y-auto')
+  chatContainer?.addEventListener('scroll', handleScroll)
+
+  const textarea = document.getElementById('message-2')
+  textarea?.addEventListener('keydown', handleKeyDown)
+})
+
+onBeforeUnmount(() => {
+  const chatContainer = document.querySelector('.overflow-y-auto')
+  chatContainer?.removeEventListener('scroll', handleScroll)
+
+  const textarea = document.getElementById('message-2')
+  textarea?.removeEventListener('keydown', handleKeyDown)
+})
+
+// 消息发送相关
+const messageInputRef = ref<HTMLTextAreaElement | null>(null)
+provide('messageInputRef', messageInputRef)
+
+async function handleSendClick() {
+  const textareaEl = document.getElementById('message-2') as HTMLTextAreaElement
+  if (textareaEl?.value.trim()) {
+    try {
+      const response = await MessageService.putMessage(
+          groupId.value,
+          0,
+          textareaEl.value
+      )
+      groupMessages.value.push(response)
+      textareaEl.value = ''
+
+      nextTick(() => {
+        const chatContainer = document.querySelector('.overflow-y-auto')
+        chatContainer?.scrollTo(0, chatContainer.scrollHeight)
+      })
+    } catch (error) {
+      console.error('发送消息失败:', error)
+    }
+  }
+}
+
+// 键盘事件处理
+function handleKeyDown(e: KeyboardEvent) {
+  const textareaEl = e.target as HTMLTextAreaElement
+  if (e.key === 'Enter' && !e.ctrlKey && !e.shiftKey) {
+    e.preventDefault()
+    handleSendClick()
+  } else if (e.key === 'Enter' && e.ctrlKey) {
+    const cursorPos = textareaEl.selectionStart || 0
+    const currentValue = textareaEl.value || ''
+    textareaEl.value =
+        currentValue.substring(0, cursorPos) +
+        '\n' +
+        currentValue.substring(cursorPos)
+    textareaEl.selectionStart = cursorPos + 1
+    textareaEl.selectionEnd = cursorPos + 1
+  }
+}
+
+// 表情插入处理
+function handleEmojiSelect(emoji: string) {
+  const textareaEl = document.getElementById('message-2') as HTMLTextAreaElement
+  if (textareaEl) {
+    const cursorPos = textareaEl.selectionStart || 0
+    const currentValue = textareaEl.value || ''
+    const newValue =
+        currentValue.substring(0, cursorPos) +
+        emoji +
+        currentValue.substring(cursorPos)
+    textareaEl.value = newValue
+    textareaEl.selectionStart = cursorPos + emoji.length
+    textareaEl.selectionEnd = cursorPos + emoji.length
+    textareaEl.focus()
+  }
+}
+
+// 菜单状态
+const showMenu = ref(false)
+function toggleMenu() {
+  showMenu.value = !showMenu.value
+}
+</script>
+
+<template>
+  <div v-if="currentGroup" class="flex flex-col h-full">
+    <!-- 顶栏 -->
+    <div class="flex items-center justify-between w-full p-4 border-b relative">
+      <span class="text-lg font-semibold">{{ currentGroup.name }}</span>
+      <button @click="toggleMenu" ref="menuButtonRef">
+        <a href="#" class="flex items-center">
+          <Ellipsis class="w-5 h-5" />
+        </a>
+      </button>
+
+      <!-- 滑动菜单 -->
+      <Transition name="slide">
+        <div
+            v-if="showMenu"
+            ref="menuRef"
+            class="absolute right-0 top-full w-80 bg-white shadow-lg z-50 h-[calc(100vh-60px-50px)]"
+        >
+          <GroupInfoCard
+              :group="currentGroup"
+              :group-settings="currentGroupSettings"
+              :myRole="currentGroup.my_role"
+              class="h-full overflow-y-auto"
+              @click.stop
+          />
+        </div>
+      </Transition>
+    </div>
+
+    <!-- 主内容区 -->
+    <div class="flex-1 overflow-y-auto p-4" @scroll="handleScroll">
+      <div v-if="noMoreInfo" class="flex justify-center py-2 text-sm text-gray-500">
+        没有更多信息
+      </div>
+      <div v-if="groupMessages.length > 0" class="space-y-4">
+        <template v-for="(msg, index) in groupMessages" :key="msg.message_id">
+          <!-- 时间显示 -->
+          <div  class="flex justify-center">
+            <span class="text-[13px] text-gray-500 truncate">
+              {{ msg.timestamp }}
+            </span>
+          </div>
+
+          <!-- 消息内容 -->
+          <div :class="['flex', msg.sender_info.user_id === currentUser.user_id ? 'justify-end' : 'justify-start']">
+            <!-- 对方消息 -->
+            <template v-if="msg.sender_info.user_id !== currentUser.user_id">
+              <div class="flex items-start max-w-[80%]">
+                <img
+                    :src="currentGroup.avatar_url || '/images/group.png'"
+                    :alt="msg.sender_info.user_id"
+                    class="w-10 h-10 rounded-full mr-2"
+                />
+                <UserTextArea
+                    :message="msg.content"
+                    :isSelf="false"
+                />
+              </div>
+            </template>
+
+            <!-- 自己的消息 -->
+            <template v-else>
+              <div class="flex items-start">
+                <UserTextArea
+                    :message="msg.content"
+                    :isSelf="true"
+                />
+                <img
+                    :src="currentUser.avatar_url"
+                    :alt="currentUser.username"
+                    class="w-10 h-10 rounded-full ml-2"
+                />
+              </div>
+            </template>
+          </div>
+        </template>
+      </div>
+      <div v-else class="flex items-center justify-center h-full text-gray-500">
+        暂无消息记录
+      </div>
+    </div>
+    <Tools @select="handleEmojiSelect" />
+    <!-- 输入区域 -->
+    <div class="relative h-1/4 border-t">
+      <Textarea
+          id="message-2"
+          ref="messageInputRef"
+          class="h-full w-full resize-none pr-20 rounded-none focus:ring-0 focus:shadow-none"
+          style="outline: none;box-shadow: none; font-size: 24px"
+      />
+      <Button
+          class="absolute bottom-4 right-4 transition-all duration-200 active:scale-95 hover:bg-primary/90 hover:scale-125"
+          @click="handleSendClick"
+      >
+        发送
+      </Button>
+    </div>
+  </div>
+  <div v-else class="flex items-center justify-center h-full">
+    加载中...
+  </div>
+</template>
+
+<style scoped>
+.slide-enter-active,
+.slide-leave-active {
+  transition: transform 0.3s ease;
+}
+
+.slide-enter-from,
+.slide-leave-to {
+  transform: translateX(100%);
+}
+</style>

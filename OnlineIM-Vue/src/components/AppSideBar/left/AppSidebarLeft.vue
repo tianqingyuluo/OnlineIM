@@ -15,6 +15,8 @@ import { useUserStore } from '@/stores/user.ts'
 import UserThings from "@/components/AppSideBar/left/userThings.vue";
 import UserFounding from "@/components/independent/founding/userFounding.vue";
 import router from "@/router";
+import { useNotificationStore } from '@/stores/notificationStore.ts'; // 引入 notificationStore
+import RedPoint from '@/components/common/redPoint.vue'; // 引入红点组件
 
 const userStore = useUserStore()
 const loggedUser = computed(() => {
@@ -22,6 +24,7 @@ const loggedUser = computed(() => {
   return userStore.loggedInUser;
 })
 
+const notificationStore = useNotificationStore(); // 使用 notificationStore
 
 const showUserThings = ref(false); // 新增控制userThings显示的状态
 const userThingsRef = ref<HTMLElement | null>(null); // 新增ref引用
@@ -89,13 +92,6 @@ function handleItemClick(item) {
 const handleAddClick = () => {
   showUserFounding.value = true;
 };
-const buttonItems = [
-  {
-    title: "设置",
-    url: "/main/setting",
-    icon: Settings,
-  },
-]
 
 const activeItem = ref('聊天')
 
@@ -110,25 +106,26 @@ const activeItem = ref('聊天')
             <SidebarMenuItem v-for="item in items" :key="item.title">
               <SidebarMenuButton 
                 as-child 
-                :isActive="activeItem === item.title" 
+                :isActive="$route.path.startsWith(item.path)" 
                 @click="handleItemClick(item)" 
                 class="data-[active=true]:bg-gray-100 data-[active=true]:text-black h-[40px] mb-4"
               >
-                <a :href="item.url" style="display: flex; justify-content: center; align-items: center; width: 100%;">
+                <a :href="item.path" style="display: flex; justify-content: center; align-items: center; width: 100%;">
                   <component :is="item.icon" style="width: 30px; height: 30px"/>
                 </a>
               </SidebarMenuButton>
             </SidebarMenuItem>
-            <!-- 单独渲染的添加按钮 -->
+            <!-- 单独渲染的添加好友按钮 -->
             <SidebarMenuItem>
               <SidebarMenuButton 
                 as-child
-                class="data-[active=true]:bg-gray-100 data-[active=true]:text-black h-[40px] mb-4"
+                class="data-[active=true]:bg-gray-100 data-[active=true]:text-black h-[40px] mb-4 relative" 
                 @click="handleAddClick"
               >
                 <a href="#" style="display: flex; justify-content: center; align-items: center; width: 100%;">
                   <UserRoundPlus style="width: 30px; height: 30px"/>
                 </a>
+                <RedPoint v-if="notificationStore.hasnewall" /> 
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
@@ -137,16 +134,19 @@ const activeItem = ref('聊天')
     </SidebarContent>
     <SidebarFooter>
       <SidebarMenu>
-        <SidebarMenuItem v-for="item in buttonItems" :key="item.title">
-          <SidebarMenuButton asChild :isActive="activeItem === item.title" @click="activeItem = item.title"
-                             class="data-[active=true]:bg-gray-100 data-[active=true]:text-black h-[40px] mb-4">
-            <router-link 
-              :to="item.path"
-              style="display: flex; justify-content: center; align-items: center; width: 100%;"
-            >
-              <component :is="item.icon" style="width: 30px; height: 30px"/>
-            </router-link>
+        <!-- 单独渲染的设置按钮 -->
+        <SidebarMenuItem>
+          <SidebarMenuButton
+              as-child
+              class="data-[active=true]:bg-gray-100 data-[active=true]:text-black h-[40px] mb-4">
+          <a style="display: flex; justify-content: center; align-items: center; width: 100%;">
+            <component :is="Settings" style="width: 30px; height: 30px"/>
+          </a>
           </SidebarMenuButton>
+        </SidebarMenuItem>
+        
+        <!-- 头像按钮 -->
+        <SidebarMenuItem>
           <button 
             v-if="loggedUser"
             class="w-[40px] h-[40px] rounded-full overflow-hidden mx-auto flex-shrink-0 block"
@@ -165,11 +165,12 @@ const activeItem = ref('聊天')
 
   <!-- 修改为Teleport到body的userThings弹出框 -->
   <Teleport to="body">
+    <Transition name="slide-up">
     <div
         v-if="showUserThings"
         ref="userThingsRef"
-        class="fixed z-[9999] bg-white border shadow-lg"
-        style="width: 200px; border-radius: 0;"
+        class="fixed z-[9999] bg-white border shadow-lg rounded-xl"
+        style="width: 200px;"
         :style="{
           bottom: '0',
           left: '60px',
@@ -179,15 +180,18 @@ const activeItem = ref('聊天')
     >
     <UserThings />
     </div>
+    </Transition>
   </Teleport>
-  
-  <!-- 添加userFounding组件和蒙版 -->
-  <template v-if="showUserFounding">
-    <div class="fixed inset-0 bg-white/80 z-40" @click="showUserFounding = false"></div>
-    <userFounding 
-      @close="showUserFounding = false"
-    />
-  </template>
+
+  <Transition name="fade-slide" mode="out-in">
+    <div v-if="showUserFounding" class="fixed inset-0 flex  z-50">
+      <div class="fixed inset-0 bg-white/80 transition-opacity" @click="showUserFounding = false"></div>
+      <userFounding
+          class="relative z-50"
+          @close="showUserFounding = false"
+      />
+    </div>
+  </Transition>
 </template>
 
 <style scoped>
@@ -197,18 +201,36 @@ const activeItem = ref('聊天')
   border-right: 1px solid #e5e7eb;
   background-color: rgb(249 250 251); /* bg-gray-75 */
 }
-
-/* 修正后的淡入淡出+滑动过渡效果 */
+/* 修改过渡样式为 */
 .fade-slide-enter-active,
 .fade-slide-leave-active {
   transition: all 0.3s ease;
 }
-.fade-slide-enter-from {
+.fade-slide-enter-from,
+.fade-slide-leave-to {
   opacity: 0;
   transform: translateY(20px);
 }
-.fade-slide-leave-to {
+
+/* 蒙版过渡 */
+.bg-white {
+  transition: opacity 0.3s ease;
+}
+.fade-slide-enter-from .bg-white,
+.fade-slide-leave-to .bg-white {
   opacity: 0;
-  transform: translateY(-20px);
+}
+</style>
+
+<style scoped>
+/* 新增从下往上滑动动画 */
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: all 0.3s ease;
+}
+.slide-up-enter-from,
+.slide-up-leave-to {
+  opacity: 0;
+  transform: translateX(-100%);
 }
 </style>

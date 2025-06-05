@@ -65,7 +65,7 @@ public class SecurityConfig {
                 // 允许所有人访问登录和注册接口
                 .requestMatchers("/api/v1/auth/**").permitAll()
                 // 允许所有人访问静态资源
-                .requestMatchers("/static/**").permitAll()
+                .requestMatchers("/onlineim/**").permitAll()
                 // 其他所有请求都需要认证
                 .anyRequest().authenticated()
             )

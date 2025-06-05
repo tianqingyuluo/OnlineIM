@@ -8,11 +8,15 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import { Toaster } from 'vue-sonner'
 import { toTypedSchema } from '@vee-validate/zod'
 import { useForm } from 'vee-validate'
 import * as z from 'zod'
 import { LoginService } from '@/services/login.service'
+import {LogIn } from 'lucide-vue-next'
+import {simpleMusicPlayer} from "@/utils/heiheihei.ts";
+
+
+
 // 使用 LoginService 的验证规则
 const formSchema = toTypedSchema(
     z.object({
@@ -26,7 +30,7 @@ const formSchema = toTypedSchema(
 )
 
 // 表单初始化
-const { handleSubmit, setFieldError } = useForm({
+const { handleSubmit } = useForm({
   validationSchema: formSchema,
   initialValues: {
     username: '',
@@ -34,21 +38,20 @@ const { handleSubmit, setFieldError } = useForm({
   }
 })
 
-import { useRouter } from 'vue-router'
 
-// 在组件内部获取路由实例
-const router = useRouter()
 
 // 提交处理
 const onSubmit = handleSubmit(async (values) => {
+
   console.log('提交登录表单:', values)
   try {
-    const response = await LoginService.login(values, router)
+    const response = await LoginService.login(values)
     console.log('登录响应:', response) // 添加调试日志
   } catch (error) {
     console.error('登录错误:', error) // 添加错误日志
   }
 })
+
 </script>
 
 <template>
@@ -58,9 +61,7 @@ const onSubmit = handleSubmit(async (values) => {
       <div class="flex items-center justify-between w-full p-4 border-b border-gray-200">
         <div class="flex items-center space-x-3">
           <div class="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4" />
-            </svg>
+            <log-in />
           </div>
           <span class="font-medium text-gray-800">用户登录</span>
         </div>
@@ -118,23 +119,10 @@ const onSubmit = handleSubmit(async (values) => {
       </div>
     </div>
 
-    <Toaster
-        position="top-center"
-        :theme="'light'"
-        richColors
-        closeButton
-    />
   </div>
 </template>
 
 <style scoped>
-/* 气泡样式微调，与 UserMainPart.vue 保持一致 */
-.bg-white {
-  border-top-left-radius: 0;
-}
-.bg-gray-100 {
-  border-top-right-radius: 0;
-}
 
 /* 输入框聚焦样式 */
 :focus {

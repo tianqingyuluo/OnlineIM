@@ -30,15 +30,6 @@ const handleDrag = ({ deltaX, deltaY }: { deltaX: number; deltaY: number }) => {
   modalRef.value.style.left = `${rect.left + deltaX}px`
 }
 
-// 初始化时转换百分比为像素
-onMounted(() => {
-  if (!modalRef.value) return
-  const vw = window.innerWidth
-  const vh = window.innerHeight
-  modalRef.value.style.top = `${vh * 0.1}px`
-  modalRef.value.style.left = `${vw * 0.3}px`
-})
-
 // 生命周期
 onMounted(async () => {
   try {
@@ -49,7 +40,7 @@ onMounted(async () => {
       email: userData.email ||"未设置",
       phone: userData.phone ||"未设置",
       region: userData.region ||"未设置",
-      gender: userData.gender ? (userData.gender === 'male' ? '男' : '女') : '未设置',
+      gender: userData.gender!=='0' ? (userData.gender === '1' ? '男' : '女') : '未设置',
       signature: userData.signature ||"未设置",
       avatar_url: userData.avatar_url
     };
@@ -71,7 +62,7 @@ watch(
           email: newUser.email || "未设置",
           phone: newUser.phone || "未设置",
           region: newUser.region || "未设置",
-          gender: newUser.gender ? (newUser.gender === 'male' ? '男' : '女') : '未设置',
+          gender: newUser.gender!=='0' ? (newUser.gender === '1' ? '男' : '女') : '未设置',
           signature: newUser.signature || "未设置",
           avatar_url: newUser.avatar_url || '/images/help.png'
         };
@@ -87,7 +78,7 @@ const editProfile = () => {
 
 <template>
   <!-- 外层容器添加拖动功能 -->
-  <div ref="modalRef" class="fixed z-50 top-[10%] left-[30%] w-[40%]">
+  <div ref="modalRef" class="fixed z-50 top-[10%] w-1/3">
     <transition name="fade-slide" mode="out-in">
       <div v-if="!showSettings" class="bg-white rounded-lg shadow-lg w-full max-w-md">
         <!-- 新增统一顶栏 -->

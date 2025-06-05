@@ -6,6 +6,7 @@ import icu.tianqingyuluo.onlineim.pojo.dto.request.UserRegisterRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.AuthResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
 import icu.tianqingyuluo.onlineim.pojo.entity.User;
+import icu.tianqingyuluo.onlineim.service.JwtService;
 import icu.tianqingyuluo.onlineim.service.UserService;
 import icu.tianqingyuluo.onlineim.service.impl.UserDetailsServiceImpl;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
@@ -42,15 +43,17 @@ public class AuthController {
     private final JwtUtil jwtUtil;
 
     private final BCryptPasswordEncoder bCryptPasswordEncoder =  new BCryptPasswordEncoder();
+    private final JwtService jwtService;
 
     public AuthController(AuthenticationManager authenticationManager,
                           UserDetailsServiceImpl userDetailsService,
                           UserService userService,
-                          JwtUtil jwtUtil) {
+                          JwtUtil jwtUtil, JwtService jwtService) {
         this.authenticationManager = authenticationManager;
         this.userDetailsService = userDetailsService;
         this.jwtUtil = jwtUtil;
         this.userService = userService;
+        this.jwtService = jwtService;
     }
 
     /**
@@ -88,7 +91,7 @@ public class AuthController {
         userInfo.put("avatar_url", briefResponse.getAvatarUrl());
 
         // 生成JWT令牌
-        final String jwt = jwtUtil.generateToken(userDetails);
+        final String jwt = jwtUtil.generateToken(userDetails, authRequest.getDeviceId());
         response.put("access_token", jwt);
         response.put("expires_in", JwtUtil.GET_EXPIRE_TIME());
         response.put("user_info", userInfo);
@@ -146,8 +149,10 @@ public class AuthController {
         // UNDO: 后续需要加入把作废的token加入到redis的操作，然后在jwtutil中加入检查redis内token黑名单的逻辑
         Map<String, String> response = new HashMap<>();
         String username = jwtUtil.getUsernameFromToken(token);
+        String deviceId = jwtUtil.getDeviceIDFromToken(token);
+        jwtService.invalidateJWT(token);
         final UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-        response.put("access_token", jwtUtil.generateToken(userDetails));
+        response.put("access_token", jwtUtil.generateToken(userDetails, deviceId));
         response.put("expires_in", JwtUtil.GET_EXPIRE_TIME());
         return ResponseEntity.ok(response);
     }
@@ -158,7 +163,7 @@ public class AuthController {
      */
     @PostMapping("/logout")
     public ResponseEntity<Map<String, String>> logout(@RequestHeader(value = "Authorization") String token) {
-        // UNDO: 把token加入jwt黑名单
+        jwtService.invalidateJWT(token);
         return ResponseEntity.status(204).build();
     }
 }

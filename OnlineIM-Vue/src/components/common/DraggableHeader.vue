@@ -18,7 +18,7 @@ let isDragging = false
 let initialX = 0
 let initialY = 0
 
-const startDrag = (e: MouseEvent) => {
+const startDrag = (e: MouseEvent) => {//开始移动时定位鼠标当前位置，启动监听器
   isDragging = true
   initialX = e.clientX
   initialY = e.clientY
@@ -27,7 +27,7 @@ const startDrag = (e: MouseEvent) => {
   document.addEventListener('mouseleave', stopDrag) // 新增边界情况处理
 }
 
-const drag = (e: MouseEvent) => {
+const drag = (e: MouseEvent) => {//鼠标移动方法，扔给主组件，让主组件处理移动逻辑
   if (!isDragging) return
   e.preventDefault()
   const deltaX = e.clientX - initialX
@@ -37,7 +37,7 @@ const drag = (e: MouseEvent) => {
   emit('drag', { deltaX, deltaY })
 }
 
-const stopDrag = () => {
+const stopDrag = () => {//停止拖动事件
   isDragging = false
   document.removeEventListener('mousemove', drag)
   document.removeEventListener('mouseup', stopDrag)

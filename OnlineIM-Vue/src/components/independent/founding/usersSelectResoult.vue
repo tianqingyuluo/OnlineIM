@@ -3,6 +3,14 @@ import {searchService} from '@/services/user.service.ts'
 import {onMounted, onUnmounted, ref, watch} from 'vue'
 import OtherProfile from "@/components/independent/profile/otherProfile.vue";
 import { type UserSearchResult } from '@/type/User.ts';
+import {Button} from "@/components/ui/button";
+import SendFriendRequest from "@/components/independent/friends/SendFriendRequest.vue";
+import { debounce } from 'lodash';
+import { useUserStore } from '@/stores/user'; // 引入 userStore
+import { useListStore } from '@/stores/list'; // 引入 listStore
+
+const userStore = useUserStore(); // 使用 userStore
+const listStore = useListStore(); // 使用 listStore
 
 const props = defineProps({
   keyword: {
@@ -14,26 +22,30 @@ const props = defineProps({
 let searchResults = ref([] as UserSearchResult[])
 const showProfile = ref(false)
 const selectedUserId = ref('')
+const showFriendRequest = ref(false)
+const selectedFriend = ref({} as UserSearchResult)
 const page = ref(0)
 const loading = ref(false)
 const hasMore = ref(true)
 
 // 监听keyword变化
-watch(() => props.keyword, async (newKeyword) => {
-  if (newKeyword) {
-    await searchUsers(newKeyword)
+
+
+const debouncedSearch = debounce(async (keyword: string) => {
+  if (keyword) {
+    await searchUsers(keyword);
   } else {
-    searchResults.value = [] // 添加.value
+    searchResults.value = [];
   }
+}, 500);
+
+watch(() => props.keyword, (newKeyword) => {
+  debouncedSearch(newKeyword);
 })
 
-async function handleUserClick(userId: string) {
-  try {
-    selectedUserId.value = userId
-    showProfile.value = true
-  } catch (error) {
-    console.error('打开用户资料失败:', error)
-  }
+function handleAddFriend(user: UserSearchResult) {
+  selectedFriend.value = user
+  showFriendRequest.value = true
 }
 
 // 监听滚动事件
@@ -88,6 +100,20 @@ onUnmounted(() => {
   }
 })
 
+// 判断用户状态
+const getUserStatus = (user: any) => {
+  if (user.user_id === userStore.loggedInUser.user_id) {
+    return 'self'; // 当前用户
+  }
+  if (listStore.friends.some(friend => friend.friend_info.user_id === user.user_id)) {
+    return 'friend'; // 已是好友
+  }
+  if (listStore.FriendRequestsList.some(request => request.sender_info.user_id === user.user_id)) {
+    return 'pending'; // 待处理请求
+  }
+  return 'stranger'; // 陌生人
+};
+
 </script>
 
 <template>
@@ -97,7 +123,6 @@ onUnmounted(() => {
         v-for="result in searchResults" 
         :key="result.user_id"
         class="flex items-center p-2 hover:bg-gray-100 rounded cursor-pointer"
-        @click="handleUserClick(result.user_id)"
       >
         <img 
           :src="result.avatar_url || '/images/default-avatar.png'" 
@@ -108,6 +133,24 @@ onUnmounted(() => {
           <span class="text-sm font-medium">{{ result.nickname }}</span>
           <span class="text-xs text-gray-500" v-if="result.username">{{ result.username }}</span>
         </div>
+        
+        <!-- 根据用户状态显示不同内容 -->
+        <template v-if="getUserStatus(result) === 'stranger'">
+          <Button 
+            class="ml-auto px-3 py-1 text-sm"
+            @click.stop="handleAddFriend(result)"
+          >
+            添加
+          </Button>
+        </template>
+        <template v-else-if="getUserStatus(result) === 'friend'">
+          <span class="ml-auto text-sm text-gray-500">已添加</span>
+        </template>
+        <template v-else-if="getUserStatus(result) === 'pending'">
+          <span class="ml-auto text-sm text-gray-500">待处理</span>
+        </template>
+        <!-- 如果是当前用户，不显示任何按钮或文字 -->
+
       </div>
       <div v-if="!hasMore" class="text-center py-4 text-gray-500">
         没有更多数据了
@@ -123,6 +166,13 @@ onUnmounted(() => {
   <div v-if="showProfile" class="fixed inset-0 bg-white/80 flex items-center justify-center z-[9999]">
     <OtherProfile @close="showProfile = false" :userId="selectedUserId" />
   </div>
+  
+  <SendFriendRequest 
+    v-if="showFriendRequest"
+    @close="showFriendRequest = false"
+    :user="selectedFriend"
+    class="fixed inset-0 m-auto w-1/2 h-1/2 z-[9999]"
+  />
 </template>
 
 <style scoped>

@@ -5,7 +5,6 @@ import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserResponse;
 import icu.tianqingyuluo.onlineim.pojo.entity.User;
 import org.springframework.stereotype.Service;
-
 import java.util.List;
 
 @Service
@@ -20,4 +19,5 @@ public interface UserService {
     List<UserBriefResponse> searchByUserID(String keyword,int LIMIT,int offset);
     List<UserBriefResponse> searchByUsername(String keyword,int LIMIT,int offset);
     UserBriefResponse getUserBriefInfoByUsername(String username);
+    UserBriefResponse getUserBriefInfoByID(String id);
 }

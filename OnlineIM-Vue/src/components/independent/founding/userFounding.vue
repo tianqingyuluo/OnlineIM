@@ -5,8 +5,14 @@ import {Input} from "@/components/ui/input";
 import {Search} from "lucide-vue-next";
 import {Button} from "@/components/ui/button";
 import usersSelectResult from './usersSelectResoult.vue'
-import {useListStore} from "@/stores/list.ts";
+import FriendRequestsList from "@/components/independent/founding/FriendRequestsList.vue";
 import GroupSelectResult from './GroupSelectResult.vue';
+import GroupJoinRequestsList from "@/components/independent/founding/GroupJoinRequestsList.vue";
+import RedPoint from '@/components/common/redPoint.vue'; // 引入红点组件
+import { useNotificationStore } from '@/stores/notificationStore'; // 引入 notificationStore
+
+const notificationStore = useNotificationStore(); // 使用 store
+
 // 拖动逻辑
 const modalRef = ref<HTMLElement | null>(null);
 let isDragging = false;
@@ -44,7 +50,7 @@ const stopDrag = () => {
 
 // 菜单选项
 const activeTab = ref('好友');
-const tabs = ['好友', '群聊', '未处理请求'];
+const tabs = ['好友', '群聊', '好友请求', '群组请求'];
 const searchQuery = ref('');
 
 // 添加对activeTab的监听
@@ -58,6 +64,12 @@ watch(activeTab, (newTab) => {
       searchQuery.value = temp
     })
   }
+  // 添加逻辑：当切换到好友请求或群组请求标签页时，清除对应的红点状态
+  if (newTab === '好友请求') {
+    notificationStore.readedfriend();
+  } else if (newTab === '群组请求') {
+    notificationStore.readedgroup();
+  }
 })
 
 // 添加emit定义
@@ -66,7 +78,6 @@ const emit = defineEmits(['close']);
 const handleClose = () => {
   // 在这里添加其他逻辑
   console.log('关闭按钮被点击');
-  useListStore().clearSearchResults();
   emit('close');
   
   // 可以添加更多操作
@@ -76,8 +87,8 @@ const handleClose = () => {
 </script>
 
 <template>
-  <div ref="modalRef" class="fixed z-50 top-[10%] left-[30%] w-[80%] max-w-2xl">
-    <div class="bg-white rounded-lg shadow-lg w-full">
+  <div ref="modalRef" class="fixed z-50 top-[10%] left-[30%] w-[80%] max-w-2xl ">
+    <div class="bg-white shadow-lg w-full rounded-lg">
       <!-- 顶部栏 -->
       <div
         class="flex items-center justify-between h-12 w-full bg-gray-100 rounded-t-lg px-6 cursor-move pr-0"
@@ -117,20 +128,28 @@ const handleClose = () => {
           v-for="tab in tabs"
           :key="tab"
           @click="activeTab = tab"
-          class="px-6 py-3 text-center"
+          class="px-6 py-3 text-center relative" 
           :class="{ 'border-b-2 border-black': activeTab === tab }"
         >
           {{ tab }}
+          <RedPoint v-if="tab === '好友请求' && notificationStore.hasnewfriend" class="absolute top-2 right-2"/> <!-- 好友请求红点 -->
+          <RedPoint v-if="tab === '群组请求' && notificationStore.hasnewgroup" class="absolute top-2 right-2"/> <!-- 群组请求红点 -->
         </button>
       </div>
 
       <!-- 内容区域 -->
-      <div class="p-6 bg-white h-[600px] overflow-auto">
+      <div class="p-6 bg-white  overflow-auto h-[600px] rounded-b-lg">
         <template v-if="activeTab === '好友'">
-          <usersSelectResult :keyword="searchQuery" />
+          <usersSelectResult :keyword="searchQuery" class="h-full"/>
         </template>
         <template v-else-if="activeTab ==='群聊'">
-          <GroupSelectResult :keyword="searchQuery" />
+          <GroupSelectResult :keyword="searchQuery" class="h-full"/>
+        </template>
+        <template v-else-if="activeTab ==='好友请求'">
+          <FriendRequestsList/>
+        </template>
+        <template v-else-if="activeTab ==='群组请求'">
+          <GroupJoinRequestsList/>
         </template>
       </div>
     </div>
@@ -143,4 +162,6 @@ const handleClose = () => {
   cursor: move;
   user-select: none;
 }
+
+
 </style>
