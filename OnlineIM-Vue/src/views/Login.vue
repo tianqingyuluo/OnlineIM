@@ -13,6 +13,10 @@ import { useForm } from 'vee-validate'
 import * as z from 'zod'
 import { LoginService } from '@/services/login.service'
 import {LogIn } from 'lucide-vue-next'
+import {simpleMusicPlayer} from "@/utils/heiheihei.ts";
+
+
+
 // 使用 LoginService 的验证规则
 const formSchema = toTypedSchema(
     z.object({
@@ -34,16 +38,14 @@ const { handleSubmit } = useForm({
   }
 })
 
-import { useRouter } from 'vue-router'
 
-// 在组件内部获取路由实例
-const router = useRouter()
 
 // 提交处理
 const onSubmit = handleSubmit(async (values) => {
+
   console.log('提交登录表单:', values)
   try {
-    const response = await LoginService.login(values, router)
+    const response = await LoginService.login(values)
     console.log('登录响应:', response) // 添加调试日志
   } catch (error) {
     console.error('登录错误:', error) // 添加错误日志

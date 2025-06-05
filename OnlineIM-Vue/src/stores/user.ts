@@ -7,6 +7,7 @@ import type {Conversation} from "@/type/Conversation.ts";
 import type {Friend} from "@/type/Friends.ts";
 import { TokenService } from '@/services/token.service'
 import type {GroupResponse} from "@/type/group.ts";
+import { dbService } from '@/utils/indexedDB';
 
 // 默认用户对象（所有字段为空值）
 const DEFAULT_USER: User = {
@@ -15,7 +16,7 @@ const DEFAULT_USER: User = {
   nickname: '游客',
   avatar_url: '/images/group.png',
   region: undefined,
-  gender: 0,
+  gender: '0',
   email: undefined,
   phone: undefined,
   signature: '这个用户很懒，什么都没写~',
@@ -33,6 +34,12 @@ export const useUserStore = defineStore('user', {
       this.loggedInUser = user
     },
     async clearUser() {
+      try {
+        await authService.logout()
+      }
+      catch (error) {
+
+      }
       this.loggedInUser = JSON.parse(JSON.stringify(DEFAULT_USER))
       this.token = ""
       const listStore = useListStore()
@@ -42,16 +49,26 @@ export const useUserStore = defineStore('user', {
       listStore.friendTotal = 0
       listStore.groups = [] as GroupResponse[]
       listStore.groupTotal = 0
-      listStore.groupedFriends=[]
       listStore.userGroups=[]
-      await authService.logout()
+      listStore.groupJoinRequestList=[]
+      listStore.hasInit = false
+      listStore.blacklist=[]
+      listStore.FriendRequestsList=[]
       TokenService.clear()
+
     },
     isAuthenticated(): boolean {//是否拥有token
       return !!this.token
     },
     async fetchUserData() {
+      if (this.loggedInUser.user_id==='') {
+
+         await this.updateToken();
+      }
       await meService.me();
+
+      const avatarUrl = this.loggedInUser.avatar_url;
+      await dbService.addImageFromUrl(avatarUrl);
     },
     async updateToken() {
       TokenService.init(this.token)

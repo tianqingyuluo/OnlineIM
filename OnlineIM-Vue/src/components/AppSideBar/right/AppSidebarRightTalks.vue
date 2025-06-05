@@ -3,8 +3,7 @@ import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
+  SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem
@@ -18,17 +17,42 @@ import router from "@/router";
 
 
 const activeId = ref<string | null>(null);
+const searchQuery = ref('');
 const emits = defineEmits(['chatSelected'])
 const listStore = useListStore()
-const conversations = computed(() => listStore.conversations)
+
+
+const pinnedConversations = computed(() => {
+  const query = searchQuery.value.toLowerCase().trim();
+  const conversations = (listStore.conversations || []).filter(conversation => conversation.is_pinned);
+  if (!query) return conversations;
+  return conversations.filter(conversation => {
+    const name = (conversation.target_info?.name || '').toLowerCase();
+    return name.includes(query);
+  });
+});
+
+const unpinnedConversations = computed(() => {
+  const query = searchQuery.value.toLowerCase().trim();
+  const conversations = (listStore.conversations || []).filter(conversation => !conversation.is_pinned);
+  if (!query) return conversations;
+  return conversations.filter(conversation => {
+    const name = (conversation.target_info?.name || '').toLowerCase();
+    return name.includes(query);
+  });
+});
+
+
+const hasConversations = computed(() => pinnedConversations.value.length > 0 || unpinnedConversations.value.length > 0);
 
 function handleChatClick(conversation: Conversation) {
-  activeId.value = conversation.conversation_id
-  emits('chatSelected', conversation)
+  activeId.value = conversation.conversation_id;
+  emits('chatSelected', conversation);
+  listStore.setConversationFieldsToNull(conversation.conversation_id);
   if (conversation.type=='private')
-    router.push(`/main/chat/private/${conversation.conversation_id}`)
+    router.push(`/main/chat/private/${conversation.conversation_id}`);
   else
-    router.push(`/main/chat/group/${conversation.conversation_id}`)
+    router.push(`/main/chat/group/${conversation.conversation_id}`);
 }
 </script>
 
@@ -45,6 +69,7 @@ function handleChatClick(conversation: Conversation) {
             id="search"
             type="text"
             placeholder="搜索"
+            v-model="searchQuery"
             class="w-full pl-10 bg-white border-blue-100 focus:border-blue-100 focus:ring-0"
         />
         <Search class="absolute left-3 top-1/2 transform -translate-y-1/2 size-6 text-muted-foreground" />
@@ -54,32 +79,77 @@ function handleChatClick(conversation: Conversation) {
       <SidebarGroup>
         <SidebarGroupContent>
           <SidebarMenu class="w-full">
-            <SidebarMenuItem v-for="conversation in conversations" :key="conversation.conversation_id" class="w-full">
-              <SidebarMenuButton
-                as-child
-                :isActive="activeId === conversation.conversation_id"
-                @click="handleChatClick(conversation)"
-                class="data-[active=true]:bg-gray-100 data-[active=true]:text-black flex items-center w-full h-[80px] px-4 hover:bg-gray-50"
-              >
-                <div class="flex items-center w-full">
-                  <div class="w-[50px] h-[50px] rounded-full overflow-hidden mr-4 flex-shrink-0">
-                    <img
-                      :src="conversation.target_info?.avatar_url || '/default-avatar.png'"
-                      :alt="conversation.target_info.name"
-                      class="w-full h-full object-cover"
-                    />
+            <!-- 置顶会话 -->
+            <template v-if="pinnedConversations.length > 0">
+              <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase">置顶</div>
+              <div class="bg-gray-50">
+              <SidebarMenuItem v-for="conversation in pinnedConversations" :key="conversation.conversation_id" class="w-full">
+                <SidebarMenuButton
+                  as-child
+                  :isActive="activeId === conversation.conversation_id"
+                  @click="handleChatClick(conversation)"
+                  class="data-[active=true]:bg-gray-100 data-[active=true]:text-black flex items-center w-full h-[80px] px-4 hover:bg-gray-50"
+                >
+                  <div class="flex items-center w-full">
+                    <div class="w-[50px] h-[50px] rounded-full overflow-hidden mr-4 flex-shrink-0">
+                      <img
+                        :src="conversation.target_info?.avatar_url || '/default-avatar.png'"
+                        :alt="conversation.target_info?.name || ''"
+                        class="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div class="flex flex-col flex-grow space-y-1 relative">
+                      <span class="text-[18px] font-bold truncate">
+                        {{ conversation.target_info?.name || 'Unknown' }}
+                      </span>
+                      <span class="text-[13px] text-gray-500 truncate truncate">
+                        <span v-if="conversation.is_at" class="text-red-500">[有人@我]</span>
+                        {{ conversation.last_message?.content_preview || '无消息' }}
+                      </span>
+                      <span v-if="conversation.notreadednumber && conversation.notreadednumber !== 0" :class="{'absolute top-0 right-0 text-white text-xs rounded-full px-2 py-1 truncate': true, 'bg-red-500': !conversation.is_muted, 'bg-gray-50': conversation.is_muted}">
+                          {{ conversation.notreadednumber >= 100 ? '99+' : conversation.notreadednumber }}
+                        </span>
+                    </div>
                   </div>
-                  <div class="flex flex-col flex-grow space-y-1">
-                    <span class="text-[18px] font-bold">
-                      {{ conversation.target_info.name }}
-                    </span>
-                    <span class="text-[13px] text-gray-500 truncate">
-                      {{ conversation.last_message.content_preview }}
-                    </span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              </div>
+            </template>
+
+            <!-- 非置顶会话 -->
+            <template v-if="unpinnedConversations.length > 0">
+              <div v-if="pinnedConversations.length > 0" class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase">其他</div>
+              <SidebarMenuItem v-for="conversation in unpinnedConversations" :key="conversation.conversation_id" class="w-full">
+                <SidebarMenuButton
+                  as-child
+                  :isActive="activeId === conversation.conversation_id"
+                  @click="handleChatClick(conversation)"
+                  class="data-[active=true]:bg-gray-100 data-[active=true]:text-black flex items-center w-full h-[80px] px-4 hover:bg-gray-50"
+                >
+                  <div class="flex items-center w-full">
+                    <div class="w-[50px] h-[50px] rounded-full overflow-hidden mr-4 flex-shrink-0">
+                      <img
+                        :src="conversation.target_info?.avatar_url || '/default-avatar.png'"
+                        :alt="conversation.target_info?.name || ''"
+                        class="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div class="flex flex-col flex-grow space-y-1">
+                      <span class="text-[18px] font-bold">
+                        {{ conversation.target_info?.name || 'Unknown' }}
+                      </span>
+                      <span class="text-[13px] text-gray-500 truncate">
+                        {{ conversation.last_message?.content_preview || '无消息' }}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </template>
+
+            <div v-if="!hasConversations" class="flex justify-center items-center py-8 text-gray-500">
+              没有找到对应会话
+            </div>
           </SidebarMenu>
         </SidebarGroupContent>
       </SidebarGroup>

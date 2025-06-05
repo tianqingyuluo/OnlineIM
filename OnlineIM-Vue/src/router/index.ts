@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Login from '@/views/Login.vue'
-import Main from '@/views/Main.vue'
 import Register from '@/views/Register.vue'
 import Test from '@/components/independent/friends/SendFriendRequest.vue'
 import AppSidebarRightTalks from '@/components/AppSideBar/right/AppSidebarRightTalks.vue'
@@ -60,7 +59,14 @@ const router = createRouter({
         },
         {
           path: 'groups',
-          component: AppSidebarRightGroup
+          component: AppSidebarRightGroup,
+          children:[
+            {
+              path: ':groupId',
+              name: 'group',
+              component: () => import('@/views/groupPart.vue')
+            }
+          ]
         },
         {
           path:'search',
@@ -82,13 +88,13 @@ const router = createRouter({
   ]
 })
 
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, _from, next) => {
   const userStore = useUserStore()
 
-  if (to.path !== '/login'&&to.path!=='/register' && !userStore.loggedInUser.user_id) {
+  if (to.path !== '/login'&&to.path!=='/register' && !userStore.token) {
     next('/login')
     toast.error('用户未登录')
-  } else if (to.path === '/login' && userStore.loggedInUser.user_id) {
+  } else if (to.path === '/login' && userStore.token) {
     next('/main/chat')
   } else {
     next()

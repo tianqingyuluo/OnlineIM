@@ -1,7 +1,7 @@
 // 基础类型定义
 type UUID = string;  // 格式如: usr_xxx 或 grp_xxx
 type ISO8601DateTime = string;
-type GroupRole = 'owner' | 'admin' | 'member';
+type GroupRole = string;
 
 export interface GroupMember {
   user_id: UUID;
@@ -35,28 +35,49 @@ export interface GroupResponse {
     announcement?: string;
     member_count: number;
     my_role: GroupRole;
-    created_at: ISO8601DateTime;
-    // 其他群组设置，如加群验证方式等
+    create_at: string;
 }
 
-export interface JoinedGroupsResponse {
-    groups: GroupResponse[];
-    total: number;
-}
 
 export interface GroupMemberAll {
     "user_info": {
-        "user_id": "usr_+UUID",
-        "username": "string",
-        "nickname": "string",
-        "avatar_url": "string (optional)"
+        "user_id": string
+        "username": string
+        "nickname": string
+        "avatar_url": string
     }
-    "role": "owner" | "admin" | "member",
-    "is_muted" : "boolean",
-    "mute_end_time": "muteEndTime",
-    "joined_at": "string (ISO 8601)"
+    group_member_id:string
+    group_nickname: string
+    "role": string;
+    "is_muted" : boolean
+    "mute_end_time": string
+    "joined_at": string
 }
 export interface GroupMembersResponse {
     members: GroupMemberAll[];
     total: number;
 }
+export interface GroupJoinRequestResponse {
+    
+    requestID:string
+    groupID:string
+    groupName:string
+    user_info:
+        {
+            username:string
+            nickname:string
+            avatarUrl:string
+            userID:string
+        }
+    inviterInfo:
+        {
+        username:string
+        nickname:string
+        avatarUrl:string
+        userID:string
+        }
+    message:string
+    status:string
+    createdAt:string
+    
+} 

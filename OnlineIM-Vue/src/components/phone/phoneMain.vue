@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import {  onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user.ts'
 import { useListStore } from '@/stores/list.ts'
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { MessageCircleMore,Users,UserRoundPlus,User } from "lucide-vue-next"
-import UserFounding from "@/components/independent/founding/userFounding.vue";
 import PhoneUserThings from "@/components/phone/phoneUserThings.vue";
 import PhoneSidebarGroup from "@/components/phone/PhoneSidebarGroup.vue";
 import PhoneSidebarFriends from "@/components/phone/PhoneSidebarFriends.vue";

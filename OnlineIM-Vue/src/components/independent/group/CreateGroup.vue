@@ -1,35 +1,10 @@
 <template>
-  <div class="flex bg-white p-6 rounded-lg shadow-sm max-w-4xl mx-auto">
-    <!-- 左侧好友头像侧边栏 -->
-    <div class="w-2/5 pr-4 border-r border-gray-200">
-      <h3 class="text-sm font-medium text-gray-700 mb-3">选择好友</h3>
-      <div class="max-h-96 overflow-y-auto space-y-2">
-        <div 
-          v-for="friend in listStore.friends" 
-          :key="friend.friendship_id"
-          class="flex items-center p-2 hover:bg-gray-50 rounded cursor-pointer"
-          @click="toggleFriendSelection(friend.friend_info.user_id)"
-        >
-          <img 
-            :src="friend.friend_info.avatar_url || '/images/default-avatar.png'"
-            class="w-10 h-10 rounded-full mr-2"
-            :alt="friend.friend_info.nickname"
-          >
-          <span class="text-sm text-gray-800 mr-2">
-            {{ friend.friend_info.nickname || friend.friend_info.username }}
-          </span>
-          <input 
-            type="checkbox" 
-            v-model="form.initial_members" 
-            :value="friend.friend_info.user_id"
-            class="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-500"
-          >
-        </div>
-      </div>
-    </div>
+  <div class="flex bg-white p-6 rounded-lg shadow-sm max-w-5xl mx-auto">
+    <!-- 使用封装的好友选择组件 -->
+    <FriendSelection v-model="form.initial_members" class="w-2/5 max-h-[500px] overflow-auto" />
 
     <!-- 右侧创建群组表单 -->
-    <div class="w-3/5 pl-6">
+    <div class="w-3/5 pl-8">
       <!-- 标题区域 -->
       <div class="flex justify-between items-center mb-6">
         <h2 class="text-xl font-medium text-gray-800">创建新群组</h2>
@@ -39,7 +14,7 @@
           </svg>
         </button>
       </div>
-  
+
       <!-- 头像区域 -->
       <div class="mb-5 flex flex-col items-center">
         <div
@@ -56,7 +31,7 @@
           </div>
         </div>
       </div>
-  
+
       <!-- 群组名称 -->
       <div class="mb-4">
         <label class="block text-sm font-medium text-gray-700 mb-1">群组名称</label>
@@ -69,7 +44,7 @@
         >
         <p v-if="errors.name" class="text-red-500 text-sm mt-1">{{ errors.name }}</p>
       </div>
-  
+
       <!-- 群组描述 -->
       <div class="mb-4">
         <label class="block text-sm font-medium text-gray-700 mb-1">群组描述</label>
@@ -79,7 +54,7 @@
           class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-gray-500"
         ></textarea>
       </div>
-  
+
       <!-- 创建按钮 -->
       <button
         @click="saveGroup"
@@ -101,6 +76,10 @@ import { useListStore } from '@/stores/list'
 import { toTypedSchema } from '@vee-validate/zod'
 import { useForm } from 'vee-validate'
 import * as z from 'zod'
+import FriendSelection from '@/components/independent/group/FriendSelection.vue'
+import { meService } from '@/services/me.service'
+import {useUserStore} from "@/stores/user.ts";
+import {conversationService} from "@/services/conversation.service.ts";
 
 const router = useRouter()
 const listStore = useListStore()
@@ -117,11 +96,6 @@ const formSchema = toTypedSchema(
   })
 )
 
-const form = ref({
-  initial_members: [] as string[]
-})
-
-// 使用defineField方式绑定表单字段
 const { handleSubmit, errors, defineField } = useForm({
   validationSchema: formSchema,
   initialValues: {
@@ -131,22 +105,32 @@ const { handleSubmit, errors, defineField } = useForm({
   }
 })
 
-// 为每个字段添加绑定
+const form = ref({
+  initial_members: [] as string[],
+  avatar_url: '' as string | undefined
+})
+
+// 绑定表单字段
 const [name] = defineField('name')
 const [description] = defineField('description')
 
-// 提交处理
 const saveGroup = handleSubmit(async (values) => {
   try {
     loading.value = true
+    form.value.initial_members.push(useUserStore().loggedInUser.user_id)
     const response = await groupService.createGroup({
       name: values.name,
       description: values.description || undefined,
-      initial_members: form.value.initial_members
+      initial_members: form.value.initial_members,
+      avatar_url: form.value.avatar_url,
+      max_members: 50
     })
 
     listStore.groups = [...listStore.groups, response]
-    router.push({
+    const targetId=response.group_id
+    const conversationResponse = await conversationService.createConversation(targetId,'group')
+    listStore.conversations.push(conversationResponse)
+    await router.push({
       name: 'chat',
       params: {
         type: 'group',
@@ -160,8 +144,30 @@ const saveGroup = handleSubmit(async (values) => {
   }
 })
 
-const changeAvatar = () => {
-  console.log('更换头像')
+const changeAvatar = async () => {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'image/*'
+  
+  input.onchange = async (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0]
+    if (!file) return
+    
+    try {
+      loading.value = true
+      const avatarUrl = await meService.uploadAvatar(file)
+      form.value.avatar_url = avatarUrl
+      // 更新显示的预览图
+      const img = document.querySelector('.w-24.h-24 img') as HTMLImageElement
+      if (img) img.src = avatarUrl
+    } catch (error) {
+      console.error('上传头像失败:', error)
+    } finally {
+      loading.value = false
+    }
+  }
+  
+  input.click()
 }
 
 const emit = defineEmits(['close'])
@@ -169,17 +175,4 @@ const emit = defineEmits(['close'])
 const closeModal = () => {
   emit('close')
 }
-
-const toggleFriendSelection = (userId: string) => {
-  const index = form.value.initial_members.indexOf(userId)
-  if (index === -1) {
-    form.value.initial_members.push(userId)
-  } else {
-    form.value.initial_members.splice(index, 1)
-  }
-}
 </script>
-
-<style scoped>
-/* 可根据需要添加自定义样式 */
-</style>

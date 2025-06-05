@@ -40,7 +40,7 @@ onMounted(async () => {
       email: userData.email ||"未设置",
       phone: userData.phone ||"未设置",
       region: userData.region ||"未设置",
-      gender: userData.gender!==0 ? (userData.gender === 1 ? '男' : '女') : '未设置',
+      gender: userData.gender!=='0' ? (userData.gender === '1' ? '男' : '女') : '未设置',
       signature: userData.signature ||"未设置",
       avatar_url: userData.avatar_url
     };
@@ -62,7 +62,7 @@ watch(
           email: newUser.email || "未设置",
           phone: newUser.phone || "未设置",
           region: newUser.region || "未设置",
-          gender: newUser.gender!==0 ? (newUser.gender === 1 ? '男' : '女') : '未设置',
+          gender: newUser.gender!=='0' ? (newUser.gender === '1' ? '男' : '女') : '未设置',
           signature: newUser.signature || "未设置",
           avatar_url: newUser.avatar_url || '/images/help.png'
         };

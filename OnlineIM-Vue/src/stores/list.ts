@@ -3,105 +3,355 @@ import {  friendsService} from '@/services/friends.service';
 import { conversationService} from '@/services/conversation.service';
 import {type Conversation}from'@/type/Conversation.ts'
 import { groupService } from '@/services/group.service';
-import type {GroupResponse} from "@/type/group.ts";
+import type {GroupJoinRequestResponse, GroupResponse} from "@/type/group.ts";
 import type {UserGroupInfo} from "@/type/userGroup.ts";
 import {friendGroupsService} from "@/services/friendGroups.servise.ts";
-import {type GroupedFriends, groupAndSortFriends } from '@/utils/friendGroupUtils';
-import type {Friend} from "@/type/Friends.ts";
+import type {Friend, FriendInFriendGroup, FriendRequest} from "@/type/Friends.ts";
 import { toast } from 'vue-sonner';
+import { blacklistService, type BlacklistUser} from "@/services/blacklist.service.ts";
+import {useUserStore} from "@/stores/user.ts";
+import { dbService, STORES } from '@/utils/indexedDB';
+import { useNotificationStore } from './notificationStore';
+
 
 export const useListStore = defineStore('list', {
   state: () => ({
     conversations: [] as Conversation[],//全会话列表
     total: 0,
-    userGroups: [] as UserGroupInfo[],//全好友列表
+    userGroups: [] as UserGroupInfo[],//全好友分组列表
     friends: [] as Friend[],
     friendTotal: 0,
     groups: [] as GroupResponse[],//全群组列表
     groupTotal: 0,
-    groupedFriends: [] as GroupedFriends[]
+    groupJoinRequestList:[] as GroupJoinRequestResponse[],
+    FriendRequestsList:[] as FriendRequest[],
+    hasInit : false,
+    blacklist: [] as BlacklistUser[],
+    
   }),
   actions: {
     async fetchUserData() {
-      this.userGroups=await friendGroupsService.getFriendGroups()
-      await conversationService.getConversations()
-      await friendsService.getFriends()
-      this.groupedFriends =await groupAndSortFriends(this.friends, this.userGroups)
-      await groupService.getJoinedGroups()
-      
+      const userStore = useUserStore();
+      if (!userStore.token) {
+        window.location.href = '/login';
+        return;
+      }
+      const notificationStore = useNotificationStore();
+
+
+
+
+      if (!this.hasInit) {
+        this.hasInit =false
+        console.log('开始初始化用户数据...')
+        console.log('当前用户ID:', userStore.loggedInUser.user_id)
+
+        try {
+          this.FriendRequestsList=await friendsService.getReceivedFriendRequests();
+        }
+        catch (error) {
+          console.log(error);
+        }
+
+        if (this.FriendRequestsList.length > 0) {
+          notificationStore.hasnewfriend = true;
+        }
+        if ((await this.getGroupJoinRequestList()).length>0){
+          notificationStore.hasnewgroup = true;
+        }
+
+        // 从IndexedDB加载缓存数据
+        try {
+          const userId = userStore.loggedInUser.user_id;
+          const [dbConvs, dbFriends, dbGroups, dbUserGroups, dbBlacklist] = await Promise.all([
+            dbService.getAll(STORES.CONVERSATIONS, userId),
+            dbService.getAll(STORES.FRIENDS, userId),
+            dbService.getAll(STORES.GROUPS,userId),
+            dbService.getAll(STORES.USER_GROUPS, userId),
+            dbService.getAll(STORES.BLACKLIST, userId)
+          ]);
+          console.log('IndexedDB加载完成')
+          if (dbConvs){
+            if (dbConvs.length) {
+              this.conversations = dbConvs;
+              console.log('从IndexedDB加载会话数据:', dbConvs.length, '条记录');
+              console.debug('会话数据详情:', dbConvs);
+            }
+          }
+          if (dbFriends) {
+            if (dbFriends.length) {
+              this.friends = dbFriends;
+              console.log('从IndexedDB加载好友数据:', dbFriends.length, '条记录');
+              console.debug('好友数据详情:', dbFriends);
+            }
+          }
+          if (dbGroups) {
+            if (dbGroups.length) {
+              this.groups = dbGroups;
+              console.log('从IndexedDB加载群组数据:', dbGroups.length, '条记录');
+              console.debug('群组数据详情:', dbGroups);
+            }
+          }
+          if (dbUserGroups) {
+            if (dbUserGroups.length) {
+              this.userGroups = dbUserGroups;
+              console.log('从IndexedDB加载好友分组数据:', dbUserGroups.length, '条记录');
+              console.debug('好友分组数据详情:', dbUserGroups);
+            }
+          }
+          if (dbBlacklist) {
+            if (dbBlacklist.length) {
+              this.blacklist = dbBlacklist;
+              console.log('从IndexedDB加载黑名单数据:', dbBlacklist.length, '条记录');
+              console.debug('黑名单数据详情:', dbBlacklist);
+            }
+          }
+
+        } catch (error) {
+          console.error('从IndexedDB加载数据失败:', error);
+        }
+
+        // 获取最新数据并更新到IndexedDB
+        try {
+          const results = await Promise.allSettled([
+            friendGroupsService.getFriendGroups(),
+            conversationService.getConversations(),
+            friendsService.getFriends(),
+            groupService.getJoinedGroups(),
+            blacklistService.getBlacklist()
+          ]);
+          
+          // 处理每个请求的结果
+          const [userGroupsResult, convsResult, friendsResult, groupsResult, blacklistResult] = results;
+          
+          // 记录失败的服务
+          results.forEach((result, index) => {
+            if (result.status === 'rejected') {
+              const serviceNames = ['好友分组服务', '会话服务', '好友服务', '群组服务', '黑名单服务'];
+              console.error(`${serviceNames[index]}加载失败:`, result.reason);
+            }
+          });
+          console.log('所有服务加载完成,开始同步到indexdb');
+          // 更新成功返回的数据
+          if (userGroupsResult.status === 'fulfilled') {
+            this.userGroups = userGroupsResult.value;
+
+            for (const group of this.userGroups) {
+              for (const friend of group.friends) {
+                const url = friend.avatar_url;
+                if (url) {
+                  try {
+                    await dbService.addImageFromUrl(url);
+                  } catch (error) {
+                    console.error('缓存头像失败:', error);
+                    console.error('错误的头像URL:', url);
+                  }
+                }
+              }
+            }
+          }
+          if (convsResult.status === 'fulfilled') {
+            this.conversations = convsResult.value;
+          }
+          if (friendsResult.status === 'fulfilled') {
+            this.friends = friendsResult.value.friends;
+          }
+          if (groupsResult.status === 'fulfilled') {
+            this.groups = groupsResult.value;
+
+            const groupAvatars = this.groups.map(group => group.avatar_url);
+            for (const url of groupAvatars) {
+              if (url) {
+                try {
+                  await dbService.addImageFromUrl(url);
+                } catch (error) {
+                  console.error('缓存头像失败:', error);
+                  console.error('错误的头像URL:', url);
+                  // 继续执行，不中断整个进程
+                }
+              }
+            }
+          }
+          if (blacklistResult.status === 'fulfilled') {
+            this.blacklist = blacklistResult.value.blacklist;
+          }
+          
+          console.debug('API返回数据详情:', {
+            userGroups: this.userGroups,
+            conversations: this.conversations,
+            friends: this.friends,
+            groups: this.groups,
+            blacklist: this.blacklist
+          });
+          const friendGroup = this.userGroups.find(g=>g.name==="我的好友")
+          // 如果用户分组为空则创建默认分组
+          if (!friendGroup) {
+            try {
+              const defaultGroup = await friendGroupsService.createFriendGroup('我的好友');
+              this.userGroups.push(defaultGroup);
+              await dbService.bulkPut(STORES.USER_GROUPS, this.userGroups);
+            } catch (error) {
+              console.error('创建默认好友分组失败:', error);
+              toast.error('初始化默认分组失败');
+            }
+          }
+          let defaultGroup = this.userGroups.find(g => g.name === '我的好友');
+          const friendsWithNoGroup = this.friends
+              .filter(friend => friend.friend_info.friend_group_id == null)
+              .map(friend => friend.friend_info);
+          const friendIds = friendsWithNoGroup.map(friend => friend.user_id);
+          if (friendIds.length > 0) {
+            try {
+
+              for (const friendId of friendIds) {
+
+                await friendsService.setFriendGroup(friendId, defaultGroup.group_id);
+
+
+                await this.updateFriendGroup(friendId, defaultGroup.group_id);
+              }
+
+              toast.success(`已将 ${friendIds.length} 个好友移动到默认分组`);
+            } catch (error) {
+              console.error("更新好友分组失败:", error);
+              toast.error("移动好友失败");
+            }
+          } else {
+            console.log("没有未分组的好友");
+          }
+          // 同步到IndexedDB
+          try {
+            // 序列化数据，确保所有属性可克隆
+            const serializeData = (data: any) => JSON.parse(JSON.stringify(data));
+            
+            await Promise.allSettled([
+              dbService.bulkPut(STORES.CONVERSATIONS, serializeData(this.conversations)),
+              dbService.bulkPut(STORES.FRIENDS, serializeData(this.friends)),
+              dbService.bulkPut(STORES.GROUPS, serializeData(this.groups)),
+              dbService.bulkPut(STORES.USER_GROUPS, serializeData(this.userGroups)),
+              dbService.bulkPut(STORES.BLACKLIST, serializeData(this.blacklist))
+            ]);
+          } catch (error) {
+            console.error('IndexedDB存储失败:', error);
+            throw error;
+          }
+
+
+        } catch (error) {
+          console.error('获取最新数据失败:', error);
+        }
+      }
+
+
+
     },
-    
+
     async deleteFriendGroup(groupId: string) {
       // 检查分组是否为空
-      const groupIndex = this.groupedFriends.findIndex(g => g.group.id === groupId);
-      if (groupIndex !== -1 && this.groupedFriends[groupIndex].friends.length > 0) {
+      const userGroup = this.userGroups.find(g => g.group_id === groupId);
+      if (userGroup && userGroup.friends.length > 0) {
         toast.error('分组不为空，无法删除');
         throw new Error('分组不为空，无法删除');
       }
-      
+
       try {
         await friendGroupsService.deleteFriendGroup(groupId);
-        
         // 从userGroups中删除
-        const userGroupIndex = this.userGroups.findIndex(g => g.id === groupId);
+        const userGroupIndex = this.userGroups.findIndex(g => g.group_id === groupId);
         if (userGroupIndex !== -1) {
           this.userGroups.splice(userGroupIndex, 1);
-        }
-        
-        // 从groupedFriends中删除
-        if (groupIndex !== -1) {
-          this.groupedFriends.splice(groupIndex, 1);
+          // 同步到IndexedDB
+          await dbService.bulkPut(STORES.USER_GROUPS, this.userGroups);
         }
       } catch (error) {
         throw error;
       }
     },
-    
-    // 更新好友分组信息，同时更新friends和groupedFriends数组
-    updateFriendGroup(friendshipId: string, newGroupId: string) {
-      // 更新friends数组中的好友分组信息
-      const friendIndex = this.friends.findIndex(friend => friend.friendship_id === friendshipId);
-      if (friendIndex !== -1) {
-        this.friends[friendIndex].friend_info.friend_group_id = newGroupId;
-      }
-      
-      // 更新groupedFriends数组
-      // 1. 找到好友当前所在的分组
-      let foundFriend: Friend | null = null;
-      let oldGroupIndex = -1;
-      let friendIndexInGroup = -1;
-      
-      for (let i = 0; i < this.groupedFriends.length; i++) {
-        const groupFriends = this.groupedFriends[i].friends;
-        const index = groupFriends.findIndex(f => f.friendship_id === friendshipId);
+
+    // 更新好友分组信息
+    async updateFriendGroup(friendshipId: string, newGroupId: string) {
+      // 更新userGroups数组中的好友分组信息
+      const friend = this.friends.find(f => f.friendship_id === friendshipId);
+      if (!friend) return;
+      // 从原分组中移除好友
+      for (const group of this.userGroups) {
+        const index = group.friends.findIndex(f => f.friendship_id === friendshipId);
         if (index !== -1) {
-          foundFriend = groupFriends[index];
-          oldGroupIndex = i;
-          friendIndexInGroup = index;
+          group.friends.splice(index, 1);
           break;
         }
       }
-      
-      // 如果找到了好友
-      if (foundFriend) {
-        // 2. 从旧分组中移除
-        if (oldGroupIndex !== -1 && friendIndexInGroup !== -1) {
-          this.groupedFriends[oldGroupIndex].friends.splice(friendIndexInGroup, 1);
-        }
-        
-        // 3. 更新好友的分组ID
-        foundFriend.friend_info.friend_group_id = newGroupId;
-        
-        // 4. 添加到新分组
-        const newGroupIndex = this.groupedFriends.findIndex(g => g.group.id === newGroupId);
-        if (newGroupIndex !== -1) {
-          this.groupedFriends[newGroupIndex].friends.push(foundFriend);
-        }
-      } else {
-        // 如果groupedFriends中没有找到，则重新生成groupedFriends
-        groupAndSortFriends(this.friends, this.userGroups, true);
+      // 更新friends数组中的好友分组信息
+      const friendIndex = this.friends.findIndex(friend => friend.friendship_id === friendshipId);
+
+      if (friendIndex !== -1) {
+        this.friends[friendIndex].friend_info.friend_group_id = newGroupId;
       }
+
+      // 将好友添加到新分组
+      const newGroup = this.userGroups.find(g => g.group_id === newGroupId);
+      if (newGroup) {
+        const friendInGroup: FriendInFriendGroup = {
+          friendship_id: friend.friendship_id,
+          user_id: friend.friend_info.user_id,
+          friend_group_id: newGroupId,
+          created_at: friend.created_at,
+          username: friend.friend_info.username,
+          nickname: friend.friend_info.nickname,
+          avatar_url: friend.friend_info.avatar_url,
+          remark: friend.friend_info.remark,
+          online_status: friend.friend_info.online_status
+        };
+        newGroup.friends.push(friendInGroup);
+      }
+
+      // 同步到IndexedDB
+      await Promise.all([
+        dbService.bulkPut(STORES.FRIENDS, this.friends),
+        dbService.bulkPut(STORES.USER_GROUPS, this.userGroups)
+      ]);
     },
-  },
-  persist: true
-})
+    // 在 useListStore 的 actions 中添加这个方法
+async getGroupJoinRequestList() {
+  try {
+    // 临时存储所有请求，避免重复添加
+    const allRequests: GroupJoinRequestResponse[] = [];
+
+    // 遍历用户的所有群组
+    for (const group of this.groups) {
+      // 只处理角色不是 'member' 的群组（管理员或群主）
+      if (group.my_role && group.my_role !== '0') {
+        try {
+          // 获取该群组的加群请求
+          const requests = await groupService.getGroupJoinRequests(group.group_id);
+
+          // 如果返回的是数组，直接合并
+          if (Array.isArray(requests)) {
+            allRequests.push(...requests);
+          }
+          // 如果返回的是单个对象，包装成数组
+          else if (typeof requests === 'object' && requests !== null) {
+            allRequests.push(requests);
+          }
+        } catch (error) {
+          console.error(`获取群组 ${group.name} 的加群请求失败:`, error);
+          // 继续处理下一个群组，不中断整个流程
+        }
+      }
+    }
+    this.groupJoinRequestList = allRequests;
+    return allRequests;
+  } catch (error) {
+    console.error('获取加群请求列表失败:', error);
+    throw error;
+    }
+  },async setConversationFieldsToNull(conversationId: string) {
+      const conversation = this.conversations.find(c => c.conversation_id === conversationId);
+      if (conversation) {
+        conversation.is_at = undefined;
+        conversation.notreadednumber = 0;
+      }
+    }
+},
+  persist: true,
+});

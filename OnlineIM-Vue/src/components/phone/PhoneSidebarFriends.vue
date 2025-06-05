@@ -21,7 +21,6 @@ import { Search, ChevronDown, ChevronRight } from "lucide-vue-next";
 import { useListStore } from '@/stores/list.ts'
 import { useRouter } from 'vue-router'
 import type { Friend } from '@/type/Friends.ts'
-import { groupAndSortFriends } from '@/utils/friendGroupUtils'
 import AddGroupDialog from "@/components/AddGroupDialog.vue";
 import EditGroupDialog from "@/components/EditGroupDialog.vue";
 

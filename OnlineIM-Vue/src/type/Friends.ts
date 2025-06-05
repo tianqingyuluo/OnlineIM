@@ -1,11 +1,11 @@
 export type FriendInfo = {
-    user_id: `usr_${string}`;
+    user_id: string;
     username: string;
     nickname: string;
     avatar_url?: string;
     remark?: string;
     friend_group_id?: string;
-    online_status?: 'online' | 'offline';
+    online_status?: string;
 };
 
 export type Friend = {
@@ -27,11 +27,22 @@ export interface FriendRequest {
     avatar_url?: string;
   };
   message?: string;
-  status: 'pending' | 'accepted' | 'rejected';
+  status: string;
   created_at: string;
 }
 
 export interface FriendRequestsResponse {
   requests: FriendRequest[];
   total: number;
+}
+export type FriendInFriendGroup = {
+  friendship_id: string;
+  user_id: string; 
+  friend_group_id: string;
+  created_at: string;
+  username: string;
+  nickname: string;
+  avatar_url?: string;
+  remark?: string;
+  online_status?:string;
 }

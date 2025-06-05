@@ -13,7 +13,7 @@ import {useRoute} from 'vue-router'
 import UserPart from '@/views/userPart.vue'
 import GroupPart from '@/views/groupPart.vue'
 import {useWidthStore} from "@/stores/width";
-
+import { websocketService } from '@/services/websocket.service';
 const userStore = useUserStore()
 const listStore = useListStore()
 const route = useRoute()
@@ -63,8 +63,11 @@ const startResize = (e: MouseEvent) => {
 
 onMounted(async () => {
   try {
+
     await userStore.fetchUserData();
+
     await listStore.fetchUserData();
+    websocketService.connect();
   } catch (err) {
     console.error('获取用户信息失败:', err);
   }
@@ -118,7 +121,7 @@ onMounted(async () => {
       />
       <GroupPart
           v-if="showGroupProfile"
-          :key="`group-${route.params.id}`"
+          :key="`group-${route.params.groupId}`"
           class="w-full h-full"
       />
       <div v-if="!chatType && !showUserProfile && !showGroupProfile" class="text-gray-500">

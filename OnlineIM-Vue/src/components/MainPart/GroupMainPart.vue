@@ -8,17 +8,18 @@ import Tools from "@/components/MainPart/tools.vue";
 import UserTextArea from "@/components/MainPart/UserTextArea.vue";
 import { groupService } from '@/services/group.service'
 import type { GroupResponse } from '@/type/group'
-import { onActivated } from 'vue'
 import GroupInfoCard from '@/components/independent/group/GroupInfoCard.vue'
 import { onClickOutside } from '@vueuse/core'
-import {MessageService} from "@/services/message.service.ts";
 import { useUserStore } from '@/stores/user.ts';
 import { GroupSettingService } from "@/services/groupsetting.service";
-import GroupAvatarWithMenu from "@/components/MainPart/GroupAvatarWithMenu.vue";
-import type {MessageResponse} from "@/type/message.ts";
+import GroupAvatarWithMenu from "@/components/independent/group/GroupAvatarWithMenu.vue";
 import {useOtherStore} from "@/stores/otherStore.ts";
-
-
+import {conversationService} from "@/services/conversation.service.ts";
+import type {Conversation} from "@/type/Conversation.ts";
+import { useHistoryStore } from '@/stores/history.ts';
+import type {MessageResponse} from "@/type/message.ts";
+import {websocketService} from "@/services/websocket.service.ts";
+import { CircleEllipsis, AlertCircle } from 'lucide-vue-next';
 const menuRef = ref<HTMLElement | null>(null)//右上角群info
 const menuButtonRef = ref<HTMLElement | null>(null)
 
@@ -46,94 +47,68 @@ onMounted(() => {
 })
 
 const route = useRoute()
+const conversation =ref<Conversation | null>(null)
 const currentGroup = ref<GroupResponse | null>(null)
 const currentGroupSettings = ref<any>(null)
 const userStore = useUserStore()
 const currentUser = computed(() => userStore.loggedInUser)
-
 const groupId = computed(() => {
   const id = route.params.id
   return Array.isArray(id) ? id[0] : id
 })
-
+const mutedTime = ref(0);
+const historyStore = useHistoryStore();
 
 onMounted(async () => {
   try {
-    console.log("当前群组ID:", groupId.value) // 添加这行检查路由参数
-    const [groupInfo, groupSettings] = await Promise.all([
+    console.log("当前群组ID:", groupId.value);
+    const [groupInfo, groupSettings, Conversation] = await Promise.allSettled([
       groupService.getGroupInfo(groupId.value),
-      GroupSettingService.getGroupSetting(groupId.value)
-    ])
-    console.log("API返回数据:", groupInfo) // 检查API返回
-    currentGroup.value = groupInfo
-    currentGroupSettings.value = groupSettings
-    console.log("设置后的群组信息:", currentGroup.value) // 检查响应式数据
-    
-    // 确保加载群组信息后立即加载消息
-    await loadMessages()
-  } catch (error) {
-    console.error('获取群组信息失败:', error)
-  }
-})
-const groupMessages = ref<MessageResponse[]>([])
-const isLoading = ref(false)
-const hasMore = ref(true)
-const noMoreInfo = ref(false)
+      GroupSettingService.getGroupSetting(groupId.value),
+      conversationService.getConversationById(groupId.value)
+    ]);
+    currentGroup.value = groupInfo;
+    currentGroupSettings.value = groupSettings;
+    conversation.value = Conversation;
+    console.log("当前群组信息:", currentGroup.value);
+    console.log("当前群组设置:", currentGroupSettings.value);
+    console.log("当前会话信息:", conversation.value)   
+    // 确保组件渲染完成
+    await nextTick();
 
-async function loadMessages() {
-  if (isLoading.value || !hasMore.value) return
-  
-  isLoading.value = true
-  try {
-    const before_message_id = groupMessages.value.length > 0 
-      ? groupMessages.value[0].seq_id
-      : undefined
-
-    const response  = await MessageService.getMessageHistory(
-      groupId.value, 
-      before_message_id
-    )
-    const messages=response.messages
-    const has_more_before = response.has_more_before
-    const has_more_after = response.has_more_after
-    
-    console.log('获取到的消息历史:', messages)
-    
-    if (messages.length > 0) { 
-       const sortedMessages = messages.sort((a, b) => a.seq_id - b.seq_id);
-       if (!before_message_id) { 
-         groupMessages.value = sortedMessages 
-       } else { 
-         groupMessages.value = [...sortedMessages, ...groupMessages.value]
-       }
-      
-      hasMore.value = has_more_before
-      noMoreInfo.value = !has_more_before
+    // 绑定键盘事件
+    const textarea = document.getElementById('message-2');
+    if (textarea) {
+      textarea.addEventListener('keydown', handleKeyDown);
+      console.log('键盘事件绑定成功');
     }
+
+    // 加载消息
+    await historyStore.loadInitialHistory(userStore.loggedInUser.user_id, groupId.value, true);
   } catch (error) {
-    console.error('获取消息历史失败:', error)
-  } finally {
-    isLoading.value = false
+    console.error('初始化失败:', error);
   }
-}
+});
 
 function handleScroll(e: Event) {
   const target = e.target as HTMLElement
   const scrollThreshold = 100 // 设置滚动阈值
-  
+
   // 当滚动到接近顶部(阈值范围内)且还有更多消息可加载时
-  if (target.scrollTop <= scrollThreshold && hasMore.value && !isLoading.value) {
-    loadMessages()
+  if (target.scrollTop <= scrollThreshold && historyStore.hasMore && !historyStore.isLoading) {
+    console.log("试图拉取数据", groupId.value)
+    historyStore.loadMessages(groupId.value, true);
   }
 }
 
 onMounted(() => {
-  loadMessages()
+  historyStore.init()
+  historyStore.loadInitialHistory(userStore.loggedInUser.user_id, groupId.value, true);
   const chatContainer = document.querySelector('.overflow-y-auto')
   if (chatContainer) {
     chatContainer.addEventListener('scroll', handleScroll)
   }
-  
+
   // 添加键盘事件监听
   const textarea = document.getElementById('message-2')
   if (textarea) {
@@ -146,7 +121,7 @@ onBeforeUnmount(() => {
   if (chatContainer) {
     chatContainer.removeEventListener('scroll', handleScroll)
   }
-  
+
   // 移除键盘事件监听
   const textarea = document.getElementById('message-2')
   if (textarea) {
@@ -154,35 +129,7 @@ onBeforeUnmount(() => {
   }
 })
 
-// 解析中文日期格式
-function parseChineseDate(dateStr: string) {
-  if (!dateStr) return new Date();
 
-  // 处理 "2001年1月1，0.00" 这种格式
-  const match = dateStr.match(/(\d+)年(\d+)月(\d+)[，,](\d+)\.(\d+)/);
-  if (match) {
-    const [_, year, month, day, hour, minute] = match;
-    return new Date(
-        parseInt(year),
-        parseInt(month) - 1,
-        parseInt(day),
-        parseInt(hour),
-        parseInt(minute)
-    );
-  }
-
-  // 尝试解析ISO格式或其它格式
-  const date = new Date(dateStr);
-  return isNaN(date.getTime()) ? new Date() : date;
-}
-
-// 判断是否需要显示时间（5分钟间隔）
-function shouldShowTime(index: number, list: any[]) {
-  if (index === 0) return true;
-  const prevTime = parseChineseDate(list[index - 1].sendTime).getTime();
-  const currentTime = parseChineseDate(list[index].sendTime).getTime();
-  return currentTime - prevTime > 5 * 60 * 1000;
-}
 
 const messageInputRef = ref<HTMLTextAreaElement | null>(null)
 provide('messageInputRef', messageInputRef)
@@ -214,67 +161,108 @@ function handleEmojiSelect(emoji: string) {
 }
 
 function handleKeyDown(e: KeyboardEvent) {
-  const textareaEl = e.target as HTMLTextAreaElement
+  console.log('按键:', e.key); // 调试
+  const textareaEl = e.target as HTMLTextAreaElement;
   if (e.key === 'Enter' && !e.ctrlKey && !e.shiftKey) {
-    e.preventDefault()
-    handleSendClick()
+    e.preventDefault();
+    console.log('触发发送');
+    handleSendClick();
   } else if (e.key === 'Enter' && e.ctrlKey) {
-    // Ctrl+Enter换行
-    const cursorPos = textareaEl.selectionStart || 0
-    const currentValue = textareaEl.value || ''
-    textareaEl.value = 
-      currentValue.substring(0, cursorPos) + 
-      '\n' + 
-      currentValue.substring(cursorPos)
-    textareaEl.selectionStart = cursorPos + 1
-    textareaEl.selectionEnd = cursorPos + 1
+    // Ctrl+Enter 换行
+    const cursorPos = textareaEl.selectionStart || 0;
+    const currentValue = textareaEl.value || '';
+    textareaEl.value = currentValue.substring(0, cursorPos) + '\n' + currentValue.substring(cursorPos);
+    textareaEl.selectionStart = cursorPos + 1;
+    textareaEl.selectionEnd = cursorPos + 1;
+  }
+}
+const clearGroupMessages=async () =>  {
+  console.log('聊天记录clearGroupMessages触发')
+  try {
+    historyStore.groupMessages = [];
+  } catch (error) {
+    console.error('清空聊天记录失败:', error);
   }
 }
 
+provide('clearGroupMessages', clearGroupMessages);
+
 async function handleSendClick() {
-  const textareaEl = document.getElementById('message-2') as HTMLTextAreaElement
-  if (textareaEl && textareaEl.value.trim()) {
+  const textareaEl = document.getElementById('message-2') as HTMLTextAreaElement;
+  const messageContent = textareaEl?.value.trim();
+
+  if (messageContent) {
     try {
-      const response = await MessageService.putMessage(
-        groupId.value,
-        0, // 文本消息
-        textareaEl.value
-      )
-            // 添加到消息列表
-      groupMessages.value.push(response)
+      if (conversation.value){
+        const conversationId = groupId.value || '';
+        const receiverId = groupId.value;
+        const messageType = 'text';
+        historyStore.sendMessage(conversationId, receiverId, messageType, messageContent,true);
+      }
       
+      
+
       // 清空输入框
-      textareaEl.value = ''
-      
+      textareaEl.value = '';
+
       // 滚动到底部
       await nextTick(() => {
-        const chatContainer = document.querySelector('.overflow-y-auto')
-        if (chatContainer) {
-          chatContainer.scrollTop = chatContainer.scrollHeight
-        }
-      })
+        const chatContainer = document.querySelector('.overflow-y-auto');
+        chatContainer?.scrollTo(0, chatContainer.scrollHeight);
+      });
+
     } catch (error) {
-      console.error('发送消息失败:', error)
+      console.error('发送消息失败:', error);
     }
   }
 }
 
-onActivated(async () => {
-  console.log('组件被激活')
-  // 可以在这里添加数据刷新逻辑
-})
 const showMenu = ref(false)
 
 function toggleMenu() {
   showMenu.value = !showMenu.value
 }
+async function handleResendMessage(message: MessageResponse) {
+  try {
+    // 更新消息时间戳
+    const oldTimestamp = message.timestamp;
+    message.timestamp = new Date().toISOString();
+    console.log('重发消息 - 时间戳变化:', { old: oldTimestamp, new: message.timestamp });
+    
+    // 更新 historyStore 中的时间戳
+    await historyStore.updateMessageTimestamp(message.client_message_id);
+    
+    // 直接通过WebSocket重新发送消息
+    const websocketMessage : any = {
+      sender_id: currentUser.user_id,
+      conversation_id: message.conversation_id,
+      receiver_id: groupId.value,
+      message_type: 'text',
+      content: message.content,
+      client_message_id: message.client_message_id
+    };
+    if (message.mentioned_user_ids) {
+      websocketMessage.at_user=message.mentioned_user_ids;
+    }
+    
+    // 发送WebSocket消息
+    websocketService.sendMessage({ type: 'PRIVATE_MESSAGE_REQUEST', message: websocketMessage });
+    
+    // 触发视图更新
+    historyStore.groupMessages = [...historyStore.groupMessages];
+  } catch (error) {
+    console.error('重新发送消息失败:', error);
+  }
+}
+
 </script>
 
 <template>
+
   <div v-if="currentGroup" class="flex flex-col h-full">
     <!-- 顶栏 -->
     <div class="flex items-center justify-between w-full p-4 border-b relative">
-      <span class="text-lg font-semibold">{{ currentGroup.name }}</span>
+      <span class="text-lg font-semibold">{{ currentGroup.value.name }}</span>
       <button @click="toggleMenu" ref="menuButtonRef">
         <a href="#" class="flex items-center">
           <Ellipsis class="w-5 h-5" />
@@ -289,9 +277,11 @@ function toggleMenu() {
             class="absolute right-0 top-full w-80 bg-white shadow-lg z-50 h-[calc(100vh-60px)]"
         >
           <GroupInfoCard
-  :group="currentGroup" 
-  :group-settings="currentGroupSettings" 
-  :myRole="currentGroup.my_role" 
+          v-if="currentGroup"
+  :group="currentGroup.value"
+  :group-settings="currentGroupSettings.value"
+  :myRole="currentGroup.value.my_role"
+  :conversation="conversation.value"
   class="h-full overflow-y-auto"
   @click.stop
 />
@@ -301,15 +291,15 @@ function toggleMenu() {
 
     <!-- 主内容区 -->
     <div class="flex-1 overflow-y-auto p-4" @scroll="handleScroll">
-      <div v-if="noMoreInfo" class="flex justify-center py-2 text-sm text-gray-500">
+      <div v-if="historyStore.noMoreInfo" class="flex justify-center py-2 text-sm text-gray-500">
         没有更多信息
       </div>
-      <div v-if="groupMessages.length > 0" class="space-y-4">
-        <template v-for="(msg, index) in groupMessages" :key="msg.message_id">
+      <div v-if="historyStore.groupMessages.length > 0" class="space-y-4">
+        <template v-for="(msg, index) in historyStore.groupMessages" :key="msg.message_id">
           <!-- 时间显示 -->
-          <div v-if="shouldShowTime(index, groupMessages)" class="flex justify-center">
+          <div class="flex justify-center">
             <span class="text-[13px] text-gray-500 truncate">
-              {{ new Date(msg.timestamp).toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-') }}
+              {{ msg.timestamp }}
             </span>
           </div>
 
@@ -318,17 +308,32 @@ function toggleMenu() {
             <!-- 对方消息 -->
             <template v-if="msg.sender_info.user_id !== currentUser.user_id">
               <div class="flex items-start max-w-[80%]">
-                <GroupAvatarWithMenu :avatar-url="currentGroup.avatar_url || '/images/group.png'" :alt-text="msg.sender_info.user_id" />
-                <UserTextArea
-                  :message="msg.content"
-                  :isSelf="false"
-                />
+                <GroupAvatarWithMenu :avatar-url="msg.sender_info.avatar_url || '/images/group.png'" :alt-text="msg.sender_info.user_id"
+                :message="msg"/>
+                <div class="flex flex-col">
+                  <span class="text-xs text-gray-500 mb-1">{{ msg.sender_info.nickname }}</span>
+                  <UserTextArea
+                    :message="msg.content"
+                    :isSelf="false"
+                  />
+                </div>
               </div>
             </template>
 
             <!-- 自己的消息 -->
             <template v-else>
-              <div class="flex items-start">
+              <div class="flex items-start max-w-[80%]:">
+                <div class="relative">
+                  <CircleEllipsis
+                      v-if="historyStore.isMessagePending(msg.client_message_id) &&!historyStore.isMessageTimeout(msg.client_message_id)"
+                      class="w-5 h-5 mr-2 text-gray-400 loading-spinner"
+                  />
+                  <AlertCircle
+                      v-if="historyStore.isMessagePending(msg.client_message_id) && historyStore.isMessageTimeout(msg.client_message_id)"
+                      class="w-5 h-5 mr-2 text-red-500 cursor-pointer"
+                      @click="handleResendMessage(msg)"
+                  />
+                </div>
                 <UserTextArea
                   :message="msg.content"
                   :isSelf="true"
@@ -345,20 +350,25 @@ function toggleMenu() {
     </div>
     <Tools @select="handleEmojiSelect" />
     <!-- 输入区域 -->
-    <div class="relative h-1/4 border-t">
-      <Textarea
-          id="message-2"
-          ref="messageInputRef"
-          class="h-full w-full resize-none pr-20 rounded-none focus:ring-0 focus:shadow-none"
-          style="outline: none;box-shadow: none; font-size: 24px"
-      />
-      <Button
-        class="absolute bottom-4 right-4 transition-all duration-200 active:scale-95 hover:bg-primary/90 hover:scale-125"
-        @click="handleSendClick"
-      >
-        发送
-      </Button>
-    </div>
+    
+    <div class="relative h-1/4 border-t" :class="{'ismuted': mutedTime > 0}">
+    <Textarea
+        id="message-2"
+        ref="messageInputRef"
+        class="h-full w-full resize-none pr-20 rounded-none focus:ring-0 focus:shadow-none whitespace-pre-wrap"
+        style="outline: none; box-shadow: none; font-size: 24px; word-break: break-all"
+        :disabled="mutedTime > 0"
+        :placeholder="mutedTime > 0 ? `您已被禁言，剩余禁言时间为${mutedTime}` : '输入消息...'"
+    />
+    <Button
+      class="absolute bottom-4 right-4 transition-all duration-200 active:scale-95 hover:bg-primary/90 hover:scale-125"
+      :disabled="mutedTime > 0"
+      :style="mutedTime > 0 ? 'background-color: gray; cursor: not-allowed;' : ''"
+      @click="handleSendClick"
+    >
+      发送
+    </Button>
+  </div>
   </div>
   <div v-else class="flex items-center justify-center h-full">
     加载中...
@@ -375,5 +385,17 @@ function toggleMenu() {
 .slide-enter-from,
 .slide-leave-to {
   transform: translateX(100%);
+}
+
+/* 加载动画 - 3秒后停止 */
+.loading-spinner {
+  animation: spin 1s linear infinite;
+  animation-duration: 3s;
+  animation-iteration-count: 3;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 </style>

@@ -14,7 +14,8 @@
       "@/*": [
         "./src/*"
       ]
-    }
+    },
+    "types": ["node"]
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"]
 }

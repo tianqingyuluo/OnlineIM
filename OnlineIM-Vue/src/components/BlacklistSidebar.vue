@@ -1,33 +1,20 @@
 <!-- src/components/BlacklistSidebar.vue -->
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref} from "vue";
 import { ChevronDown, ChevronRight } from "lucide-vue-next";
-import { blacklistService } from "@/services/blacklist.service";
-import type { BlacklistUser } from "@/services/blacklist.service";
 import { useRouter } from 'vue-router';
+import {useListStore} from "@/stores/list.ts";
 
 const router = useRouter();
-const blacklist = ref<BlacklistUser[]>([]);
+const blacklist = useListStore().blacklist
 const isExpanded = ref(false);
 const activeItem = ref<string | null>(null);
 
-const loadBlacklist = async () => {
-  try {
-    const response = await blacklistService.getBlacklist();
-    blacklist.value = response.blacklist;
-  } catch (error) {
-    console.error('获取黑名单失败:', error);
-  }
-};
 
 const handleUserClick = (userId: string) => {
   activeItem.value = userId;
   router.push(`/friends/${userId}`);
 };
-
-onMounted(() => {
-  loadBlacklist();
-});
 </script>
 
 <template>

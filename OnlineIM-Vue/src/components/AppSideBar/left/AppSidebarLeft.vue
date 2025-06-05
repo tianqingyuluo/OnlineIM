@@ -15,6 +15,8 @@ import { useUserStore } from '@/stores/user.ts'
 import UserThings from "@/components/AppSideBar/left/userThings.vue";
 import UserFounding from "@/components/independent/founding/userFounding.vue";
 import router from "@/router";
+import { useNotificationStore } from '@/stores/notificationStore.ts'; // 引入 notificationStore
+import RedPoint from '@/components/common/redPoint.vue'; // 引入红点组件
 
 const userStore = useUserStore()
 const loggedUser = computed(() => {
@@ -22,6 +24,7 @@ const loggedUser = computed(() => {
   return userStore.loggedInUser;
 })
 
+const notificationStore = useNotificationStore(); // 使用 notificationStore
 
 const showUserThings = ref(false); // 新增控制userThings显示的状态
 const userThingsRef = ref<HTMLElement | null>(null); // 新增ref引用
@@ -116,12 +119,13 @@ const activeItem = ref('聊天')
             <SidebarMenuItem>
               <SidebarMenuButton 
                 as-child
-                class="data-[active=true]:bg-gray-100 data-[active=true]:text-black h-[40px] mb-4"
+                class="data-[active=true]:bg-gray-100 data-[active=true]:text-black h-[40px] mb-4 relative" 
                 @click="handleAddClick"
               >
                 <a href="#" style="display: flex; justify-content: center; align-items: center; width: 100%;">
                   <UserRoundPlus style="width: 30px; height: 30px"/>
                 </a>
+                <RedPoint v-if="notificationStore.hasnewall" /> 
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>

@@ -60,7 +60,10 @@ const handleMenuOpenChange = (open: boolean) => {
         <ContextMenuTrigger class="w-full">
           <div
               ref="messageRef"
-              :class="['bg-gray-50 rounded-lg p-3 shadow-sm w-full select-text', isMenuOpen ? 'bg-gray-200' : '']"
+              :class="[
+                'bg-gray-50 rounded-lg p-3 shadow-sm w-full select-text break-words whitespace-pre-wrap',
+                isMenuOpen ? 'bg-gray-200' : ''
+              ]"
           >
             {{ message }}
           </div>
@@ -78,7 +81,10 @@ const handleMenuOpenChange = (open: boolean) => {
         <ContextMenuTrigger class="w-full">
           <div
               ref="messageRef"
-              :class="['bg-blue-50 rounded-lg p-3 shadow-sm w-full select-text', isMenuOpen ? 'bg-gray-200' : '']"
+              :class="[
+                'bg-blue-50 rounded-lg p-3 shadow-sm w-full select-text break-all whitespace-pre-wrap',
+                isMenuOpen ? 'bg-gray-200' : ''
+              ]"
           >
             {{ message }}
           </div>

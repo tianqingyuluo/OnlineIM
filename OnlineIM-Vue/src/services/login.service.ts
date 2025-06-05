@@ -3,6 +3,8 @@ import api from './api.service';
 import { useUserStore } from '@/stores/user';
 import { toast } from 'vue-sonner';
 import router from "@/router";
+import { websocketService } from '@/services/websocket.service';
+import { UAParser } from 'ua-parser-js';
 
 export const LoginService = {
     validationRules: {
@@ -30,8 +32,16 @@ export const LoginService = {
         const userStore = useUserStore();
 
         try {
-            console.log('准备发送请求...');
-             const response = await api.post('/auth/login', credentials);
+            const parser = new UAParser;
+            const uaResult = parser.getResult();
+
+            const deviceId = `web-${uaResult.browser.name}-${uaResult.os.name}-${Date.now()}`;
+            const requestBody = {
+                ...credentials,
+                device_id: deviceId
+            };
+            const response = await api.post('/auth/login', requestBody);
+
             if (response.data.access_token) {
                 // 更新用户状态
 
@@ -43,8 +53,11 @@ export const LoginService = {
                 });
                 userStore.loggedInUser.user_id=response.data.user_info.user_id
                 userStore.token = response.data.access_token
-                await userStore.updateToken()
+
                 console.log("token:\n"+response.data.access_token);
+
+                // 连接 WebSocket
+                websocketService.connect();
 
                 // 显示欢迎消息
                 toast.success('登录成功', {

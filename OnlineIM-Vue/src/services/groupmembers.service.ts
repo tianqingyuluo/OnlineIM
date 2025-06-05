@@ -17,7 +17,7 @@ export const groupMembersService = {
   // 设置管理员
   async setAdmin(groupId: string, memberId: string): Promise<void> {
     try {
-      await api.put(`/groups/${groupId}/admins/${memberId}`);
+      await api.post(`/groups/${groupId}/members/${memberId}/set-admin`);
       toast.success('设置管理员成功');
     } catch (error) {
       console.error('设置管理员失败:', error);

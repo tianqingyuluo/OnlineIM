@@ -3,7 +3,6 @@ import axios from 'axios';
 import { API_BASE_URL } from '../../shared/config.ts';
 import { useUserStore } from '@/stores/user';
 import { toast } from 'vue-sonner';
-import router from '@/router';
 // 定义标准API响应格式
 export type ApiResponse<T = any> = {
   data?: T;
@@ -27,7 +26,6 @@ const api = axios.create({
 // 请求拦截器添加调试日志
 api.interceptors.request.use(
   (config) => {
-    console.log('请求配置:', config) // 添加调试日志
     const userStore=useUserStore();
     // 从 localStorage 获取 token
     const token = userStore.token
@@ -53,10 +51,8 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-
-    const userStore = useUserStore();
-    
-    // 如果请求被取消
+    useUserStore();
+// 如果请求被取消
     if (axios.isCancel(error)) {
       return Promise.reject({
         code: 'REQUEST_CANCELLED',
@@ -106,10 +102,10 @@ api.interceptors.response.use(
       //     description: '您没有执行此操作的权限'
       //   });
       //   break;
-
-      case 404:
-        toast.error( data.message ||"我们的服务出了点问题，网页错误代码：404");
-        break;
+      //
+      // case 404:
+      //   toast.error( data.message ||"我们的服务出了点问题，网页错误代码：404");
+      //   break;
 
       // case 429:
       //   toast.error('请求过于频繁', {
@@ -127,8 +123,8 @@ api.interceptors.response.use(
       //   if (status >= 500) {
       //     toast.error(`服务器错误 (${status})`);
       //   }
-      default:
-        toast.error(  data.message ||"我们的服务出了点问题");
+      // default:
+      //   toast.error(  data.message ||"我们的服务出了点问题");
     }
     return Promise.reject(normalizedError);
   }
