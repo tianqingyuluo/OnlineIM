@@ -1,7 +1,7 @@
 package icu.tianqingyuluo.onlineim.service;
 
 import icu.tianqingyuluo.onlineim.pojo.entity.RedisConnectionMeta;
-import icu.tianqingyuluo.onlineim.util.LocalChannelRegistry;
+import icu.tianqingyuluo.onlineim.websocket.registry.LocalSessionRegistry;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -13,6 +13,7 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class UserSessionService {
     private final RedisTemplate<String, Object> redisTemplate;
+    private final LocalSessionRegistry sessionRegistry;
     private final String SESSION_PREFIX = "user:sessions:";
     private final String NODE_PREFIX = "user:nodes:";
     private final String CHANNEL_TO_SESSION_PREFIX = "user:channel:to:session:";
@@ -20,8 +21,10 @@ public class UserSessionService {
     @Value("${node.ip}")
     private final String ip = "";
 
-    public UserSessionService(RedisTemplate<String, Object> redisTemplate) {
+    public UserSessionService(RedisTemplate<String, Object> redisTemplate,
+                              LocalSessionRegistry sessionRegistry) {
         this.redisTemplate = redisTemplate;
+        this.sessionRegistry = sessionRegistry;
     }
 
     // 存储设备会话
@@ -44,10 +47,11 @@ public class UserSessionService {
         return ip.equals(nodeIP);
     }
 
-    public void removeDeviceSession(String userID, String deviceID, String channelID) {
+    public void removeDeviceSession(String userID, String deviceID, String socketId) {
         String key = SESSION_PREFIX + userID + ":" + deviceID;
         redisTemplate.delete(key);
-        LocalChannelRegistry.remove(channelID, userID);
+        // 通过socketId和userID注销本地会话
+        sessionRegistry.unregisterBySocketId(socketId, userID);
     }
 
 //    // 删除特定设备会话

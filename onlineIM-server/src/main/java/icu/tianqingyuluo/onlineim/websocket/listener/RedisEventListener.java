@@ -1,7 +1,7 @@
 package icu.tianqingyuluo.onlineim.websocket.listener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import icu.tianqingyuluo.onlineim.util.LocalChannelRegistry;
+import icu.tianqingyuluo.onlineim.websocket.registry.LocalSessionRegistry;
 import icu.tianqingyuluo.onlineim.websocket.event.RedisStreamEvent;
 import icu.tianqingyuluo.onlineim.websocket.event.WebSocketMessageEvent;
 import lombok.extern.slf4j.Slf4j;
@@ -24,12 +24,15 @@ public class RedisEventListener implements StreamListener<String, ObjectRecord<S
 
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
+    private final LocalSessionRegistry sessionRegistry;
 
     @Autowired
     public RedisEventListener(ApplicationEventPublisher eventPublisher,
-                              ObjectMapper objectMapper) {
+                              ObjectMapper objectMapper,
+                              LocalSessionRegistry sessionRegistry) {
         this.eventPublisher = eventPublisher;
         this.objectMapper = objectMapper;
+        this.sessionRegistry = sessionRegistry;
     }
 
     @Override
@@ -83,6 +86,6 @@ public class RedisEventListener implements StreamListener<String, ObjectRecord<S
     }
 
     private boolean hasReceiverConnected(List<String> receiverIDs) {
-        return LocalChannelRegistry.hasUserOnConnection(receiverIDs);
+        return sessionRegistry.hasUserOnline(receiverIDs);
     }
 }

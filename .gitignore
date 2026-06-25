@@ -38,5 +38,12 @@ build/
 ### password ###
 db.properties
 
+### Qoder ###
+onlineIM-server/.qoder/
+
+### logs ###
+onlineIM-server/stderr.txt
+onlineIM-server/stdout.txt
+
 ### tests ###
 onlineIM-server/src/test

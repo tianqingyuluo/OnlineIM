@@ -8,10 +8,9 @@ import icu.tianqingyuluo.onlineim.pojo.dto.response.GroupMemberResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
 import icu.tianqingyuluo.onlineim.service.GroupMemberService;
 import icu.tianqingyuluo.onlineim.service.MessageService;
-import icu.tianqingyuluo.onlineim.util.LocalChannelRegistry;
+import icu.tianqingyuluo.onlineim.websocket.registry.LocalSessionRegistry;
+import icu.tianqingyuluo.onlineim.websocket.session.WebSocketSession;
 import icu.tianqingyuluo.onlineim.websocket.event.WebSocketMessageEvent;
-import io.netty.channel.Channel;
-import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -32,12 +31,15 @@ public class RecallMessageReceiver implements MessageReceiverHandler {
     private final ObjectMapper objectMapper;
     private final MessageService messageService;
     private final GroupMemberService groupMemberService;
+    private final LocalSessionRegistry sessionRegistry;
 
     @Autowired
-    public RecallMessageReceiver(ObjectMapper objectMapper, MessageService messageService, GroupMemberService groupMemberService) {
+    public RecallMessageReceiver(ObjectMapper objectMapper, MessageService messageService,
+                                 GroupMemberService groupMemberService, LocalSessionRegistry sessionRegistry) {
         this.objectMapper = objectMapper;
         this.messageService = messageService;
         this.groupMemberService = groupMemberService;
+        this.sessionRegistry = sessionRegistry;
     }
 
     @Override
@@ -81,14 +83,11 @@ public class RecallMessageReceiver implements MessageReceiverHandler {
             response.put("timestamp", System.currentTimeMillis());
             
             // 向发送者发送响应（确认消息已撤回）
-            String senderConnectionId = LocalChannelRegistry.getConnectionIDByUserID(event.getSenderID());
-            if (senderConnectionId != null) {
-                Channel senderChannel = LocalChannelRegistry.get(senderConnectionId);
-                if (senderChannel != null && senderChannel.isActive()) {
-                    String responseJson = objectMapper.writeValueAsString(response);
-                    senderChannel.writeAndFlush(new TextWebSocketFrame(responseJson));
-                    log.debug("已向发送者 {} 发送撤回确认", event.getSenderID());
-                }
+            WebSocketSession senderSession = sessionRegistry.getByUserId(event.getSenderID());
+            if (senderSession != null && senderSession.isActive()) {
+                String responseJson = objectMapper.writeValueAsString(response);
+                senderSession.sendMessage(responseJson);
+                log.debug("已向发送者 {} 发送撤回确认", event.getSenderID());
             }
             
             // 判断是私聊还是群聊
@@ -124,13 +123,10 @@ public class RecallMessageReceiver implements MessageReceiverHandler {
                     continue; // 跳过发送者自己
                 }
                 
-                String connectionId = LocalChannelRegistry.getConnectionIDByUserID(userId);
-                if (connectionId != null) {
-                    Channel channel = LocalChannelRegistry.get(connectionId);
-                    if (channel != null && channel.isActive()) {
-                        channel.writeAndFlush(new TextWebSocketFrame(notifyResponseJson));
-                        log.debug("已向用户 {} 发送消息撤回通知", userId);
-                    }
+                WebSocketSession session = sessionRegistry.getByUserId(userId);
+                if (session != null && session.isActive()) {
+                    session.sendMessage(notifyResponseJson);
+                    log.debug("已向用户 {} 发送消息撤回通知", userId);
                 }
             }
             

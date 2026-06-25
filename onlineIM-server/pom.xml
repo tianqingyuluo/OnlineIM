@@ -32,6 +32,7 @@
 		<aws.sdk.version>2.20.26</aws.sdk.version>
 		<aliyun.oss.version>3.16.1</aliyun.oss.version>
 		<tencent.cos.version>5.6.97</tencent.cos.version>
+		<vertx.version>4.5.11</vertx.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -74,9 +75,16 @@
 			<artifactId>mybatis-spring-boot-starter</artifactId>
 			<version>3.0.3</version>
 		</dependency>
+		<!-- Vert.x WebSocket 依赖 -->
 		<dependency>
-			<groupId>io.netty</groupId>
-			<artifactId>netty-all</artifactId>
+			<groupId>io.vertx</groupId>
+			<artifactId>vertx-core</artifactId>
+			<version>${vertx.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>io.vertx</groupId>
+			<artifactId>vertx-web</artifactId>
+			<version>${vertx.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.projectlombok</groupId>

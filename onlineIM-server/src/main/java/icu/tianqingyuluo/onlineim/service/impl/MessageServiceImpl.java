@@ -15,7 +15,6 @@ import icu.tianqingyuluo.onlineim.repository.RecallLogRepository;
 import icu.tianqingyuluo.onlineim.service.GroupMemberService;
 import icu.tianqingyuluo.onlineim.service.MessageService;
 import icu.tianqingyuluo.onlineim.service.UserService;
-import icu.tianqingyuluo.onlineim.util.LocalChannelRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;

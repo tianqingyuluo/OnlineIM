@@ -1,63 +1,19 @@
 package icu.tianqingyuluo.onlineim.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import icu.tianqingyuluo.onlineim.service.RedisStreamService;
-import icu.tianqingyuluo.onlineim.service.UserSessionService;
-import icu.tianqingyuluo.onlineim.service.impl.UserDetailsServiceImpl;
-import icu.tianqingyuluo.onlineim.util.JwtUtil;
-import icu.tianqingyuluo.onlineim.websocket.NettyWebSocketServer;
-import icu.tianqingyuluo.onlineim.websocket.WebSocketAuthHandler;
-import icu.tianqingyuluo.onlineim.websocket.WebSocketMessageDispatchHandler;
-import icu.tianqingyuluo.onlineim.websocket.listener.handler.MessageTypeSenderRegistry;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.redis.core.RedisTemplate;
 
 /**
  * WebSocket配置类
- * 用于配置WebSocket相关的Bean和设置
+ * Vert.x WebSocket相关组件通过@Component注解自动注册
+ * 
+ * 核心组件:
+ * - VertxWebSocketServer: WebSocket服务器（位于websocket/server包）
+ * - WebSocketAuthenticator: JWT认证器（位于websocket/handler包）
+ * - WebSocketMessageRouter: 消息路由器（位于websocket/handler包）
+ * - LocalSessionRegistry: 本地会话注册表（位于websocket/registry包）
  */
 @Configuration
 public class WebSocketConfig {
-
-    private final UserDetailsServiceImpl userDetailsService;
-    private final JwtUtil jwtUtil;
-    private final UserSessionService userSessionService;
-
-    public WebSocketConfig(UserDetailsServiceImpl userDetailsService,
-                           JwtUtil jwtUtil, UserSessionService userSessionService) {
-        this.userDetailsService = userDetailsService;
-        this.jwtUtil = jwtUtil;
-        this.userSessionService = userSessionService;
-    }
-
-    /**
-     * 注册WebSocket认证处理器
-     */
-    @Bean
-    public WebSocketAuthHandler webSocketAuthHandler() {
-        return new WebSocketAuthHandler(jwtUtil, userDetailsService, userSessionService);
-    }
-
-    /**
-     * 注册WebSocket消息处理器
-     */
-    @Bean
-    public WebSocketMessageDispatchHandler webSocketMessageHandler(JwtUtil jwtUtil,
-                                                                   ObjectMapper objectMapper,
-                                                                   RedisStreamService redisStreamService,
-                                                                   MessageTypeSenderRegistry messageTypeSenderRegistry) {
-        return new WebSocketMessageDispatchHandler(jwtUtil, objectMapper, redisStreamService, messageTypeSenderRegistry);
-    }
-
-    /**
-     * 注册WebSocket服务器
-     */
-    @Bean
-    public NettyWebSocketServer nettyWebSocketServer(WebSocketAuthHandler webSocketAuthHandler, 
-                                                    WebSocketMessageDispatchHandler webSocketMessageDispatchHandler,
-                                                     RedisTemplate<String, Object> redisTemplate) {
-        return new NettyWebSocketServer(webSocketAuthHandler, webSocketMessageDispatchHandler, redisTemplate);
-    }
+    // Vert.x WebSocket组件已通过@Component注解自动注册到Spring容器
+    // 无需额外配置
 }

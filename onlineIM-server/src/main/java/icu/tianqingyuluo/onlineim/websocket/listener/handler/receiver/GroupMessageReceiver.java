@@ -7,10 +7,9 @@ import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
 import icu.tianqingyuluo.onlineim.service.GroupMemberService;
 import icu.tianqingyuluo.onlineim.service.MessageService;
-import icu.tianqingyuluo.onlineim.util.LocalChannelRegistry;
+import icu.tianqingyuluo.onlineim.websocket.registry.LocalSessionRegistry;
+import icu.tianqingyuluo.onlineim.websocket.session.WebSocketSession;
 import icu.tianqingyuluo.onlineim.websocket.event.WebSocketMessageEvent;
-import io.netty.channel.Channel;
-import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -28,12 +27,15 @@ public class GroupMessageReceiver implements MessageReceiverHandler {
     private final ObjectMapper objectMapper;
     private final MessageService messageService;
     private final GroupMemberService groupMemberService;
+    private final LocalSessionRegistry sessionRegistry;
 
     @Autowired
-    public GroupMessageReceiver(ObjectMapper objectMapper, MessageService messageService, GroupMemberService groupMemberService) {
+    public GroupMessageReceiver(ObjectMapper objectMapper, MessageService messageService,
+                                GroupMemberService groupMemberService, LocalSessionRegistry sessionRegistry) {
         this.objectMapper = objectMapper;
         this.messageService = messageService;
         this.groupMemberService = groupMemberService;
+        this.sessionRegistry = sessionRegistry;
     }
 
     @Override
@@ -93,17 +95,14 @@ public class GroupMessageReceiver implements MessageReceiverHandler {
             response.put("message", messageResponse);
             
             // 向发送者发送响应（确认消息已送达）
-            String senderConnectionId = LocalChannelRegistry.getConnectionIDByUserID(event.getSenderID());
-            if (senderConnectionId != null) {
-                Channel senderChannel = LocalChannelRegistry.get(senderConnectionId);
-                if (senderChannel != null && senderChannel.isActive()) {
-                    String responseJson = objectMapper.writeValueAsString(response);
-                    senderChannel.writeAndFlush(new TextWebSocketFrame(responseJson));
-                    log.debug("已向发送者 {} 发送消息确认", event.getSenderID());
-                }
-                else log.info("发送者 {} 在本服务器没有连接存在", event.getSenderID());
+            WebSocketSession senderSession = sessionRegistry.getByUserId(event.getSenderID());
+            if (senderSession != null && senderSession.isActive()) {
+                String responseJson = objectMapper.writeValueAsString(response);
+                senderSession.sendMessage(responseJson);
+                log.debug("已向发送者 {} 发送消息确认", event.getSenderID());
+            } else {
+                log.info("发送者 {} 在本服务器没有连接存在", event.getSenderID());
             }
-            else log.info("发送者 {} 在本服务器没有连接存在", event.getSenderID());
             
 //            // 获取群组成员列表
 //            List<String> groupMembers = groupMemberService
@@ -119,16 +118,13 @@ public class GroupMessageReceiver implements MessageReceiverHandler {
                     continue; // 跳过发送者自己
                 }
                 
-                String memberConnectionId = LocalChannelRegistry.getConnectionIDByUserID(memberId);
-                if (memberConnectionId != null) {
-                    Channel memberChannel = LocalChannelRegistry.get(memberConnectionId);
-                    if (memberChannel != null && memberChannel.isActive()) {
-                        // 修改响应类型为新消息
-                        response.put("type", "GROUP_MESSAGE_RESPONSE");
-                        String responseJson = objectMapper.writeValueAsString(response);
-                        memberChannel.writeAndFlush(new TextWebSocketFrame(responseJson));
-                        log.debug("已向群组成员 {} 发送新消息", memberId);
-                    }
+                WebSocketSession memberSession = sessionRegistry.getByUserId(memberId);
+                if (memberSession != null && memberSession.isActive()) {
+                    // 修改响应类型为新消息
+                    response.put("type", "GROUP_MESSAGE_RESPONSE");
+                    String responseJson = objectMapper.writeValueAsString(response);
+                    memberSession.sendMessage(responseJson);
+                    log.debug("已向群组成员 {} 发送新消息", memberId);
                 }
             }
             
