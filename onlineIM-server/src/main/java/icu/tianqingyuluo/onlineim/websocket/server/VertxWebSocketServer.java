@@ -73,17 +73,6 @@ public class VertxWebSocketServer {
             // 创建路由器
             Router router = Router.router(vertx);
 
-            // 配置WebSocket路由
-            router.route(websocketPath).handler(ctx -> {
-                // 升级为WebSocket连接
-                ctx.request().toWebSocket()
-                        .onSuccess(ws -> handleWebSocketConnection(ws, ctx.request().uri()))
-                        .onFailure(err -> {
-                            log.error("WebSocket升级失败: {}", err.getMessage());
-                            ctx.response().setStatusCode(400).end("WebSocket升级失败");
-                        });
-            });
-
             // 健康检查端点
             router.get("/health").handler(ctx -> {
                 ctx.response()
@@ -98,18 +87,33 @@ public class VertxWebSocketServer {
                     .setTcpKeepAlive(true);
 
             // 创建并启动HTTP服务器
-            httpServer = vertx.createHttpServer(options)
+            // 使用CountDownLatch阻塞等待listen()完成，确保端口绑定失败时中断Spring启动，
+            // 避免部署呈现健康状态而实时消息服务实际不可用的情况
+            java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+            java.util.concurrent.atomic.AtomicReference<Throwable> failure = new java.util.concurrent.atomic.AtomicReference<>();
+
+            vertx.createHttpServer(options)
                     .requestHandler(router)
+                    .webSocketHandler(ws -> handleWebSocketConnection(ws, ws.uri()))
                     .listen()
                     .onSuccess(server -> {
+                        httpServer = server;
                         log.info("Vert.x WebSocket服务器启动成功，监听端口: {}", server.actualPort());
-                        // 向Redis注册服务
-                        registerServiceToRedis();
+                        latch.countDown();
                     })
                     .onFailure(err -> {
+                        failure.set(err);
                         log.error("Vert.x WebSocket服务器启动失败: {}", err.getMessage(), err);
-                    })
-                    .result();
+                        latch.countDown();
+                    });
+
+            latch.await();
+            if (failure.get() != null) {
+                throw new RuntimeException("WebSocket服务器启动失败", failure.get());
+            }
+
+            // 向Redis注册服务
+            registerServiceToRedis();
 
         } catch (Exception e) {
             log.error("WebSocket服务器启动异常: {}", e.getMessage(), e);
