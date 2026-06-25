@@ -4,10 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import icu.tianqingyuluo.onlineim.pojo.document.PrivateMessage;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageResponse;
 import icu.tianqingyuluo.onlineim.service.MessageService;
-import icu.tianqingyuluo.onlineim.util.LocalChannelRegistry;
+import icu.tianqingyuluo.onlineim.websocket.registry.LocalSessionRegistry;
+import icu.tianqingyuluo.onlineim.websocket.session.WebSocketSession;
 import icu.tianqingyuluo.onlineim.websocket.event.WebSocketMessageEvent;
-import io.netty.channel.Channel;
-import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -25,11 +24,14 @@ public class PrivateMessageReceiver implements MessageReceiverHandler {
 
     private final ObjectMapper objectMapper;
     private final MessageService messageService;
+    private final LocalSessionRegistry sessionRegistry;
 
     @Autowired
-    public PrivateMessageReceiver(ObjectMapper objectMapper, MessageService messageService) {
+    public PrivateMessageReceiver(ObjectMapper objectMapper, MessageService messageService,
+                                  LocalSessionRegistry sessionRegistry) {
         this.objectMapper = objectMapper;
         this.messageService = messageService;
+        this.sessionRegistry = sessionRegistry;
     }
 
     @Override
@@ -81,25 +83,19 @@ public class PrivateMessageReceiver implements MessageReceiverHandler {
             response.put("message", messageResponse);
             
             // 向发送者发送响应（确认消息已送达）
-            String senderConnectionId = LocalChannelRegistry.getConnectionIDByUserID(event.getSenderID());
-            if (senderConnectionId != null) {
-                Channel senderChannel = LocalChannelRegistry.get(senderConnectionId);
-                if (senderChannel != null && senderChannel.isActive()) {
-                    String responseJson = objectMapper.writeValueAsString(response);
-                    senderChannel.writeAndFlush(new TextWebSocketFrame(responseJson));
-                    log.debug("已向发送者 {} 发送消息确认", event.getSenderID());
-                }
+            WebSocketSession senderSession = sessionRegistry.getByUserId(event.getSenderID());
+            if (senderSession != null && senderSession.isActive()) {
+                String responseJson = objectMapper.writeValueAsString(response);
+                senderSession.sendMessage(responseJson);
+                log.debug("已向发送者 {} 发送消息确认", event.getSenderID());
             }
             
             // 向接收者发送消息
-            String receiverConnectionId = LocalChannelRegistry.getConnectionIDByUserID(privateMessage.getReceiverId());
-            if (receiverConnectionId != null) {
-                Channel receiverChannel = LocalChannelRegistry.get(receiverConnectionId);
-                if (receiverChannel != null && receiverChannel.isActive()) {
-                    String responseJson = objectMapper.writeValueAsString(response);
-                    receiverChannel.writeAndFlush(new TextWebSocketFrame(responseJson));
-                    log.debug("已向接收者 {} 发送新消息", privateMessage.getReceiverId());
-                }
+            WebSocketSession receiverSession = sessionRegistry.getByUserId(privateMessage.getReceiverId());
+            if (receiverSession != null && receiverSession.isActive()) {
+                String responseJson = objectMapper.writeValueAsString(response);
+                receiverSession.sendMessage(responseJson);
+                log.debug("已向接收者 {} 发送新消息", privateMessage.getReceiverId());
             }
             
             return true;

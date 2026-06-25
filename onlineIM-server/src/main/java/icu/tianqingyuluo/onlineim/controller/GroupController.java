@@ -129,9 +129,7 @@ public class GroupController {
         String username = jwtUtil.getUsernameFromToken(token);
         String userID = jwtUtil.getUserIDFromToken(token);
         try {
-//            groupService.disbandGroupByID(groupId,operatorId);
-            // 该方法应负责校验操作者是否为群主，然后解散群组（例如更新群组状态为已解散）。
-            // 成功则返回成功信息，失败则抛出异常或返回错误信息。
+
             boolean success = groupService.disbandGroupByID(groupId, userID);
             if (success) {
                 return ResponseEntity.ok(Map.of("message", "群组已成功解散"));

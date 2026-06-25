@@ -2,12 +2,10 @@ package icu.tianqingyuluo.onlineim.controller;
 
 import cn.hutool.core.util.IdUtil;
 import icu.tianqingyuluo.onlineim.mapper.FriendRequestMapper;
-import icu.tianqingyuluo.onlineim.pojo.dto.request.FriendRequestCreateRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.FriendRequestRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.FriendRequestResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.FriendResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
-import icu.tianqingyuluo.onlineim.pojo.entity.User;
 import icu.tianqingyuluo.onlineim.pojo.entity.UserFriend;
 import icu.tianqingyuluo.onlineim.service.FriendGroupService;
 import icu.tianqingyuluo.onlineim.service.FriendService;
