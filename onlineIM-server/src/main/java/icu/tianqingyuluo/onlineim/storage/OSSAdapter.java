@@ -5,7 +5,7 @@ import java.util.List;
 
 /**
  * 对象存储服务适配器接口
- * 提供统一的接口用于连接不同的对象存储服务（MinIO、S3、阿里云OSS、腾讯云COS等）
+ * 提供统一的接口用于连接不同的对象存储服务（RustFS、MinIO、S3、阿里云OSS、腾讯云COS等）
  */
 public interface OSSAdapter {
     

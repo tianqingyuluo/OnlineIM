@@ -19,7 +19,7 @@ import org.springframework.context.annotation.Configuration;
 public class OSSConfig {
 
     /**
-     * OSS类型：minio, s3, aliyun, tencent
+     * OSS类型：rustfs, minio, s3, aliyun, tencent
      */
     private String type;
 
@@ -66,8 +66,8 @@ public class OSSConfig {
         try {
             ossType = OSSAdapterFactory.OSSType.valueOf(type.toUpperCase());
         } catch (IllegalArgumentException e) {
-            log.error("不支持的OSS类型: {}, 将使用MinIO作为默认类型", type);
-            ossType = OSSAdapterFactory.OSSType.MINIO;
+            log.error("不支持的 OSS 类型: {}, 将使用 RustFS 作为默认类型", type);
+            ossType = OSSAdapterFactory.OSSType.RUSTFS;
         }
 
         return OSSAdapterFactory.createAdapter(ossType, endpoint, region, accessKey, secretKey, cdnDomain);

@@ -2,6 +2,7 @@ package icu.tianqingyuluo.onlineim.storage;
 
 import icu.tianqingyuluo.onlineim.storage.impl.AliyunOSSAdapter;
 import icu.tianqingyuluo.onlineim.storage.impl.MinIOAdapter;
+import icu.tianqingyuluo.onlineim.storage.impl.RustFSAdapter;
 import icu.tianqingyuluo.onlineim.storage.impl.S3Adapter;
 import icu.tianqingyuluo.onlineim.storage.impl.TencentCOSAdapter;
 import lombok.extern.slf4j.Slf4j;
@@ -17,10 +18,24 @@ public class OSSAdapterFactory {
      * OSS服务类型枚举
      */
     public enum OSSType {
+        RUSTFS,
         MINIO,
         S3,
         ALIYUN,
         TENCENT
+    }
+
+    /**
+     * 创建 RustFS 适配器
+     *
+     * @param endpoint RustFS 服务端点 URL，如：http://rustfs.example.com:9000
+     * @param accessKey 访问密钥
+     * @param secretKey 秘密密钥
+     * @return RustFS 适配器实例
+     */
+    public static OSSAdapter createRustFSAdapter(String endpoint, String accessKey, String secretKey) {
+        log.info("创建 RustFS 适配器: {}", endpoint);
+        return new RustFSAdapter(endpoint, accessKey, secretKey);
     }
     
     /**
@@ -115,6 +130,8 @@ public class OSSAdapterFactory {
      */
     public static OSSAdapter createAdapter(OSSType type, String endpoint, String region, String accessKey, String secretKey, String cdnDomain) {
         switch (type) {
+            case RUSTFS:
+                return createRustFSAdapter(endpoint, accessKey, secretKey);
             case MINIO:
                 return createMinIOAdapter(endpoint, accessKey, secretKey);
             case S3:

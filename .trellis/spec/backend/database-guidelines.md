@@ -116,6 +116,7 @@ public class PrivateMessage {
 - Complex conditions: `@Query` with JSON-style query string.
 - Aggregations: `@Aggregation(pipeline = { ... })`.
 - Pagination via `Pageable`/`Page`, sorting via `Sort`.
+- Local development must declare `spring.data.mongodb.uri` explicitly when Mongo repositories are used. Relying on Spring Boot defaults makes a missing MongoDB instance surface only on the first repository call, typically as a 30-second server-selection timeout that frontend callers misread as a CORS/network failure.
 
 Reference: `repository/ConversationRepository.java`
 ```java

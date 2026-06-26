@@ -23,6 +23,7 @@ public class MinIOAdapter implements OSSAdapter {
 
     private final MinioClient minioClient;
     private final String endpoint;
+    private final String providerName;
 
     /**
      * 构造函数
@@ -32,6 +33,11 @@ public class MinIOAdapter implements OSSAdapter {
      * @param secretKey 秘密密钥
      */
     public MinIOAdapter(String endpoint, String accessKey, String secretKey) {
+        this("MinIO", endpoint, accessKey, secretKey);
+    }
+
+    protected MinIOAdapter(String providerName, String endpoint, String accessKey, String secretKey) {
+        this.providerName = providerName;
         this.endpoint = endpoint;
         this.minioClient = MinioClient.builder()
                 .endpoint(endpoint)
@@ -59,7 +65,7 @@ public class MinIOAdapter implements OSSAdapter {
             // 返回文件访问URL
             return getFileUrl(bucketName, objectName);
         } catch (Exception e) {
-            log.error("MinIO上传文件失败: {}", e.getMessage(), e);
+            log.error("{} 上传文件失败: {}", providerName, e.getMessage(), e);
             throw e;
         }
     }
@@ -74,7 +80,7 @@ public class MinIOAdapter implements OSSAdapter {
             
             return minioClient.getObject(getObjectArgs);
         } catch (Exception e) {
-            log.error("MinIO下载文件失败: {}", e.getMessage(), e);
+            log.error("{} 下载文件失败: {}", providerName, e.getMessage(), e);
             throw e;
         }
     }
@@ -89,7 +95,7 @@ public class MinIOAdapter implements OSSAdapter {
             
             minioClient.removeObject(removeObjectArgs);
         } catch (Exception e) {
-            log.error("MinIO删除文件失败: {}", e.getMessage(), e);
+            log.error("{} 删除文件失败: {}", providerName, e.getMessage(), e);
             throw e;
         }
     }
@@ -111,10 +117,10 @@ public class MinIOAdapter implements OSSAdapter {
             Iterable<Result<DeleteError>> results = minioClient.removeObjects(removeObjectsArgs);
             for (Result<DeleteError> result : results) {
                 DeleteError error = result.get();
-                log.error("MinIO批量删除文件失败: 对象 {} 删除失败，错误: {}", error.objectName(), error.message());
+                log.error("{} 批量删除文件失败: 对象 {} 删除失败，错误: {}", providerName, error.objectName(), error.message());
             }
         } catch (Exception e) {
-            log.error("MinIO批量删除文件失败: {}", e.getMessage(), e);
+            log.error("{} 批量删除文件失败: {}", providerName, e.getMessage(), e);
             throw e;
         }
     }
@@ -131,7 +137,7 @@ public class MinIOAdapter implements OSSAdapter {
             
             return minioClient.getPresignedObjectUrl(args);
         } catch (Exception e) {
-            log.error("MinIO获取预签名URL失败: {}", e.getMessage(), e);
+            log.error("{} 获取预签名 URL 失败: {}", providerName, e.getMessage(), e);
             throw e;
         }
     }
@@ -152,7 +158,7 @@ public class MinIOAdapter implements OSSAdapter {
             }
             throw e;
         } catch (Exception e) {
-            log.error("MinIO检查文件是否存在失败: {}", e.getMessage(), e);
+            log.error("{} 检查文件是否存在失败: {}", providerName, e.getMessage(), e);
             throw e;
         }
     }
@@ -163,10 +169,10 @@ public class MinIOAdapter implements OSSAdapter {
             boolean bucketExists = minioClient.bucketExists(BucketExistsArgs.builder().bucket(bucketName).build());
             if (!bucketExists) {
                 minioClient.makeBucket(MakeBucketArgs.builder().bucket(bucketName).build());
-                log.info("创建MinIO存储桶成功: {}", bucketName);
+                log.info("创建 {} 存储桶成功: {}", providerName, bucketName);
             }
         } catch (Exception e) {
-            log.error("MinIO创建存储桶失败: {}", e.getMessage(), e);
+            log.error("{} 创建存储桶失败: {}", providerName, e.getMessage(), e);
             throw e;
         }
     }
