@@ -41,6 +41,14 @@ public class WebSocketSession {
     private final ServerWebSocket socket;
 
     /**
+     * 最后活跃时间（epoch millis）
+     * 任意入站帧（含心跳）均刷新此值，用于服务端超时检测
+     */
+    @Getter(lombok.AccessLevel.NONE)
+    @Builder.Default
+    private volatile long lastActiveAt = System.currentTimeMillis();
+
+    /**
      * 发送文本消息到客户端
      * @param message 要发送的消息内容
      * @return 是否发送成功
@@ -88,5 +96,30 @@ public class WebSocketSession {
      */
     public String getSocketId() {
         return socket != null ? socket.textHandlerID() : null;
+    }
+
+    /**
+     * 获取最后活跃时间
+     * @return epoch millis
+     */
+    public long getLastActiveAt() {
+        return lastActiveAt;
+    }
+
+    /**
+     * 刷新最后活跃时间为当前时间
+     */
+    public void refreshLastActiveAt() {
+        // volatile long 写入是原子的（Java 5+）
+        this.lastActiveAt = System.currentTimeMillis();
+    }
+
+    /**
+     * 判断会话是否因心跳超时而失活
+     * @param timeoutMs 超时阈值（毫秒）
+     * @return true 表示已超时
+     */
+    public boolean isHeartbeatTimeout(long timeoutMs) {
+        return (System.currentTimeMillis() - lastActiveAt) > timeoutMs;
     }
 }

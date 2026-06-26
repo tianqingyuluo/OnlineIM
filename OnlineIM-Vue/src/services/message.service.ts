@@ -67,5 +67,13 @@ export const MessageService = {
         console.log(userId, before_message_id,conversation_id);
         const messages = await dbService.getHistory(userId, conversation_id,last_message_id, before_message_id);
         return { messages, has_more_before: messages.length === 50 };
+    },
+
+    async syncMessages(conversation_id: string, seq_id: string): Promise<MessageResponse[]> {
+        const response = await api.get(
+            `/messages/sync/${conversation_id}`,
+            { params: { seq_id } }
+        );
+        return response.data.messages || [];
     }
 };

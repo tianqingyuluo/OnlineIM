@@ -20,11 +20,14 @@ public class WebSocketMessageRouter {
 
     private final ObjectMapper objectMapper;
     private final MessageTypeSenderRegistry messageTypeSenderRegistry;
+    private final HeartbeatHandler heartbeatHandler;
 
     public WebSocketMessageRouter(ObjectMapper objectMapper,
-                                  MessageTypeSenderRegistry messageTypeSenderRegistry) {
+                                  MessageTypeSenderRegistry messageTypeSenderRegistry,
+                                  HeartbeatHandler heartbeatHandler) {
         this.objectMapper = objectMapper;
         this.messageTypeSenderRegistry = messageTypeSenderRegistry;
+        this.heartbeatHandler = heartbeatHandler;
     }
 
     /**
@@ -38,6 +41,9 @@ public class WebSocketMessageRouter {
             return;
         }
 
+        // 任意入站帧均刷新会话活跃时间（保活）
+        session.refreshLastActiveAt();
+
         String userId = session.getUserId();
         String connectionId = session.getConnectionId();
 
@@ -50,6 +56,12 @@ public class WebSocketMessageRouter {
             String message = jsonNode.has("message") ? jsonNode.get("message").toString() : "";
 
             log.info("解析消息: userId={}, type={}, content={}", userId, type, message);
+
+            // 控制帧短路：HEARTBEAT 不走业务 registry
+            if (HeartbeatHandler.TYPE_HEARTBEAT.equals(type)) {
+                heartbeatHandler.handle(session);
+                return;
+            }
 
             // 根据消息类型分发到对应的处理器
             if (messageTypeSenderRegistry.supportMessageType(type)) {

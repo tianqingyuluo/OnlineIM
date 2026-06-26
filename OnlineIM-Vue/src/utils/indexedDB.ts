@@ -2,11 +2,12 @@ import {type IDBPDatabase, openDB} from 'idb';
 import {useUserStore} from '@/stores/user';
 
 const DB_NAME = 'im_db';
-const DB_VERSION = 1; // 保持版本号不变
+const DB_VERSION = 2;
 const DB_PERSISTENCE_KEY = 'im_db_persistence';
 const IMAGE_STORE = 'images';
 const HISTORY_STORE = 'history';
 const PENDING_MESSAGES_STORE = 'pending_messages';
+const OUTBOUND_QUEUE_STORE = 'outbound_queue';
 
 export const STORES = {
   CONVERSATIONS: 'conversations',
@@ -15,7 +16,8 @@ export const STORES = {
   USER_GROUPS: 'user_groups',
   BLACKLIST: 'blacklist',
   HISTORY: HISTORY_STORE,
-  PENDING_MESSAGES: PENDING_MESSAGES_STORE
+  PENDING_MESSAGES: PENDING_MESSAGES_STORE,
+  OUTBOUND_QUEUE: OUTBOUND_QUEUE_STORE
 };
 
 export const initDB = async (): Promise<IDBPDatabase> => {
@@ -67,6 +69,16 @@ export const initDB = async (): Promise<IDBPDatabase> => {
         store.createIndex('user_conversation', ['user_id', 'conversation_id']);
         store.createIndex('min_seq', 'min_seq_id');
         store.createIndex('max_seq', 'max_seq_id');
+      }
+      // v2: 出站待发消息队列
+      if (!db.objectStoreNames.contains(OUTBOUND_QUEUE_STORE)) {
+        const store = db.createObjectStore(OUTBOUND_QUEUE_STORE, {
+          keyPath: 'id',
+          autoIncrement: true
+        });
+        store.createIndex('user_conversation', ['user_id', 'conversation_id']);
+        store.createIndex('client_local_id', 'client_local_id');
+        store.createIndex('status', 'status');
       }
     }
   });
@@ -300,5 +312,72 @@ export const dbService = {
     return records
         .sort((a, b) => b.seq_id.localeCompare(a.seq_id))[0]
         .seq_id;
+  },
+
+  // ===== 出站待发消息队列 =====
+
+  async getOutboundQueue(userId: string, conversationId: string) {
+    const db = await initDB();
+    return db.getAllFromIndex(
+      OUTBOUND_QUEUE_STORE,
+      'user_conversation',
+      [userId, conversationId]
+    );
+  },
+
+  async getAllOutboundQueue(userId: string) {
+    const db = await initDB();
+    const allItems = await db.getAll(OUTBOUND_QUEUE_STORE);
+    return allItems.filter((item: any) => item.user_id === userId);
+  },
+
+  async addOutboundMessage(item: {
+    user_id: string;
+    conversation_id: string;
+    type: string;
+    payload: any;
+    client_local_id: string;
+    status: string;
+    created_at: number;
+  }) {
+    const db = await initDB();
+    await db.put(OUTBOUND_QUEUE_STORE, item);
+  },
+
+  async markOutboundSent(userId: string, clientLocalId: string) {
+    const db = await initDB();
+    const tx = db.transaction(OUTBOUND_QUEUE_STORE, 'readwrite');
+    const index = tx.store.index('client_local_id');
+    const record = await index.get(clientLocalId);
+    if (record && record.user_id === userId) {
+      record.status = 'sent';
+      await tx.store.put(record);
+    }
+    await tx.done;
+  },
+
+  async clearOutboundQueue(userId: string, conversationId?: string) {
+    const db = await initDB();
+    if (conversationId) {
+      const items = await db.getAllFromIndex(
+        OUTBOUND_QUEUE_STORE,
+        'user_conversation',
+        [userId, conversationId]
+      );
+      const tx = db.transaction(OUTBOUND_QUEUE_STORE, 'readwrite');
+      for (const item of items) {
+        await tx.store.delete(item.id);
+      }
+      await tx.done;
+    } else {
+      const allItems = await db.getAll(OUTBOUND_QUEUE_STORE);
+      const tx = db.transaction(OUTBOUND_QUEUE_STORE, 'readwrite');
+      for (const item of allItems) {
+        if (item.user_id === userId) {
+          await tx.store.delete(item.id);
+        }
+      }
+      await tx.done;
+    }
   }
 };

@@ -38,6 +38,8 @@ export const useHistoryStore = defineStore('history', {
     inMyHistory: false,
     hasInit: false,
     pendingMessagesInfo: [] as PendingMessageInfoItem[],
+    activeConversationId: null as string | null,
+    activeConversationIsGroup: false,
 
   }),
 
@@ -63,6 +65,8 @@ export const useHistoryStore = defineStore('history', {
 
     async loadInitialHistory(userId: string, conversationId: string, isGroup: boolean = false) {
       console.log("开始初始化历史记录");
+      this.activeConversationId = conversationId;
+      this.activeConversationIsGroup = isGroup;
       const ranges = await dbService.getPendingRanges(userId, conversationId);
       console.log("initial history", ranges);
       const pendingRanges = ranges.map(r => ({
@@ -535,6 +539,27 @@ export const useHistoryStore = defineStore('history', {
         websocketService.sendMessage({type: 'GROUP_MESSAGE_REQUEST', message: websocketMessage})
       }
 
+    },
+
+    async syncActiveConversation() {
+      if (!this.activeConversationId) return;
+      try {
+        const userStore = useUserStore();
+        const userId = userStore.loggedInUser.user_id;
+        const maxSeq = await dbService.getLastHistorySeq(userId, this.activeConversationId);
+        if (!maxSeq) return;
+        const missed = await MessageService.syncMessages(this.activeConversationId, maxSeq);
+        if (missed.length > 0) {
+          await dbService.putHistory(missed);
+          if (this.activeConversationIsGroup) {
+            this.groupMessages = [...missed.reverse(), ...this.groupMessages];
+          } else {
+            this.chatMessages = [...missed.reverse(), ...this.chatMessages];
+          }
+        }
+      } catch (error) {
+        console.error('重连补齐失败:', error);
+      }
     }
   },
 

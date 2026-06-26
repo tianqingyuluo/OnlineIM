@@ -96,6 +96,27 @@ public class UserSessionService {
         return hashOps.size(key);
     }
 
+    /**
+     * 刷新设备会话的活跃时间
+     * 心跳到达时调用，更新 Redis 中 user:sessions:{userId}:{deviceId} 的 activeTime
+     * @param userId 用户ID
+     * @param deviceId 设备ID
+     */
+    public void refreshActiveTime(String userId, String deviceId) {
+        String key = SESSION_PREFIX + userId + ":" + deviceId;
+        Object obj = redisTemplate.opsForValue().get(key);
+        if (obj instanceof RedisConnectionMeta meta) {
+            meta.setActiveTime(System.currentTimeMillis());
+            redisTemplate.opsForValue().set(key, meta);
+        } else if (obj instanceof java.util.LinkedHashMap<?, ?> map) {
+            // GenericJackson2JsonRedisSerializer 可能反序列化为 LinkedHashMap
+            @SuppressWarnings("unchecked")
+            java.util.LinkedHashMap<String, Object> typedMap = (java.util.LinkedHashMap<String, Object>) map;
+            typedMap.put("activeTime", System.currentTimeMillis());
+            redisTemplate.opsForValue().set(key, typedMap);
+        }
+    }
+
 //    public String getUserIdByChannelId(String channelId) {
 //        String key = CHANNEL_TO_SESSION_PREFIX + channelId;
 //        Set<Object> info = redisTemplate.opsForSet().members(key);

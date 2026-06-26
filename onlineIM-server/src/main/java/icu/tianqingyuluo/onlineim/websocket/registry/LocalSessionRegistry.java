@@ -1,9 +1,13 @@
 package icu.tianqingyuluo.onlineim.websocket.registry;
 
 import icu.tianqingyuluo.onlineim.websocket.session.WebSocketSession;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -34,6 +38,35 @@ public class LocalSessionRegistry {
      * 用于通过用户ID快速查找连接
      */
     private final ConcurrentMap<String, String> userIdToConnectionId = new ConcurrentHashMap<>();
+
+    private final TaskScheduler taskScheduler;
+
+    @Value("${websocket.heartbeat.interval:30s}")
+    private Duration heartbeatInterval;
+
+    @Value("${websocket.heartbeat.timeout:90s}")
+    private Duration heartbeatTimeout;
+
+    public LocalSessionRegistry(TaskScheduler taskScheduler) {
+        this.taskScheduler = taskScheduler;
+    }
+
+    @PostConstruct
+    public void initScheduler() {
+        taskScheduler.scheduleAtFixedRate(this::scheduledCleanup, heartbeatInterval);
+        log.info("心跳超时清理调度器已启动: 间隔={}, 超时阈值={}", heartbeatInterval, heartbeatTimeout);
+    }
+
+    /**
+     * 定时清理超时和失效会话
+     */
+    private void scheduledCleanup() {
+        try {
+            cleanupInactiveSessions(heartbeatTimeout.toMillis());
+        } catch (Exception e) {
+            log.error("定时清理会话异常: {}", e.getMessage(), e);
+        }
+    }
 
     /**
      * 注册WebSocket会话
@@ -168,11 +201,30 @@ public class LocalSessionRegistry {
 
     /**
      * 清理所有失效的会话
+     * 判据：socket 已关闭（isActive==false）或 心跳超时（lastActiveAt 超过阈值）
      */
     public void cleanupInactiveSessions() {
+        cleanupInactiveSessions(heartbeatTimeout.toMillis());
+    }
+
+    /**
+     * 清理所有失效的会话
+     * @param timeoutMs 心跳超时阈值（毫秒）
+     */
+    public void cleanupInactiveSessions(long timeoutMs) {
         sessionMap.entrySet().removeIf(entry -> {
             WebSocketSession session = entry.getValue();
-            if (!session.isActive()) {
+            boolean inactive = !session.isActive();
+            boolean heartbeatTimeout = session.isHeartbeatTimeout(timeoutMs);
+
+            if (inactive || heartbeatTimeout) {
+                if (heartbeatTimeout && !inactive) {
+                    // 心跳超时但 socket 未关闭，主动 close
+                    session.close();
+                    log.info("心跳超时断连: connectionId={}, userId={}, lastActiveAt={}",
+                            entry.getKey(), session.getUserId(), session.getLastActiveAt());
+                }
+
                 String socketId = session.getSocketId();
                 String userId = session.getUserId();
                 

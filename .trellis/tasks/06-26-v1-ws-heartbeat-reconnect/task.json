@@ -3,7 +3,7 @@
   "name": "v1-ws-heartbeat-reconnect",
   "title": "WebSocket心跳与断线重连",
   "description": "",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
