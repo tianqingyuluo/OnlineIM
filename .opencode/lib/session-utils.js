@@ -280,6 +280,18 @@ function readDeveloper(directory) {
   return "(not initialized)"
 }
 
+function readChangeLogsSpec(directory) {
+  try {
+    const specPath = join(directory, "docs", "change_logs", "README.md")
+    if (!existsSync(specPath)) return null
+    const content = readFileSync(specPath, "utf-8").trim()
+    if (!content) return null
+    return content
+  } catch {
+    return null
+  }
+}
+
 function runGit(directory, args) {
   try {
     return execFileSync("git", args, {
@@ -439,6 +451,13 @@ Trellis compact SessionStart context. Use it to orient the session; load details
     "`python ./.trellis/scripts/get_context.py --mode packages`"
   )
   parts.push("</guidelines>")
+
+  const changeLogsSpec = readChangeLogsSpec(directory)
+  if (changeLogsSpec) {
+    parts.push(`<change-logs-spec>
+${changeLogsSpec}
+</change-logs-spec>`)
+  }
 
   const taskStatus = getTaskStatus(ctx, platformInput)
   parts.push(`<task-status>\n${taskStatus}\n</task-status>`)
