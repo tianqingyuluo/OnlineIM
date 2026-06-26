@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Tauri 在 OnlineIM-Vue 内集成 src-tauri/，需遵循 Vue 工程目录结构与路径别名约定"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Tauri 复用 Vue 的 API service 与 WebSocket service 单例模式，notifyService 桥接需遵循 service 规范"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Tauri 复用 Pinia + idb 双层缓存与 localStorage token 持久化，托盘红点需从 list store 读未读数"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "snake_case API 字段约定，Tauri 内协议层与 Web 端一致"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Vue 工程构建命令、import 规范、禁止模式，Tauri 集成不得破坏 Web 端构建"}
+{"file": ".trellis/spec/backend/index.md", "reason": "三端复用 HTTP+WS 协议概览（端口/路径/消息格式），Tauri 协议层对齐"}

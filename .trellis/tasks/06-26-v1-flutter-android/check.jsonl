@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "check 时核对 Flutter 端 HTTP+WS 协议与后端/Web 端一致"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "check 时核对协议→缓存→状态→UI 跨层数据流正确性"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "check 时核对协议层未与 Vue 端产生字段口径分歧"}

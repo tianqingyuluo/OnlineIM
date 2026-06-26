@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Flutter 复用后端 HTTP+WS 协议（端口/路径/消息格式/ID 格式），协议层需对齐"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Flutter 协议层→model→drift缓存→Riverpod状态→UI 跨层数据流设计参考"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Flutter 协议层与 Vue 端 service 在协议解析上避免重复设计，统一字段口径"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "snake_case API 字段约定，Flutter models 需与 Vue/后端字段一致"}

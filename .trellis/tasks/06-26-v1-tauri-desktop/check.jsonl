@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "check 时核对 Vue 工程构建/lint 命令未被 Tauri 集成破坏"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "check 时核对 snake_case 字段、类型定义一致性"}
+{"file": ".trellis/spec/backend/index.md", "reason": "check 时核对 Tauri 端 HTTP+WS 协议与后端/Web 端一致"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "check 时核对通知/托盘/单实例原生能力与 Vue 状态层跨层数据流"}
