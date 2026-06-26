@@ -1,7 +1,13 @@
 import api from './api.service';
 import type { FormContext } from 'vee-validate';
 import { useListStore } from '@/stores/list';
-import {type FriendRequest,  type FriendsResponse} from "@/type/Friends.ts";
+import type { FriendRequest, FriendRequestsResponse, FriendsResponse } from "@/type/Friends.ts";
+
+export type FriendRequestAction = 'accept' | 'reject' | 'refuse';
+
+export interface HandleFriendRequestResponse {
+  friend_id?: string;
+}
 
 
 export const friendsService = {
@@ -62,9 +68,15 @@ export const friendsService = {
     offset?: number;
   }): Promise<FriendRequest[]> {
     try {
-      const response = await api.get<FriendRequest[]>('/friends/requests/received', { params });
-      return response.data;
-    } catch (error) {
+      const response = await api.get<FriendRequestsResponse | FriendRequest[]>('/friends/requests/received', { params });
+      if (Array.isArray(response.data)) {
+        return response.data;
+      }
+      return response.data.requests ?? [];
+    } catch (error: any) {
+      if (error?.status === 404 || error?.code === '404' || error?.code === 'HTTP_404') {
+        return [];
+      }
       console.error('获取好友请求列表失败:', error);
       throw error;
     }
@@ -80,14 +92,23 @@ export const friendsService = {
       throw error;
     }
   },
-  async handelFriendRequest(requestId: string,request:string):Promise<string> {
+  async handleFriendRequest(
+    requestId: string,
+    request: FriendRequestAction
+  ): Promise<HandleFriendRequestResponse> {
     try {
-      const response = await api.post<string>(`/friends/request/${requestId}/handle`,{type:request});
+      const response = await api.post<HandleFriendRequestResponse>(`/friends/request/${requestId}/handle`, { type: request });
       return response.data;
     }
     catch (error) {
       throw error;
     }
+  },
+  async handelFriendRequest(
+    requestId: string,
+    request: FriendRequestAction
+  ): Promise<HandleFriendRequestResponse> {
+    return this.handleFriendRequest(requestId, request);
   }
 
 };

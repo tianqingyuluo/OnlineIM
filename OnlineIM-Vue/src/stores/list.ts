@@ -196,6 +196,10 @@ export const useListStore = defineStore('list', {
             }
           }
           let defaultGroup = this.userGroups.find(g => g.name === '我的好友');
+          if (!defaultGroup) {
+            console.error('默认好友分组不存在，跳过未分组好友迁移');
+            return;
+          }
           const friendsWithNoGroup = this.friends
               .filter(friend => friend.friend_info.friend_group_id == null)
               .map(friend => friend.friend_info);

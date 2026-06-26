@@ -23,6 +23,7 @@ export interface FriendRequest {
   request_id: string;
   sender_info: {
     user_id: string;
+    username?: string;
     nickname: string;
     avatar_url?: string;
   };

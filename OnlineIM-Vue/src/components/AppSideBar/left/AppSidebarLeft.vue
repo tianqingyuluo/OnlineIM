@@ -12,16 +12,29 @@ import {
 } from "@/components/ui/sidebar"
 import {ref, computed, onUnmounted,onMounted} from "vue";
 import { useUserStore } from '@/stores/user.ts'
+import { useWebSocketStore } from '@/stores/websocketStore';
 import UserThings from "@/components/AppSideBar/left/userThings.vue";
 import UserFounding from "@/components/independent/founding/userFounding.vue";
+import ConnectionStatusBadge from "@/components/independent/ConnectionStatusBadge.vue";
 import router from "@/router";
 import { useNotificationStore } from '@/stores/notificationStore.ts'; // 引入 notificationStore
 import RedPoint from '@/components/common/redPoint.vue'; // 引入红点组件
 
+defineOptions({
+  inheritAttrs: false
+})
+
 const userStore = useUserStore()
+const wsStore = useWebSocketStore()
 const loggedUser = computed(() => {
   console.log('Logged user:', userStore.loggedInUser);
   return userStore.loggedInUser;
+})
+
+const avatarGrayscale = computed(() => {
+  return wsStore.connectionState === 'reconnecting' || wsStore.connectionState === 'offline'
+    ? 'grayscale'
+    : ''
 })
 
 const notificationStore = useNotificationStore(); // 使用 notificationStore
@@ -78,11 +91,12 @@ const items = [
     icon: Users
   }
 ];
+type SidebarItem = (typeof items)[number];
 
 
 const showUserFounding = ref(false);
 
-function handleItemClick(item) {
+function handleItemClick(item: SidebarItem) {
   if (item.path) {
     router.push(item.path);
     activeItem.value = item.title;
@@ -98,7 +112,7 @@ const activeItem = ref('聊天')
 </script>
 
 <template>
-  <Sidebar collapsible="none" class="sidebar-left">
+  <Sidebar v-bind="$attrs" collapsible="none" class="sidebar-left">
     <SidebarContent>
       <SidebarGroup>
         <SidebarGroupContent>
@@ -150,6 +164,7 @@ const activeItem = ref('聊天')
           <button 
             v-if="loggedUser"
             class="w-[40px] h-[40px] rounded-full overflow-hidden mx-auto flex-shrink-0 block"
+            :class="avatarGrayscale"
             @click="toggleUserThings"
           >
             <img
@@ -161,6 +176,7 @@ const activeItem = ref('聊天')
         </SidebarMenuItem>
       </SidebarMenu>
     </SidebarFooter>
+    <ConnectionStatusBadge />
   </Sidebar>
 
   <!-- 修改为Teleport到body的userThings弹出框 -->

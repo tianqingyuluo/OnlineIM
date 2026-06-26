@@ -65,6 +65,13 @@ api.interceptors.response.use(
       toast.error('网络错误', {
         description: '请检查网络连接后重试'
       });
+      return Promise.reject({
+        code: 'NETWORK_ERROR',
+        message: error.message || '网络错误',
+        details: {},
+        status: 0,
+        originalError: error
+      });
     }
 
     const { status, data } = error.response;

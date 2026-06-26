@@ -6,6 +6,7 @@ import icu.tianqingyuluo.onlineim.pojo.dto.request.FriendRequestRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.FriendRequestResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.FriendResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
+import icu.tianqingyuluo.onlineim.pojo.entity.FriendRequest;
 import icu.tianqingyuluo.onlineim.pojo.entity.UserFriend;
 import icu.tianqingyuluo.onlineim.service.FriendGroupService;
 import icu.tianqingyuluo.onlineim.service.FriendService;
@@ -15,6 +16,7 @@ import icu.tianqingyuluo.onlineim.util.JwtUtil;
 import icu.tianqingyuluo.onlineim.util.enumeration.FriendshipStatusEnum;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ibatis.exceptions.PersistenceException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -284,16 +286,29 @@ public class FriendController {
             @RequestBody Map<String,String> request
     ) {
         String userId = jwtUtil.getUserIDFromToken(token);
-        String friendId = friendRequestMapper.getById(requestId).getFromUserId();
-        SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-
-        if (userId.compareTo(friendId) > 0) {
-            String temp = userId;
-            userId = friendId;
-            friendId = temp;
+        FriendRequest friendRequest = friendRequestMapper.getById(requestId);
+        if (friendRequest == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ErrorCodeUtil.getErrorOutput("404", "未找到该好友请求"));
+        }
+        if (!Objects.equals(friendRequest.getToUserId(), userId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(ErrorCodeUtil.getErrorOutput("403", "无权处理该好友请求"));
+        }
+        if (!Objects.equals(friendRequest.getStatus(), 0)) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ErrorCodeUtil.getErrorOutput("409", "该好友请求已被处理"));
         }
 
-        String status = request.get("type");
+        String friendId = friendRequest.getFromUserId();
+        SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        String updatedAt = format.format(new Date());
+        String status = Optional.ofNullable(request)
+                .map(body -> body.get("type"))
+                .orElse("")
+                .trim()
+                .toLowerCase(Locale.ROOT);
+
         if (status.equals("accept")) { // 同意
             UserFriend friend = new UserFriend();
             String id = "rel_" + IdUtil.getSnowflakeNextIdStr();
@@ -306,13 +321,18 @@ public class FriendController {
             friend.setCreatedAt(LocalDateTime.now());
             friend.setUpdatedAt(LocalDateTime.now());
 
-            friendService.createFriend(friend, requestId, 1, format.format(new Date()));
+            try {
+                friendService.createFriend(friend, requestId, 1, updatedAt);
+            } catch (DataIntegrityViolationException | PersistenceException e) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(ErrorCodeUtil.getErrorOutput("409", "你们已经是好友"));
+            }
             Map<String,Object> response = new HashMap<>();
             response.put("friend_id", id);
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
         }
-        else if (status.equals("refuse")) { // 拒绝
-            friendRequestMapper.updateStatus(requestId, 2, format.format(new Date()));
+        else if (status.equals("refuse") || status.equals("reject")) { // 拒绝
+            friendRequestMapper.updateStatus(requestId, 2, updatedAt);
             return ResponseEntity.status(HttpStatus.OK).build();
         }
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "啊哦，发生了些问题"));

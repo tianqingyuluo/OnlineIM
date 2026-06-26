@@ -9,6 +9,10 @@ import { debounce } from 'lodash';
 import { useUserStore } from '@/stores/user'; // 引入 userStore
 import { useListStore } from '@/stores/list'; // 引入 listStore
 
+defineOptions({
+  inheritAttrs: false
+})
+
 const userStore = useUserStore(); // 使用 userStore
 const listStore = useListStore(); // 使用 listStore
 
@@ -108,7 +112,8 @@ const getUserStatus = (user: any) => {
   if (listStore.friends.some(friend => friend.friend_info.user_id === user.user_id)) {
     return 'friend'; // 已是好友
   }
-  if (listStore.FriendRequestsList.some(request => request.sender_info.user_id === user.user_id)) {
+  const friendRequests = Array.isArray(listStore.FriendRequestsList) ? listStore.FriendRequestsList : []
+  if (friendRequests.some(request => request.sender_info.user_id === user.user_id)) {
     return 'pending'; // 待处理请求
   }
   return 'stranger'; // 陌生人
@@ -117,62 +122,64 @@ const getUserStatus = (user: any) => {
 </script>
 
 <template>
-  <div class="flex flex-col space-y-2 p-2">
-    <template v-if="searchResults.length > 0">
-      <div 
-        v-for="result in searchResults" 
-        :key="result.user_id"
-        class="flex items-center p-2 hover:bg-gray-100 rounded cursor-pointer"
-      >
-        <img 
-          :src="result.avatar_url || '/images/default-avatar.png'" 
-          :alt="result.nickname"
-          class="w-8 h-8 rounded-full mr-2"
+  <div v-bind="$attrs">
+    <div class="flex flex-col space-y-2 p-2">
+      <template v-if="searchResults.length > 0">
+        <div
+          v-for="result in searchResults"
+          :key="result.user_id"
+          class="flex items-center p-2 hover:bg-gray-100 rounded cursor-pointer"
         >
-        <div class="flex flex-col">
-          <span class="text-sm font-medium">{{ result.nickname }}</span>
-          <span class="text-xs text-gray-500" v-if="result.username">{{ result.username }}</span>
-        </div>
-        
-        <!-- 根据用户状态显示不同内容 -->
-        <template v-if="getUserStatus(result) === 'stranger'">
-          <Button 
-            class="ml-auto px-3 py-1 text-sm"
-            @click.stop="handleAddFriend(result)"
+          <img
+            :src="result.avatar_url || '/images/default-avatar.png'"
+            :alt="result.nickname"
+            class="w-8 h-8 rounded-full mr-2"
           >
-            添加
-          </Button>
-        </template>
-        <template v-else-if="getUserStatus(result) === 'friend'">
-          <span class="ml-auto text-sm text-gray-500">已添加</span>
-        </template>
-        <template v-else-if="getUserStatus(result) === 'pending'">
-          <span class="ml-auto text-sm text-gray-500">待处理</span>
-        </template>
-        <!-- 如果是当前用户，不显示任何按钮或文字 -->
+          <div class="flex flex-col">
+            <span class="text-sm font-medium">{{ result.nickname }}</span>
+            <span class="text-xs text-gray-500" v-if="result.username">{{ result.username }}</span>
+          </div>
 
-      </div>
-      <div v-if="!hasMore" class="text-center py-4 text-gray-500">
-        没有更多数据了
-      </div>
-    </template>
-    <template v-else>
-      <div class="text-center py-8 text-gray-500">
-        没有找到匹配的用户
-      </div>
-    </template>
-  </div>
+          <!-- 根据用户状态显示不同内容 -->
+          <template v-if="getUserStatus(result) === 'stranger'">
+            <Button
+              class="ml-auto px-3 py-1 text-sm"
+              @click.stop="handleAddFriend(result)"
+            >
+              添加
+            </Button>
+          </template>
+          <template v-else-if="getUserStatus(result) === 'friend'">
+            <span class="ml-auto text-sm text-gray-500">已添加</span>
+          </template>
+          <template v-else-if="getUserStatus(result) === 'pending'">
+            <span class="ml-auto text-sm text-gray-500">待处理</span>
+          </template>
+          <!-- 如果是当前用户，不显示任何按钮或文字 -->
 
-  <div v-if="showProfile" class="fixed inset-0 bg-white/80 flex items-center justify-center z-[9999]">
-    <OtherProfile @close="showProfile = false" :userId="selectedUserId" />
+        </div>
+        <div v-if="!hasMore" class="text-center py-4 text-gray-500">
+          没有更多数据了
+        </div>
+      </template>
+      <template v-else>
+        <div class="text-center py-8 text-gray-500">
+          没有找到匹配的用户
+        </div>
+      </template>
+    </div>
+
+    <div v-if="showProfile" class="fixed inset-0 bg-white/80 flex items-center justify-center z-[9999]">
+      <OtherProfile @close="showProfile = false" :userId="selectedUserId" />
+    </div>
+
+    <SendFriendRequest
+      v-if="showFriendRequest"
+      @close="showFriendRequest = false"
+      :user="selectedFriend"
+      class="fixed inset-0 m-auto w-1/2 h-1/2 z-[9999]"
+    />
   </div>
-  
-  <SendFriendRequest 
-    v-if="showFriendRequest"
-    @close="showFriendRequest = false"
-    :user="selectedFriend"
-    class="fixed inset-0 m-auto w-1/2 h-1/2 z-[9999]"
-  />
 </template>
 
 <style scoped>

@@ -1,40 +1,35 @@
 <script setup lang="ts">
-import { ref, onMounted} from 'vue'
-import type { FriendRequest } from '@/type/Friends'
+import { computed } from 'vue'
 import { useListStore } from '@/stores/list';
 import { friendsService } from '@/services/friends.service';
 import { toast } from 'vue-sonner';
 
 const listStore = useListStore();
-const requests = ref<FriendRequest[]>([])
-
-
-
-onMounted(() => {
-  // 直接从 store 获取数据
-  requests.value = listStore.FriendRequestsList.requests;
-  console.log("拿到的消息内容",requests.value)
-
-})
+const requests = computed(() => (
+  Array.isArray(listStore.FriendRequestsList) ? listStore.FriendRequestsList : []
+))
 
 
 const handleRequest = async (isAccept: boolean, requestId: string) => {
   try {
-    const friendid=await friendsService.handelFriendRequest(requestId, isAccept ? 'accept' : 'reject');
+    const response = await friendsService.handleFriendRequest(requestId, isAccept ? 'accept' : 'reject');
     
     if (isAccept) {
+      if (!response.friend_id) {
+        throw new Error('后端未返回好友关系ID');
+      }
       // 查找默认分组
       const defaultGroup = listStore.userGroups.find(g => g.name === '我的好友');
       if (defaultGroup) {
-        await friendsService.setFriendGroup(friendid, defaultGroup.group_id);
-        listStore.updateFriendGroup(friendid, defaultGroup.group_id);
+        await friendsService.setFriendGroup(response.friend_id, defaultGroup.group_id);
+        await listStore.updateFriendGroup(response.friend_id, defaultGroup.group_id);
       }
     }
     
     // 更新请求状态
-    const index = requests.value.findIndex(r => r.request_id === requestId);
+    const index = listStore.FriendRequestsList.findIndex(r => r.request_id === requestId);
     if (index !== -1) {
-      requests.value[index].status = isAccept ? '1' : '2';
+      listStore.FriendRequestsList[index].status = isAccept ? '1' : '2';
     }
   } catch (error) {
     console.error('处理请求失败:', error);
@@ -176,4 +171,3 @@ const handleRequest = async (isAccept: boolean, requestId: string) => {
   }
 }
 </style>
-

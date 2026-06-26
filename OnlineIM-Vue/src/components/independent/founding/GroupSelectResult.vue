@@ -5,10 +5,12 @@ import GroupProfile from "@/components/independent/profile/GroupProfile.vue"
 import { type GroupSearchResult } from '@/type/group.ts'
 import { debounce } from 'lodash';
 import { useListStore } from '@/stores/list';
-import type {UserSearchResult} from "@/type/User.ts";
 import SendGroupRequest from "@/components/independent/group/SendGroupRequest.vue";
-import SendFriendRequest from "@/components/independent/friends/SendFriendRequest.vue";
 import {Button} from "@/components/ui/button"; // 引入 listStore
+
+defineOptions({
+  inheritAttrs: false
+})
 
 const listStore = useListStore(); // 使用 listStore
 
@@ -122,56 +124,58 @@ function handleAddGroup(group: GroupSearchResult) {
 </script>
 
 <template>
-  <send-group-request
-      v-if="showGroupRequest"
-      @close="showGroupRequest = false"
-      :group="selectedGroup"
-      class="fixed inset-0 m-auto w-1/2 h-1/2 z-[9999]"/>
-  <div class="flex flex-col space-y-2 p-2">
-    <template v-if="searchResults.length > 0">
-      <div 
-        v-for="result in searchResults" 
-        :key="result.group_id"
-        class="flex items-center p-2 hover:bg-gray-100 rounded cursor-pointer"
-        @click="handleGroupClick(result.group_id)"
-      >
-        <img 
-          :src="result.avatar_url || '/images/group.png'" 
-          :alt="result.name"
-          class="w-8 h-8 rounded-full mr-2"
+  <div v-bind="$attrs">
+    <send-group-request
+        v-if="showGroupRequest"
+        @close="showGroupRequest = false"
+        :group="selectedGroup"
+        class="fixed inset-0 m-auto w-1/2 h-1/2 z-[9999]"/>
+    <div class="flex flex-col space-y-2 p-2">
+      <template v-if="searchResults.length > 0">
+        <div
+          v-for="result in searchResults"
+          :key="result.group_id"
+          class="flex items-center p-2 hover:bg-gray-100 rounded cursor-pointer"
+          @click="handleGroupClick(result.group_id)"
         >
-        <div class="flex flex-col">
-          <span class="text-sm font-medium">{{ result.name }}</span>
-          <span class="text-xs text-gray-500">群描述: {{ result.description }}</span>
-        </div>
-        
-        <!-- 根据群组状态显示不同内容 -->
-        <template v-if="getGroupStatus(result) === 'joined'">
-          <span class="ml-auto text-sm text-gray-500">已加入</span>
-        </template>
-        <template v-else>
-          <Button 
-            class="ml-auto px-3 py-1 text-sm"
-            @click.stop="handleAddGroup(result)"
+          <img
+            :src="result.avatar_url || '/images/group.png'"
+            :alt="result.name"
+            class="w-8 h-8 rounded-full mr-2"
           >
-            添加
-          </Button>
-        </template>
+          <div class="flex flex-col">
+            <span class="text-sm font-medium">{{ result.name }}</span>
+            <span class="text-xs text-gray-500">群描述: {{ result.description }}</span>
+          </div>
 
-      </div>
-      <div v-if="!hasMore" class="text-center py-4 text-gray-500">
-        没有更多数据了
-      </div>
-    </template>
-    <template v-else>
-      <div class="text-center py-8 text-gray-500">
-        没有找到匹配的群组
-      </div>
-    </template>
-  </div>
+          <!-- 根据群组状态显示不同内容 -->
+          <template v-if="getGroupStatus(result) === 'joined'">
+            <span class="ml-auto text-sm text-gray-500">已加入</span>
+          </template>
+          <template v-else>
+            <Button
+              class="ml-auto px-3 py-1 text-sm"
+              @click.stop="handleAddGroup(result)"
+            >
+              添加
+            </Button>
+          </template>
 
-  <div v-if="showGroupProfile" class="fixed inset-0 bg-white/80 flex items-center justify-center z-[9999]">
-    <GroupProfile @close="showGroupProfile = false" :groupId="selectedGroupId" />
+        </div>
+        <div v-if="!hasMore" class="text-center py-4 text-gray-500">
+          没有更多数据了
+        </div>
+      </template>
+      <template v-else>
+        <div class="text-center py-8 text-gray-500">
+          没有找到匹配的群组
+        </div>
+      </template>
+    </div>
+
+    <div v-if="showGroupProfile" class="fixed inset-0 bg-white/80 flex items-center justify-center z-[9999]">
+      <GroupProfile @close="showGroupProfile = false" :groupId="selectedGroupId" />
+    </div>
   </div>
 </template>
 
