@@ -3,7 +3,7 @@
   "name": "v1-redis-stream-consumer-group",
   "title": "Redis Stream消费者组多实例去重",
   "description": "",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

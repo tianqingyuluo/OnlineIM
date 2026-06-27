@@ -9,7 +9,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.ObjectRecord;
+import org.springframework.data.redis.connection.stream.ReadOffset;
 import org.springframework.data.redis.connection.stream.StreamOffset;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
@@ -17,12 +19,14 @@ import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.data.redis.stream.StreamMessageListenerContainer;
 import icu.tianqingyuluo.onlineim.websocket.listener.RedisEventListener;
+import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
 import java.util.Arrays;
 
 @EnableCaching
 @Configuration
+@Slf4j
 public class RedisConfig implements CachingConfigurer {
 
     // 默认缓存过期时间: 1天
@@ -85,7 +89,8 @@ public class RedisConfig implements CachingConfigurer {
 
     @Bean
     public StreamMessageListenerContainer<String, ObjectRecord<String, String>> streamContainer(
-            RedisConnectionFactory connectionFactory, RedisEventListener redisEventListener) {
+            RedisConnectionFactory connectionFactory, RedisEventListener redisEventListener,
+            RedisTemplate<String, Object> redisTemplate, ServerIdentity serverIdentity) {
         StreamMessageListenerContainer.StreamMessageListenerContainerOptions<String, ObjectRecord<String, String>> options =
                 StreamMessageListenerContainer.StreamMessageListenerContainerOptions
                         .builder()
@@ -94,16 +99,28 @@ public class RedisConfig implements CachingConfigurer {
                         .build();
         StreamMessageListenerContainer<String, ObjectRecord<String, String>> container =
                 StreamMessageListenerContainer.create(connectionFactory, options);
-        
-        // 注册监听器到指定的 Stream
+
+        String streamKey = "im:message:stream";
+        String groupId = serverIdentity.getGroupId();
+        String consumerName = serverIdentity.getServerId();
+
+        // 启动时创建本实例的消费者组（从流尾开始，不重放历史；已存在则忽略 BUSYGROUP）
+        try {
+            redisTemplate.opsForStream().createGroup(streamKey, ReadOffset.from("$"), groupId);
+            log.info("已创建 Redis Stream 消费者组: stream={}, group={}", streamKey, groupId);
+        } catch (Exception e) {
+            log.warn("创建消费者组失败（可能已存在）: stream={}, group={}, err={}", streamKey, groupId, e.getMessage());
+        }
+
+        // 以消费者组模式注册监听器：每实例各读全量流（广播），group 记住 last-delivered-id 避免重启重放
         container.receive(
-            StreamOffset.fromStart("im:message:stream"),
+            Consumer.from(groupId, consumerName),
+            StreamOffset.create(streamKey, ReadOffset.lastConsumed()),
             redisEventListener
         );
-        
-        // 启动容器
+
         container.start();
-        
+
         return container;
     }
 }

@@ -1,6 +1,7 @@
 package icu.tianqingyuluo.onlineim.websocket.server;
 
 import cn.hutool.core.util.IdUtil;
+import icu.tianqingyuluo.onlineim.config.ServerIdentity;
 import icu.tianqingyuluo.onlineim.service.UserSessionService;
 import icu.tianqingyuluo.onlineim.util.RealIPUtil;
 import icu.tianqingyuluo.onlineim.websocket.handler.WebSocketAuthenticator;
@@ -39,24 +40,26 @@ public class VertxWebSocketServer {
 
     private Vertx vertx;
     private HttpServer httpServer;
-    private String serverId;
 
     private final WebSocketAuthenticator authenticator;
     private final WebSocketMessageRouter messageRouter;
     private final LocalSessionRegistry sessionRegistry;
     private final UserSessionService userSessionService;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final ServerIdentity serverIdentity;
 
     public VertxWebSocketServer(WebSocketAuthenticator authenticator,
                                 WebSocketMessageRouter messageRouter,
                                 LocalSessionRegistry sessionRegistry,
                                 UserSessionService userSessionService,
-                                RedisTemplate<String, Object> redisTemplate) {
+                                RedisTemplate<String, Object> redisTemplate,
+                                ServerIdentity serverIdentity) {
         this.authenticator = authenticator;
         this.messageRouter = messageRouter;
         this.sessionRegistry = sessionRegistry;
         this.userSessionService = userSessionService;
         this.redisTemplate = redisTemplate;
+        this.serverIdentity = serverIdentity;
     }
 
     /**
@@ -228,6 +231,9 @@ public class VertxWebSocketServer {
     public void stop() {
         log.info("正在关闭Vert.x WebSocket服务器...");
 
+        // 销毁本实例的 Redis Stream 消费者组（避免孤儿 group）
+        destroyConsumerGroup();
+
         // 从Redis注销服务
         unregisterServiceFromRedis();
 
@@ -253,7 +259,7 @@ public class VertxWebSocketServer {
      */
     private void registerServiceToRedis() {
         try {
-            serverId = "serverID_" + IdUtil.simpleUUID();
+            String serverId = serverIdentity.getServerId();
             String serverInfo = "{\"ip\":\"" + RealIPUtil.getRealLocalIP() + "\",\"port\":" + port + "}";
             redisTemplate.opsForHash().put("websocket_servers", serverId, serverInfo);
             log.info("服务已注册到Redis: serverId={}", serverId);
@@ -266,13 +272,26 @@ public class VertxWebSocketServer {
      * 从Redis注销当前服务实例
      */
     private void unregisterServiceFromRedis() {
-        if (serverId != null) {
-            try {
-                redisTemplate.opsForHash().delete("websocket_servers", serverId);
-                log.info("服务已从Redis注销: serverId={}", serverId);
-            } catch (Exception e) {
-                log.error("从Redis注销服务失败: {}", e.getMessage());
-            }
+        String serverId = serverIdentity.getServerId();
+        try {
+            redisTemplate.opsForHash().delete("websocket_servers", serverId);
+            log.info("服务已从Redis注销: serverId={}", serverId);
+        } catch (Exception e) {
+            log.error("从Redis注销服务失败: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 销毁本实例的 Redis Stream 消费者组
+     * 正常停机时调用，避免 Redis 残留孤儿 group；异常崩溃残留的 group 清理不在本任务范围
+     */
+    private void destroyConsumerGroup() {
+        String groupId = serverIdentity.getGroupId();
+        try {
+            redisTemplate.opsForStream().destroyGroup("im:message:stream", groupId);
+            log.info("已销毁消费者组: {}", groupId);
+        } catch (Exception e) {
+            log.warn("销毁消费者组失败: groupId={}, err={}", groupId, e.getMessage());
         }
     }
 

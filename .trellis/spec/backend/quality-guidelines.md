@@ -97,6 +97,64 @@ String gid = "grp_" + IdUtil.getSnowflakeNextIdStr();
   - Use JUnit 5 (`@Test`, `@SpringBootTest`, `@MockBean`, etc.).
   - Be placed in `src/test/java/icu/tianqingyuluo/onlineim/`.
 
+### Scenario: Redis Stream / Testcontainers Integration Tests
+
+#### 1. Scope / Trigger
+- Trigger: Adding or changing Redis Stream / consumer-group behavior, or any Docker-backed integration test that must run under default `./mvnw test`.
+
+#### 2. Signatures
+- Test file discovery: `*Test.java` / `*Tests.java` only under default Surefire config.
+- Backend verification command: `cd onlineIM-server && ./mvnw test`
+- Redis Stream consumer-group registration under test:
+  ```java
+  container.receive(
+      Consumer.from(groupId, consumerName),
+      StreamOffset.create("im:message:stream", ReadOffset.lastConsumed()),
+      listener
+  )
+  ```
+
+#### 3. Contracts
+- Integration tests that use Testcontainers must be named so they are discovered by default `mvn test` (`RedisStreamConsumerGroupIntegrationTest`, not `RedisStreamConsumerGroupIT`).
+- If Docker daemon requires a higher API version than docker-java's default, pass the API version through Surefire (`<api.version>1.40</api.version>` in `maven-surefire-plugin`).
+- If the environment cannot pull `testcontainers/ryuk`, disable Ryuk in Surefire environment variables (`TESTCONTAINERS_RYUK_DISABLED=true`).
+- Redis test templates should use `StringRedisSerializer` for stream key/field compatibility with production stream usage.
+
+#### 4. Validation & Error Matrix
+- Test file named `*IT.java` only -> test is **not executed** by default `./mvnw test`.
+- `src/test/` ignored by `.gitignore` -> test files are invisible to `git status` and can be omitted from commits.
+- Docker API too old (`client version 1.32 is too old`) -> configure Surefire `api.version` to match daemon minimum.
+- Ryuk pull timeout -> disable Ryuk for local/CI environments that cannot reach Docker Hub.
+
+#### 5. Good / Base / Bad Cases
+- Good: `RedisStreamConsumerGroupIntegrationTest.java` is executed by `./mvnw test` and validates broadcast + ack behavior against real Redis.
+- Base: `RedisEventListenerTest.java` covers ack/no-ack branches with Mockito only.
+- Bad: `RedisStreamConsumerGroupIT.java` exists but is never run by default, creating false confidence.
+
+#### 6. Tests Required
+- Unit: listener ack path, local-filter path, exception/no-ack path.
+- Integration: two consumer groups both receive one stream message and ack independently.
+- Integration: new group created with `$` does not replay historical messages and only consumes new ones.
+- Integration or focused unit: `VertxWebSocketServer.stop()` destroys the consumer group on normal shutdown.
+- Integration or focused config test: `RedisConfig.streamContainer(...)` wires `Consumer.from(...)` + `ReadOffset.lastConsumed()` correctly.
+
+#### 7. Wrong vs Correct
+##### Wrong
+```java
+// RedisStreamConsumerGroupIT.java
+// Looks like an integration test, but default Surefire will skip it.
+class RedisStreamConsumerGroupIT {
+}
+```
+
+##### Correct
+```java
+// RedisStreamConsumerGroupIntegrationTest.java
+// Still clearly an integration test, and default Surefire will execute it.
+class RedisStreamConsumerGroupIntegrationTest {
+}
+```
+
 ---
 
 ## Build & Verification

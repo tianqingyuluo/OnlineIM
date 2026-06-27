@@ -46,4 +46,4 @@ onlineIM-server/stderr.txt
 onlineIM-server/stdout.txt
 
 ### tests ###
-onlineIM-server/src/test
+# Keep backend test sources under version control.
