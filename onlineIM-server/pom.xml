@@ -33,6 +33,7 @@
 		<aliyun.oss.version>3.16.1</aliyun.oss.version>
 		<tencent.cos.version>5.6.97</tencent.cos.version>
 		<vertx.version>4.5.11</vertx.version>
+		<byte-buddy.version>1.17.8</byte-buddy.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -48,6 +49,12 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>net.bytebuddy</groupId>
+			<artifactId>byte-buddy-agent</artifactId>
+			<version>${byte-buddy.version}</version>
 			<scope>test</scope>
 		</dependency>
 		<!-- 集成测试: testcontainers 起真实 Redis 验证 Stream 消费者组语义 -->
@@ -187,6 +194,7 @@
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-surefire-plugin</artifactId>
 				<configuration>
+					<argLine>-javaagent:${settings.localRepository}/net/bytebuddy/byte-buddy-agent/${byte-buddy.version}/byte-buddy-agent-${byte-buddy.version}.jar</argLine>
 					<systemPropertyVariables>
 						<api.version>1.40</api.version>
 					</systemPropertyVariables>
