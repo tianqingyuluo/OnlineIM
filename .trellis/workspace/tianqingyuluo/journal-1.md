@@ -72,3 +72,37 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: 完成 WebSocket 心跳与断线重连任务
+
+**Date**: 2026-07-10
+**Task**: 完成 WebSocket 心跳与断线重连任务
+**Branch**: `v1`
+
+### Summary
+
+修复重连状态机、离线队列关联 ID 与 WebSocket 路径校验，补齐前端服务测试和真实 Vert.x 集成测试并归档任务。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b3cf3ca` | (see git log) |
+| `4f6ab75` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
