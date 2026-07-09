@@ -172,3 +172,64 @@ class RedisStreamConsumerGroupIntegrationTest {
 # Run the application
 ./mvnw spring-boot:run
 ```
+
+---
+
+## Vert.x WebSocket Endpoint Contract
+
+### 1. Scope / Trigger
+
+- Trigger: changing `VertxWebSocketServer`, WebSocket authentication, heartbeat routing, or server integration tests.
+
+### 2. Signatures
+
+```java
+@Value("${websocket.path:/ws}")
+private String websocketPath;
+```
+
+### 3. Contracts
+
+- The WebSocket server accepts upgrades only when the URI path exactly matches `websocket.path`; query parameters are excluded from the comparison.
+- Path validation runs before token extraction and authentication.
+- Heartbeat integration tests use a real Vert.x server on port `0` and a real Vert.x client; JWT and Redis boundaries may be mocked.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required behavior |
+|---|---|
+| URI path equals configured path | Continue to authentication |
+| URI path differs | Reject upgrade with HTTP 404 |
+| Token missing or invalid | Reject upgrade with HTTP 401 |
+| Silent connection exceeds timeout | Close socket and remove local session |
+
+### 5. Good / Base / Bad Cases
+
+- Good: `/api/v1/chat?token=...` is accepted when `websocket.path=/api/v1/chat`.
+- Base: valid connection sends `HEARTBEAT` and receives `HEARTBEAT_ACK`.
+- Bad: a global `webSocketHandler` accepts `/wrong` because the configured path is only logged, not checked.
+
+### 6. Tests Required
+
+- Real WebSocket heartbeat request receives `HEARTBEAT_ACK`.
+- Real silent connection is closed and removed by `cleanupInactiveSessions`.
+- Upgrade on a non-configured path is rejected.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```java
+.webSocketHandler(ws -> handleWebSocketConnection(ws, ws.uri()))
+// websocketPath is never checked
+```
+
+#### Correct
+
+```java
+String requestPath = uri.split("\\?", 2)[0];
+if (!websocketPath.equals(requestPath)) {
+    ws.reject(404);
+    return;
+}
+```

@@ -62,6 +62,6 @@
 
 ## `task.py start` 前检查
 
-- [ ] `prd.md` / `design.md` / `implement.md` 已评审
-- [ ] 前置核查 1 ~ 6 完成（handler 落点、router 容错、`UserSessionService` 签名、配置绑定、前端切入点、头像组件位置）
-- [ ] test profile 缩短阈值方案确定
+- [x] `prd.md` / `design.md` / `implement.md` 已评审
+- [x] 前置核查 1 ~ 6 完成（handler 落点、router 容错、`UserSessionService` 签名、配置绑定、前端切入点、头像组件位置）
+- [x] test profile 缩短阈值方案确定

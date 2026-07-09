@@ -233,3 +233,73 @@ Matches the backend protocol: `{ type: "<TYPE>", message: {<payload>} }`
 3. **`message.service.ts` `putMessage`** has URL `/api/v1/messages/group` which double-prefixes `/api/v1` (the axios `baseURL` already includes `/api/v1`). The URL should be `/messages/group`.
 
 4. **`auth.service.ts` `updateToken`** logs "登出失败" (logout failed) in the error message — copy-paste error, should say "刷新Token失败" (token refresh failed).
+
+---
+
+## WebSocket Reconnection Safety Contract
+
+### 1. Scope / Trigger
+
+- Trigger: modifying `services/websocket.service.ts`, reconnect timers, heartbeat handling, or offline outbound queues.
+
+### 2. Signatures
+
+```ts
+connect(preserveOfflineState?: boolean): void
+sendMessage(payload: { type: string; message: unknown }): void
+manualRetry(): void
+```
+
+### 3. Contracts
+
+- Do not create another socket while the current socket is `CONNECTING` or `OPEN`.
+- Every event callback must be bound to its socket instance and ignored when that instance is no longer the service's current socket.
+- A generated `client_message_id` must be written into both queue metadata and the queued message payload; the server response uses that payload field to mark the queue entry sent.
+- After the offline threshold, background retries keep `connectionState === 'offline'` until a connection succeeds. Manual retry may explicitly show `reconnecting`.
+- Send the first heartbeat immediately after `open`; two missed heartbeat intervals must close the socket at approximately two intervals, not three.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required behavior |
+|---|---|
+| `connect()` called while `CONNECTING` | Reuse current attempt; do not create a second socket |
+| Old socket emits `close` after replacement | Ignore it; do not schedule another reconnect |
+| Offline message lacks client ID | Generate one and persist it in metadata and payload |
+| Socket closes during queue flush | Stop flushing immediately |
+| Five reconnect failures | Keep offline UI visible while periodic retries continue |
+
+### 5. Good / Base / Bad Cases
+
+- Good: event handlers capture `socket`, then start with `if (this.ws !== socket) return`.
+- Base: a normal close of the current socket schedules one reconnect.
+- Bad: callbacks read only `this.ws`; an old socket close can overwrite the new socket state.
+
+### 6. Tests Required
+
+- Duplicate connect while connecting.
+- Obsolete socket close isolation.
+- Heartbeat death after two missed intervals.
+- Offline state persistence during background retry.
+- Queue ID copied into the outbound payload.
+- Queue flush and sync after reconnect.
+- Response marks the matching queued message sent.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```ts
+this.ws.onclose = () => this.startReconnect()
+```
+
+#### Correct
+
+```ts
+const socket = new WebSocket(url)
+this.ws = socket
+socket.onclose = () => {
+  if (this.ws !== socket) return
+  this.ws = null
+  this.startReconnect()
+}
+```
