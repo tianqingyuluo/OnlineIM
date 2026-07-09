@@ -39,3 +39,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 2: 完成 Redis Stream 消费者组任务
+
+**Date**: 2026-07-10
+**Task**: 完成 Redis Stream 消费者组任务
+**Branch**: `v1`
+
+### Summary
+
+修复 Java 21 下 Mockito 测试启动，完成 Redis Testcontainers 全量验证并归档任务。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9c76f15` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
