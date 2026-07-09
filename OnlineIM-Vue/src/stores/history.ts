@@ -121,12 +121,8 @@ export const useHistoryStore = defineStore('history', {
             );
           }
           console.log("服务器返回数据", response);
-          messages = response;
-          if (before_message_id!==undefined)
-          {has_more = before_message_id.localeCompare(messages[messages.length - 1].seq_id) > 0;}
-          else{
-            has_more = true;
-          }
+          messages = response.messages;
+          has_more = response.has_more_before;
           if (messages.length > 0) {
             // 注意：updatePendingRanges 和 putHistory 可能需要根据消息类型调整
             await this.updatePendingRanges(conversationId, messages as any[]);
@@ -313,8 +309,7 @@ export const useHistoryStore = defineStore('history', {
           });
         });
     
-        // 可以等待所有缓存完成（可选）
-        // await Promise.all(cachePromises);
+        void Promise.all(cachePromises);
         
       } catch (error) {
         console.error('处理消息时发生错误:', error);

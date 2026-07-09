@@ -130,6 +130,13 @@ public class VertxWebSocketServer {
      * @param uri 请求URI
      */
     private void handleWebSocketConnection(ServerWebSocket ws, String uri) {
+        String requestPath = uri == null ? "" : uri.split("\\?", 2)[0];
+        if (!websocketPath.equals(requestPath)) {
+            log.warn("WebSocket连接被拒绝: 非法路径 {}", requestPath);
+            ws.reject(404);
+            return;
+        }
+
         // 从URI中提取token并进行认证
         String token = authenticator.extractTokenFromUri(uri);
         

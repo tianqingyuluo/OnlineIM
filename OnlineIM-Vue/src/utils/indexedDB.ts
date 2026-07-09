@@ -30,7 +30,7 @@ export const initDB = async (): Promise<IDBPDatabase> => {
   }
 
   return openDB(DB_NAME, DB_VERSION, {
-    upgrade(db, oldVersion, newVersion) {
+    upgrade(db) {
       if (!db.objectStoreNames.contains(STORES.CONVERSATIONS)) {
         const store = db.createObjectStore(STORES.CONVERSATIONS, { keyPath: 'conversation_id' });
         store.createIndex('user_id', 'user_id');
@@ -52,7 +52,7 @@ export const initDB = async (): Promise<IDBPDatabase> => {
         store.createIndex('user_id', 'user_id');
       }
       if (!db.objectStoreNames.contains(IMAGE_STORE)) {
-        const store = db.createObjectStore(IMAGE_STORE, { keyPath: 'name' });
+        db.createObjectStore(IMAGE_STORE, { keyPath: 'name' });
       }
       if (!db.objectStoreNames.contains(HISTORY_STORE)) {
         const store = db.createObjectStore(HISTORY_STORE, { keyPath: 'message_id' });

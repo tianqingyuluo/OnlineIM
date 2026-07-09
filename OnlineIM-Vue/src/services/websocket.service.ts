@@ -15,7 +15,7 @@ import {
 
 export type { ConnectionState };
 
-class WebSocketService {
+export class WebSocketService {
   private ws: WebSocket | null = null;
 
   public connectionState: Ref<ConnectionState> = ref('connecting');
@@ -51,26 +51,28 @@ class WebSocketService {
     }
   }
 
-  connect(): void {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+  connect(preserveOfflineState = false): void {
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       return;
     }
 
     this.isManualDisconnect = false;
-    this.setConnectionState(this.hasConnectedBefore ? 'reconnecting' : 'connecting');
+    if (!preserveOfflineState) {
+      this.setConnectionState(this.hasConnectedBefore ? 'reconnecting' : 'connecting');
+    }
 
     const userStore = useUserStore();
     const token = userStore.token;
     const url = `${WS_API_URL}?token=Bearer ${token}`;
 
-    this.ws = new WebSocket(url);
-    this.bindWsEvents();
+    const socket = new WebSocket(url);
+    this.ws = socket;
+    this.bindWsEvents(socket);
   }
 
-  private bindWsEvents(): void {
-    if (!this.ws) return;
-
-    this.ws.onopen = (event) => {
+  private bindWsEvents(socket: WebSocket): void {
+    socket.onopen = (event) => {
+      if (this.ws !== socket) return;
       this.setConnectionState('online');
       this.reconnectAttempts = 0;
       this.missedAckCount = 0;
@@ -86,7 +88,8 @@ class WebSocketService {
       this.openHandlers.forEach(handler => handler(event));
     };
 
-    this.ws.onmessage = (event) => {
+    socket.onmessage = (event) => {
+      if (this.ws !== socket) return;
       try {
         const message = JSON.parse(event.data);
 
@@ -112,12 +115,15 @@ class WebSocketService {
       this.messageHandlers.forEach(handler => handler(event));
     };
 
-    this.ws.onerror = (event) => {
+    socket.onerror = (event) => {
+      if (this.ws !== socket) return;
       console.error('WebSocket error:', event);
       this.errorHandlers.forEach(handler => handler(event));
     };
 
-    this.ws.onclose = (event) => {
+    socket.onclose = (event) => {
+      if (this.ws !== socket) return;
+      this.ws = null;
       this.stopHeartbeat();
       this.closeHandlers.forEach(handler => handler(event));
 
@@ -131,10 +137,11 @@ class WebSocketService {
     this.isManualDisconnect = true;
     this.stopHeartbeat();
     this.stopReconnectTimer();
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.close();
-    }
+    const socket = this.ws;
     this.ws = null;
+    if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+      socket.close();
+    }
     this.setConnectionState('offline');
   }
 
@@ -160,6 +167,7 @@ class WebSocketService {
   private startHeartbeat(): void {
     this.stopHeartbeat();
     this.missedAckCount = 0;
+    this.sendHeartbeat();
     this.heartbeatTimer = setInterval(() => {
       if (this.missedAckCount >= ACK_MISS_THRESHOLD) {
         console.warn('连续未收到HEARTBEAT_ACK，判定连接已死');
@@ -169,9 +177,13 @@ class WebSocketService {
         }
         return;
       }
-      this.missedAckCount++;
-      this.sendMessage({ type: 'HEARTBEAT', message: {} });
+      this.sendHeartbeat();
     }, HEARTBEAT_INTERVAL_MS);
+  }
+
+  private sendHeartbeat(): void {
+    this.missedAckCount++;
+    this.sendMessage({ type: 'HEARTBEAT', message: {} });
   }
 
   private stopHeartbeat(): void {
@@ -184,17 +196,18 @@ class WebSocketService {
   private startReconnect(): void {
     if (this.isManualDisconnect) return;
 
-    this.setConnectionState('reconnecting');
     const delay = computeBackoff(this.reconnectAttempts);
     this.reconnectAttempts++;
 
     if (this.reconnectAttempts >= OFFLINE_THRESHOLD) {
       this.setConnectionState('offline');
+    } else {
+      this.setConnectionState('reconnecting');
     }
 
     this.stopReconnectTimer();
     this.reconnectTimer = setTimeout(() => {
-      this.connect();
+      this.connect(this.connectionState.value === 'offline');
     }, delay);
   }
 
@@ -222,12 +235,18 @@ class WebSocketService {
         return;
       }
 
+      const clientLocalId = message.client_message_id || crypto.randomUUID();
+      const queuedPayload = {
+        ...message,
+        client_message_id: clientLocalId,
+      };
+
       await dbService.addOutboundMessage({
         user_id: userId,
         conversation_id: conversationId,
         type: payload.type,
-        payload: message,
-        client_local_id: message.client_message_id || crypto.randomUUID(),
+        payload: queuedPayload,
+        client_local_id: clientLocalId,
         status: 'pending',
         created_at: Date.now(),
       });
@@ -253,7 +272,8 @@ class WebSocketService {
         items.sort((a, b) => a.created_at - b.created_at);
         for (const item of items) {
           if (item.status === 'pending') {
-            this.ws?.send(JSON.stringify({ type: item.type, message: item.payload }));
+            if (this.ws?.readyState !== WebSocket.OPEN) return;
+            this.ws.send(JSON.stringify({ type: item.type, message: item.payload }));
           }
         }
       }
