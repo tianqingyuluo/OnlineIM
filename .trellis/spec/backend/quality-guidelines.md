@@ -315,3 +315,108 @@ if (SeqIdComparator.compare(nextReadSeq, latestSeq) > 0) {
 }
 readStateService.advanceRead(conversationId, readerId, "group", nextReadSeq);
 ```
+
+---
+
+## Scenario: HTTP and WebSocket Message-Send Consistency
+
+### 1. Scope / Trigger
+
+- Trigger: changing `MessageSendRequest`, `/api/v1/messages/send`, private/group WebSocket senders, message idempotency, reply metadata, or Redis Stream publication.
+- Applies to both private and group messages. A transport may return a different success envelope, but authentication, validation, persistence, idempotency, and publication semantics must remain equivalent.
+
+### 2. Signatures
+
+```java
+MessageResponse MessageService.sendMessage(MessageSendRequest request, String authenticatedUserId);
+String ConversationIdUtil.privateConversationId(String firstUserId, String secondUserId);
+
+PrivateMessage PrivateMessageRepository.findBySenderIdAndClientMessageId(
+    String senderId, String clientMessageId);
+GroupMessage GroupMessageRepository.findBySenderIdAndClientMessageId(
+    String senderId, String clientMessageId);
+```
+
+```http
+POST /api/v1/messages/send
+Content-Type: application/json
+```
+
+```json
+{
+  "target_id": "usr_xxx or grp_xxx",
+  "message_type": "text",
+  "content": "message body",
+  "client_message_id": "stable retry key",
+  "reply_to_message_id": "optional msg_xxx",
+  "at_user_ids": ["optional usr_xxx"]
+}
+```
+
+WebSocket requests use the same `message_type`, `content`, `client_message_id`, and `reply_to_message_id`; private messages additionally carry `conversation_id` and `receiver_id`, while group messages carry `group_id`.
+
+### 3. Contracts
+
+- External JSON fields are snake_case. Jackson camelCase aliases may be accepted for Java/legacy compatibility, but new clients must not rely on them.
+- HTTP identity comes from `@AuthenticationPrincipal UserIDProvider`; WebSocket identity comes from `WebSocketSession.userId`. Payload `sender_id` is never authoritative.
+- `client_message_id` is required and idempotent per sender. A duplicate returns the first persisted message and must not rebuild the reply snapshot, save again, or publish Redis again.
+- The send order is: authenticate and validate access -> idempotency lookup -> create authoritative reply snapshot when requested -> save MongoDB -> publish Redis Stream -> return HTTP `MessageResponse` or send WebSocket `MESSAGE_ACK`.
+- Private HTTP sends derive the conversation with `ConversationIdUtil.privateConversationId(...)`; conversation creation and every other deterministic private-ID caller must reuse this utility.
+- A reply request supplies only `reply_to_message_id`. `MessageReplyService` owns target access checks and preview generation.
+- Redis event types remain `PRIVATE_MESSAGE` and `GROUP_MESSAGE`. HTTP sends publish the same document JSON consumed by existing WebSocket receivers.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required behavior |
+|---|---|
+| Missing/blank target, type, or client ID; null content | HTTP 400 / WebSocket structured rejection; no save or publish |
+| Private target equals authenticated sender | Reject; no save or publish |
+| Sender is not an exact private-conversation participant | HTTP 403 / WebSocket rejection; no save or publish |
+| Sender is not a current group member | HTTP 403 / WebSocket rejection; no save or publish |
+| Reply target missing, cross-conversation, inaccessible, or recalled | `REPLY_TARGET_UNAVAILABLE` (HTTP 409); no save, publish, or ACK |
+| Duplicate `(senderId, clientMessageId)` | Return the original HTTP response or ACK; do not inspect a replacement reply target |
+| Mongo save or Redis publish throws | Do not emit `MESSAGE_ACK`; propagate failure to HTTP |
+
+### 5. Good / Base / Bad Cases
+
+- Good: an HTTP private reply validates the deterministic conversation, saves one Mongo document, publishes one `PRIVATE_MESSAGE`, and the online peer receives `PRIVATE_MESSAGE_RESPONSE` with `reply_to`.
+- Base: a client sends a normal message without `reply_to_message_id`; the send path performs no reply-target query.
+- Good: retrying the same HTTP request with the same `client_message_id` returns the original `message_id` and does not broadcast a duplicate.
+- Bad: computing private conversation IDs locally with extra separators, accepting `targetId` as the primary wire field, or saving an HTTP message without Redis publication.
+
+### 6. Tests Required
+
+- DTO/ObjectMapper: snake_case request fields deserialize correctly; camelCase aliases remain compatible.
+- Unit: private and group access rejection asserts no Mongo save and no Redis interaction.
+- Unit: duplicate private and group client IDs return the original message and skip reply snapshot creation/publication.
+- Unit: reply rejection asserts no persistence or publication.
+- Integration/E2E: a real HTTP reply reaches the peer through Redis/WebSocket, survives history reload, is idempotent, and is redacted after target recall.
+- Integration/E2E: a recalled target produces HTTP 409 with `REPLY_TARGET_UNAVAILABLE` and no new history record.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```java
+// Wrong ID shape, no access check, no idempotency, and no realtime delivery.
+String conversationId = "conv_" + left + "_" + right;
+privateMessageRepository.save(message);
+return convertPrivateMessageToResponse(message);
+```
+
+#### Correct
+
+```java
+String conversationId = ConversationIdUtil.privateConversationId(senderId, receiverId);
+assertPrivateConversationAccess(conversationId, senderId, receiverId);
+PrivateMessage existing = privateMessageRepository
+        .findBySenderIdAndClientMessageId(senderId, request.getClientMsgId());
+if (existing != null) {
+    return convertPrivateMessageToResponse(existing);
+}
+message.setReplyTo(createReplySnapshot(conversationId, request.getReplyToMessageId(), senderId));
+privateMessageRepository.save(message);
+redisStreamService.publishPrivateMessage(
+        "PRIVATE_MESSAGE", senderId, serializeMessage(message), receiverId);
+return convertPrivateMessageToResponse(message);
+```
