@@ -37,6 +37,11 @@ public interface PrivateMessageRepository extends MongoRepository<PrivateMessage
      * 根据客户端消息ID查询消息
      */
     PrivateMessage findByClientMessageId(String clientMessageId);
+
+    /**
+     * 按发送者和客户端消息ID查询，避免不同发送者使用相同客户端ID时误去重。
+     */
+    PrivateMessage findBySenderIdAndClientMessageId(String senderId, String clientMessageId);
     
     /**
      * 根据消息ID查询
@@ -56,5 +61,16 @@ public interface PrivateMessageRepository extends MongoRepository<PrivateMessage
     /**
      * 查询序列号大于指定值的消息，用于增量同步
      */
-    List<PrivateMessage> findByConversationIdAndSeqIdGreaterThanOrderBySeqIdAsc(String conversationId, Long seqId);
+    @Query("{ 'conversationId': ?0, '$expr': { '$gt': [ { '$toDecimal': '$seqId' }, { '$toDecimal': ?1 } ] } }")
+    List<PrivateMessage> findByConversationIdAndSeqIdGreaterThanOrderBySeqIdAsc(String conversationId, String seqId);
+
+    @Query(value = "{ 'conversationId': ?0, '$expr': { '$gt': [ { '$toDecimal': '$seqId' }, { '$toDecimal': ?1 } ] } }", count = true)
+    long countByConversationIdAndSeqIdGreaterThan(String conversationId, String seqId);
+
+    @Query(value = "{ 'conversationId': ?0, 'receiverId': ?1, '$expr': { '$gt': [ { '$toDecimal': '$seqId' }, { '$toDecimal': ?2 } ] } }", count = true)
+    long countUnreadByConversationIdAndReceiverIdAndSeqIdGreaterThan(String conversationId, String receiverId, String seqId);
+
+    PrivateMessage findByConversationIdAndSeqId(String conversationId, String seqId);
+
+    PrivateMessage findTopByConversationIdOrderBySeqIdDesc(String conversationId);
 }

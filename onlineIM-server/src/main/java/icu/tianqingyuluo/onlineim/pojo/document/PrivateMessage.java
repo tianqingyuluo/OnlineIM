@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.pojo.document;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -27,10 +28,11 @@ public class PrivateMessage {
     private String messageType;    // 消息类型：text, image, voice, file, etc.
     private String content;        // 文本内容或媒体文件引用
     private Integer status;        // 消息状态：0-发送中，1-已送达，2-发送失败，3-已撤回
+    @JsonProperty("client_message_id")
     private String clientMessageId; // 客户端去重
     private String seqId;            // 序列号，用于消息排序和增量同步
     private Date timestamp;        // 消息时间戳
     private Date createdAt;        // 创建时间
     private Date updatedAt;        // 更新时间
     private Map<String, Object> ext; // 扩展字段，用于存储自定义属性
-} 
+}

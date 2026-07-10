@@ -9,6 +9,7 @@ import icu.tianqingyuluo.onlineim.repository.ConversationRepository;
 import icu.tianqingyuluo.onlineim.service.ConversationService;
 import icu.tianqingyuluo.onlineim.service.FriendService;
 import icu.tianqingyuluo.onlineim.service.GroupService;
+import icu.tianqingyuluo.onlineim.service.ConversationReadStateService;
 import icu.tianqingyuluo.onlineim.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Sort;
@@ -30,14 +31,21 @@ public class ConversationServiceImpl implements ConversationService {
     private final UserService userService;
     private final FriendService friendService;
     private final UserFriendMapper userFriendMapper;
+    private final ConversationReadStateService readStateService;
 
     @Autowired
-    public ConversationServiceImpl(ConversationRepository conversationRepository, GroupService groupService, UserService userService, FriendService friendService, UserFriendMapper userFriendMapper) {
+    public ConversationServiceImpl(ConversationRepository conversationRepository,
+                                   GroupService groupService,
+                                   UserService userService,
+                                   FriendService friendService,
+                                   UserFriendMapper userFriendMapper,
+                                   ConversationReadStateService readStateService) {
         this.conversationRepository = conversationRepository;
         this.groupService = groupService;
         this.userService = userService;
         this.friendService = friendService;
         this.userFriendMapper = userFriendMapper;
+        this.readStateService = readStateService;
     }
 
     @Override
@@ -51,7 +59,7 @@ public class ConversationServiceImpl implements ConversationService {
                 conversationResponses.add(convertToConversationResponse(conversation, userId));
             }
             else {
-                conversationResponses.add(convertToConversationResponse(conversation, conversation.getTargetId()));
+                conversationResponses.add(convertToConversationResponse(conversation, userId));
             }
 
         }
@@ -252,12 +260,29 @@ public class ConversationServiceImpl implements ConversationService {
         }
         
         // 构建会话响应对象
+        String deliveredSeq = "0";
+        String readSeq = "0";
+        String latestSeq = "0";
+        Integer unreadCount = conversation.getUnreadCount();
+        try {
+            var readState = readStateService.getReadState(conversation.getId(), userId, null);
+            deliveredSeq = readState.getDeliveredSeq();
+            readSeq = readState.getReadSeq();
+            latestSeq = readState.getLatestSeq();
+            unreadCount = Math.toIntExact(readState.getUnreadCount());
+        } catch (RuntimeException ignored) {
+            // 历史会话可能尚未建立 read state，保留旧会话字段并在后续访问时懒创建。
+        }
+
         return ConversationResponse.builder()
                 .conversationID(conversation.getId())
                 .type(conversation.getConversationType())
                 .targetInfo(targetInfo)
                 .lastMessage(lastMessage)
-                .unreadCount(conversation.getUnreadCount())
+                .unreadCount(unreadCount)
+                .deliveredSeq(deliveredSeq)
+                .readSeq(readSeq)
+                .latestSeq(latestSeq)
                 .isMuted(conversation.getMute())
                 .isPinned(conversation.getTop())
                 .lastActivityTime(dateFormat.format(conversation.getUpdatedAt()))

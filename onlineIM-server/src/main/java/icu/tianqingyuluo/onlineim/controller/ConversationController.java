@@ -3,7 +3,10 @@ package icu.tianqingyuluo.onlineim.controller;
 import icu.tianqingyuluo.onlineim.pojo.document.Conversation;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.ConversationCreateRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.ConversationResponse;
+import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageReadersResponse;
+import icu.tianqingyuluo.onlineim.pojo.dto.response.ReadStateResponse;
 import icu.tianqingyuluo.onlineim.repository.ConversationRepository;
+import icu.tianqingyuluo.onlineim.service.ConversationReadStateService;
 import icu.tianqingyuluo.onlineim.service.ConversationService;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,12 +26,17 @@ public class ConversationController {
     private final ConversationService conversationService;
     private final JwtUtil jwtUtil;
     private final ConversationRepository conversationRepository;
+    private final ConversationReadStateService readStateService;
 
     @Autowired
-    public ConversationController(ConversationService conversationService, JwtUtil jwtUtil, ConversationRepository conversationRepository) {
+    public ConversationController(ConversationService conversationService,
+                                  JwtUtil jwtUtil,
+                                  ConversationRepository conversationRepository,
+                                  ConversationReadStateService readStateService) {
         this.conversationService = conversationService;
         this.jwtUtil = jwtUtil;
         this.conversationRepository = conversationRepository;
+        this.readStateService = readStateService;
     }
 
     /**
@@ -270,14 +278,51 @@ public class ConversationController {
             @RequestHeader("Authorization") String token,
             @PathVariable String conversationId,
             @PathVariable String seqId) {
-//        String userId = jwtUtil.getUserIDFromToken(token);
-//        if (userId == null) {
-//            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-//        }
-//
-//        Map<String, Object> result = conversationService.getUnreadCount(userId);
-//        return ResponseEntity.ok(result);
-        return null;
-        // 需要修改成根据seqId拿到该conversation的seqId后面的消息数统计
+        String userId = jwtUtil.getUserIDFromToken(token);
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        ReadStateResponse response = readStateService.getReadState(conversationId, userId, seqId);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("conversation_id", response.getConversationId());
+        result.put("from_seq_id", seqId);
+        result.put("read_seq", response.getReadSeq());
+        result.put("latest_seq", response.getLatestSeq());
+        result.put("unread_count", response.getUnreadCount());
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * 获取当前用户在会话中的送达/已读游标，用于首次加载和重连恢复。
+     */
+    @GetMapping("/{conversationId}/read-state")
+    public ResponseEntity<ReadStateResponse> getReadState(
+            @RequestHeader("Authorization") String token,
+            @PathVariable String conversationId) {
+        String userId = jwtUtil.getUserIDFromToken(token);
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        return ResponseEntity.ok(readStateService.getReadState(conversationId, userId, null));
+    }
+
+    /**
+     * 获取消息的阅读成员明细。
+     */
+    @GetMapping("/{conversationId}/messages/{messageId}/readers")
+    public ResponseEntity<MessageReadersResponse> getMessageReaders(
+            @RequestHeader("Authorization") String token,
+            @PathVariable String conversationId,
+            @PathVariable String messageId) {
+        String userId = jwtUtil.getUserIDFromToken(token);
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        MessageReadersResponse response = readStateService.getMessageReaders(conversationId, messageId, userId);
+        if (response == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(response);
     }
 }

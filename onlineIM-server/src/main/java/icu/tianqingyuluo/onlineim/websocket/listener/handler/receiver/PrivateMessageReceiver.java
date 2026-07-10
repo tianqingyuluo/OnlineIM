@@ -82,14 +82,6 @@ public class PrivateMessageReceiver implements MessageReceiverHandler {
             response.put("type", "PRIVATE_MESSAGE_RESPONSE");
             response.put("message", messageResponse);
             
-            // 向发送者发送响应（确认消息已送达）
-            WebSocketSession senderSession = sessionRegistry.getByUserId(event.getSenderID());
-            if (senderSession != null && senderSession.isActive()) {
-                String responseJson = objectMapper.writeValueAsString(response);
-                senderSession.sendMessage(responseJson);
-                log.debug("已向发送者 {} 发送消息确认", event.getSenderID());
-            }
-            
             // 向接收者发送消息
             WebSocketSession receiverSession = sessionRegistry.getByUserId(privateMessage.getReceiverId());
             if (receiverSession != null && receiverSession.isActive()) {

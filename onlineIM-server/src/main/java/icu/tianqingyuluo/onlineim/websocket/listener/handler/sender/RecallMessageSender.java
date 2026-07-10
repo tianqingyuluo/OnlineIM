@@ -10,6 +10,7 @@ import icu.tianqingyuluo.onlineim.pojo.entity.GroupMember;
 import icu.tianqingyuluo.onlineim.repository.RecallLogRepository;
 import icu.tianqingyuluo.onlineim.service.GroupMemberService;
 import icu.tianqingyuluo.onlineim.service.RedisStreamService;
+import icu.tianqingyuluo.onlineim.websocket.session.WebSocketSession;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -41,9 +42,12 @@ public class RecallMessageSender implements MessageSenderHandler {
 
     @SneakyThrows
     @Override
-    public boolean publishMessage(String message) {
+    public boolean publishMessage(WebSocketSession session, String message) {
 
         RecallMessageRequest request = objectMapper.readValue(message, RecallMessageRequest.class);
+        if (session != null && session.getUserId() != null) {
+            request.setOperatorId(session.getUserId());
+        }
         List<String> receiverIds = new ArrayList<>();
 
         // 创建recalllog持久化对象

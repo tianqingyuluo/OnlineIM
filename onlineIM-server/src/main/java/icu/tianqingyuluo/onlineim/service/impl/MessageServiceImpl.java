@@ -15,6 +15,7 @@ import icu.tianqingyuluo.onlineim.repository.RecallLogRepository;
 import icu.tianqingyuluo.onlineim.service.GroupMemberService;
 import icu.tianqingyuluo.onlineim.service.MessageService;
 import icu.tianqingyuluo.onlineim.service.UserService;
+import icu.tianqingyuluo.onlineim.util.SeqIdComparator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -69,7 +70,10 @@ public class MessageServiceImpl implements MessageService {
         
         if (seqId != null && !seqId.isEmpty()) {
             // 查找指定序列号之前的消息
-            PrivateMessage refMessage = privateMessageRepository.findById(seqId).orElse(null);
+            PrivateMessage refMessage = privateMessageRepository.findByConversationIdAndSeqId(conversationId, seqId);
+            if (refMessage == null) {
+                refMessage = privateMessageRepository.findById(seqId).orElse(null);
+            }
             if (refMessage != null) {
                 messages = privateMessageRepository.findMessagesBeforeTimestamp(
                         conversationId, refMessage.getTimestamp(), pageable);
@@ -97,7 +101,10 @@ public class MessageServiceImpl implements MessageService {
         
         if (seqId != null && !seqId.isEmpty()) {
             // 查找指定序列号之前的消息
-            GroupMessage refMessage = groupMessageRepository.findById(seqId).orElse(null);
+            GroupMessage refMessage = groupMessageRepository.findByGroupIdAndSeqId(groupId, seqId);
+            if (refMessage == null) {
+                refMessage = groupMessageRepository.findById(seqId).orElse(null);
+            }
             if (refMessage != null) {
                 messages = groupMessageRepository.findMessagesBeforeTimestamp(
                         groupId, refMessage.getTimestamp(), pageable);
@@ -212,32 +219,34 @@ public class MessageServiceImpl implements MessageService {
     public List<MessageResponse> syncMessages(String conversationId, String seqId, String userId) {
         // 根据会话ID的前缀判断是群聊还是单聊
         List<MessageResponse> messages = new ArrayList<>();
-        long seqIdLong;
+        String normalizedSeqId;
         try {
-            seqIdLong = Long.parseLong(seqId);
-        } catch (NumberFormatException e) {
+            normalizedSeqId = SeqIdComparator.requireValid(seqId);
+        } catch (IllegalArgumentException e) {
             // 如果 seqId 不是有效的数字，返回空列表
             return messages;
         }
         
         if (conversationId.startsWith("grp_")) {
             // 群聊消息
-            // 查询序列号大于 seqIdLong 的群聊消息
+            // 查询序列号大于 normalizedSeqId 的群聊消息
             List<GroupMessage> groupMessages = groupMessageRepository.findByGroupIdAndSeqIdGreaterThanOrderBySeqIdAsc(
-                    conversationId, seqIdLong);
+                    conversationId, normalizedSeqId);
             
             // 转换为响应对象
             messages = groupMessages.stream()
+                    .sorted((left, right) -> SeqIdComparator.compare(left.getSeqId(), right.getSeqId()))
                     .map(this::convertGroupMessageToResponse)
                     .collect(Collectors.toList());
         } else {
             // 单聊消息
-            // 查询序列号大于 seqIdLong 的单聊消息
+            // 查询序列号大于 normalizedSeqId 的单聊消息
             List<PrivateMessage> privateMessages = privateMessageRepository.findByConversationIdAndSeqIdGreaterThanOrderBySeqIdAsc(
-                    conversationId, seqIdLong);
+                    conversationId, normalizedSeqId);
             
             // 转换为响应对象
             messages = privateMessages.stream()
+                    .sorted((left, right) -> SeqIdComparator.compare(left.getSeqId(), right.getSeqId()))
                     .map(this::convertPrivateMessageToResponse)
                     .collect(Collectors.toList());
         }
@@ -339,6 +348,7 @@ public class MessageServiceImpl implements MessageService {
                 .messageType(message.getMessageType())
                 .content(message.getContent())
                 .status(status)
+                .deliveryState("sent")
                 .seqId(message.getSeqId())
                 .clientMessageId(message.getClientMessageId())
                 .isRecalled(message.getStatus() == 3)
@@ -370,6 +380,7 @@ public class MessageServiceImpl implements MessageService {
                 .content(message.getContent())
                 .mentionedUserIds(message.getAtUsers())
                 .status(status)
+                .deliveryState("sent")
                 .seqId(message.getSeqId())
                 .clientMessageId(message.getClientMessageId())
                 .isRecalled(message.getStatus() == 3)

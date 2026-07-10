@@ -73,13 +73,27 @@ class WebSocketMessageRouterTest {
     void businessMessageGoesThroughRegistry() {
         when(senderRegistry.supportMessageType("PRIVATE_MESSAGE_REQUEST")).thenReturn(true);
         MessageSenderHandler handler = mock(MessageSenderHandler.class);
-        when(handler.publishMessage(any())).thenReturn(true);
+        when(handler.publishMessage(eq(session), any())).thenReturn(true);
         when(senderRegistry.getHandler("PRIVATE_MESSAGE_REQUEST")).thenReturn(handler);
 
         router.route(session, "{\"type\":\"PRIVATE_MESSAGE_REQUEST\",\"message\":{\"content\":\"hi\"}}");
 
         verify(senderRegistry).supportMessageType("PRIVATE_MESSAGE_REQUEST");
-        verify(handler).publishMessage(any());
+        verify(handler).publishMessage(eq(session), any());
+    }
+
+    @Test
+    void rejectedBusinessMessageErrorContainsClientMessageId() {
+        when(senderRegistry.supportMessageType("PRIVATE_MESSAGE_REQUEST")).thenReturn(true);
+        MessageSenderHandler handler = mock(MessageSenderHandler.class);
+        when(handler.publishMessage(eq(session), any())).thenReturn(false);
+        when(senderRegistry.getHandler("PRIVATE_MESSAGE_REQUEST")).thenReturn(handler);
+
+        router.route(session, "{\"type\":\"PRIVATE_MESSAGE_REQUEST\",\"message\":{"
+                + "\"client_message_id\":\"client_1\"}}");
+
+        verify(mockSocket).writeTextMessage(contains("client_message_id"));
+        verify(mockSocket).writeTextMessage(contains("client_1"));
     }
 
     @Test

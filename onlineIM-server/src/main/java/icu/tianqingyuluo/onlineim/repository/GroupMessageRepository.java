@@ -37,6 +37,11 @@ public interface GroupMessageRepository extends MongoRepository<GroupMessage, St
      * 根据客户端消息ID查询消息
      */
     GroupMessage findByClientMessageId(String clientMsgId);
+
+    /**
+     * 按发送者和客户端消息ID查询，避免不同发送者使用相同客户端ID时误去重。
+     */
+    GroupMessage findBySenderIdAndClientMessageId(String senderId, String clientMessageId);
     
     /**
      * 根据消息ID查询
@@ -57,5 +62,16 @@ public interface GroupMessageRepository extends MongoRepository<GroupMessage, St
     /**
      * 查询序列号大于指定值的消息，用于增量同步
      */
-    List<GroupMessage> findByGroupIdAndSeqIdGreaterThanOrderBySeqIdAsc(String groupId, Long seqId);
+    @Query("{ 'groupId': ?0, '$expr': { '$gt': [ { '$toDecimal': '$seqId' }, { '$toDecimal': ?1 } ] } }")
+    List<GroupMessage> findByGroupIdAndSeqIdGreaterThanOrderBySeqIdAsc(String groupId, String seqId);
+
+    @Query(value = "{ 'groupId': ?0, '$expr': { '$gt': [ { '$toDecimal': '$seqId' }, { '$toDecimal': ?1 } ] } }", count = true)
+    long countByGroupIdAndSeqIdGreaterThan(String groupId, String seqId);
+
+    @Query(value = "{ 'groupId': ?0, 'senderId': { '$ne': ?1 }, '$expr': { '$gt': [ { '$toDecimal': '$seqId' }, { '$toDecimal': ?2 } ] } }", count = true)
+    long countUnreadByGroupIdAndUserIdAndSeqIdGreaterThan(String groupId, String userId, String seqId);
+
+    GroupMessage findByGroupIdAndSeqId(String groupId, String seqId);
+
+    GroupMessage findTopByGroupIdOrderBySeqIdDesc(String groupId);
 }

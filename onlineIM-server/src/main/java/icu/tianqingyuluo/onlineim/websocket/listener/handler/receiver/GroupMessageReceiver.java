@@ -94,16 +94,6 @@ public class GroupMessageReceiver implements MessageReceiverHandler {
             response.put("type", "GROUP_MESSAGE_RESPONSE");
             response.put("message", messageResponse);
             
-            // 向发送者发送响应（确认消息已送达）
-            WebSocketSession senderSession = sessionRegistry.getByUserId(event.getSenderID());
-            if (senderSession != null && senderSession.isActive()) {
-                String responseJson = objectMapper.writeValueAsString(response);
-                senderSession.sendMessage(responseJson);
-                log.debug("已向发送者 {} 发送消息确认", event.getSenderID());
-            } else {
-                log.info("发送者 {} 在本服务器没有连接存在", event.getSenderID());
-            }
-            
 //            // 获取群组成员列表
 //            List<String> groupMembers = groupMemberService
 //                    .getGroupMembers(groupMessage.getGroupId())

@@ -50,7 +50,11 @@ public class MessageController {
         }
         
         List<MessageResponse> messages = messageService.getHistory(conversationId, seqId, size, userId);
-        return ResponseEntity.ok(messages);
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("messages", messages);
+        result.put("has_more_before", messages.size() >= size);
+        result.put("has_more_after", false);
+        return ResponseEntity.ok(result);
     }
     
     /**
