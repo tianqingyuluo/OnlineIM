@@ -10,7 +10,8 @@
     "proxy": "node proxy-server.js",
     "dev-all": "concurrently \"npm run dev\" \"npm run proxy\"",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.1",
@@ -37,6 +38,7 @@
     "zod": "^3.24.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/lodash": "^4.17.17",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-vue": "^5.2.1",

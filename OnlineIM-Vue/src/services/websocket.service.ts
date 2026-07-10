@@ -6,6 +6,7 @@ import { dbService } from '@/utils/indexedDB.ts';
 import { toast } from 'vue-sonner';
 import type {
   MessageAckPayload,
+  MessageRecalledPayload,
   MessageResponse,
   ReadReceiptPayload,
   ReceiptPayload,
@@ -114,7 +115,9 @@ export class WebSocketService {
       try {
         const frame = JSON.parse(String(event.data)) as { type?: unknown; message?: unknown };
         const type = typeof frame.type === 'string' ? frame.type : '';
-        const payload = isJsonPayload(frame.message) ? frame.message : {};
+        const payload = isJsonPayload(frame.message)
+          ? frame.message
+          : isJsonPayload(frame) ? frame : {};
 
         if (type === 'HEARTBEAT_ACK') {
           this.missedAckCount = 0;
@@ -144,6 +147,10 @@ export class WebSocketService {
           case 'ERROR':
             historyStore.handleServerError(payload as ServerErrorPayload);
             toast.error((payload as ServerErrorPayload).message || '消息处理失败');
+            break;
+          case 'MESSAGE_RECALLED':
+          case 'RECALL_MESSAGE_RESPONSE':
+            void historyStore.handleMessageRecalled(payload as unknown as MessageRecalledPayload);
             break;
           default:
             break;
@@ -272,7 +279,9 @@ export class WebSocketService {
     try {
       const userId = useUserStore().loggedInUser.user_id;
       const message = payload.message;
-      const conversationId = asString(message.conversation_id) || asString(message.target_id);
+      const conversationId = asString(message.conversation_id)
+        || asString(message.group_id)
+        || asString(message.target_id);
       if (!conversationId) {
         console.error('无法入队：缺少会话 ID');
         return null;

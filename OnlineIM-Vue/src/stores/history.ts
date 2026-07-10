@@ -1,10 +1,13 @@
 import { defineStore } from 'pinia';
 import type {
   MessageAckPayload,
+  MessageRecalledPayload,
   MessageResponse,
   MessageUserBrief,
   ReadReceiptPayload,
+  ReplyReference,
   ReceiptPayload,
+  ServerErrorPayload,
 } from '@/type/message';
 import { advanceDeliveryState, type DeliveryState } from '@/utils/message-state';
 import { dbService } from '@/utils/indexedDB';
@@ -13,6 +16,7 @@ import { useUserStore } from '@/stores/user';
 import { websocketService } from '@/services/websocket.service';
 import { conversationService } from '@/services/conversation.service';
 import { compareSeqId, maxSeqId } from '@/utils/seq-id';
+import { buildReplyReference } from '@/utils/reply-preview';
 
 interface PendingMessageRange {
   id?: number;
@@ -36,9 +40,26 @@ interface PendingMessageInfoItem {
   receiverId: string;
   isGroup: boolean;
   atUsers?: string[];
+  replyTo?: ReplyReference;
   attempts: number;
   state: DeliveryState;
   timeoutId?: ReturnType<typeof setTimeout>;
+}
+
+export interface ReplyComposerTarget {
+  conversationId: string;
+  reference: ReplyReference;
+}
+
+export interface FailedReplyDraft {
+  clientId: string;
+  conversationId: string;
+  receiverId: string;
+  content: string;
+  messageType: string;
+  isGroup: boolean;
+  atUsers?: string[];
+  replyTarget: ReplyComposerTarget;
 }
 
 interface ConversationReadState {
@@ -71,11 +92,33 @@ export const useHistoryStore = defineStore('history', {
     deliveredCursors: {} as Record<string, Record<string, string>>,
     readersByMessage: {} as Record<string, MessageUserBrief[]>,
     visibleMessageIds: {} as Record<string, Record<string, boolean>>,
+    replyTarget: null as ReplyComposerTarget | null,
+    failedReplyDraft: null as FailedReplyDraft | null,
   }),
 
   actions: {
     generateClientId(): string {
       return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 11)}`;
+    },
+
+    selectReplyTarget(message: MessageResponse): boolean {
+      const reference = buildReplyReference(message);
+      if (!reference) return false;
+      this.replyTarget = {
+        conversationId: message.conversation_id,
+        reference,
+      };
+      return true;
+    },
+
+    cancelReplyTarget(): void {
+      this.replyTarget = null;
+    },
+
+    consumeFailedReplyDraft(): FailedReplyDraft | null {
+      const draft = this.failedReplyDraft;
+      this.failedReplyDraft = null;
+      return draft;
     },
 
     async init() {
@@ -89,9 +132,14 @@ export const useHistoryStore = defineStore('history', {
       this.chatMessages = [];
       this.pendingMessages = {};
       this.hasInit = false;
+      this.replyTarget = null;
+      this.failedReplyDraft = null;
     },
 
     async loadInitialHistory(userId: string, conversationId: string, isGroup = false) {
+      if (this.activeConversationId && this.activeConversationId !== conversationId) {
+        this.cancelReplyTarget();
+      }
       this.activeConversationId = conversationId;
       this.activeConversationIsGroup = isGroup;
       await this.refreshReadState(conversationId);
@@ -298,6 +346,9 @@ export const useHistoryStore = defineStore('history', {
       const clientId = this.generateClientId();
       const timestamp = new Date().toISOString();
       const currentUser = useUserStore().loggedInUser;
+      const replyTo = this.replyTarget?.conversationId === conversationId
+        ? { ...this.replyTarget.reference }
+        : undefined;
       const tempMessage: MessageResponse = {
         message_id: `local_${clientId}`,
         conversation_id: conversationId,
@@ -316,6 +367,7 @@ export const useHistoryStore = defineStore('history', {
         is_recalled: false,
         client_message_id: clientId,
         mentioned_user_ids: atUsers,
+        reply_to: replyTo,
       };
       if (isGroup) this.groupMessages.push(tempMessage);
       else this.chatMessages.push(tempMessage);
@@ -330,6 +382,7 @@ export const useHistoryStore = defineStore('history', {
         receiverId,
         isGroup,
         atUsers,
+        replyTo,
         attempts: 1,
         state: 'sending',
       };
@@ -342,6 +395,7 @@ export const useHistoryStore = defineStore('history', {
             message_type: messageType,
             content,
             client_message_id: clientId,
+            ...(replyTo ? { reply_to_message_id: replyTo.message_id } : {}),
             ...(atUsers ? { at_users: atUsers } : {}),
           }
         : {
@@ -350,6 +404,7 @@ export const useHistoryStore = defineStore('history', {
             message_type: messageType,
             content,
             client_message_id: clientId,
+            ...(replyTo ? { reply_to_message_id: replyTo.message_id } : {}),
           };
       websocketService.sendMessage({
         type: isGroup ? 'GROUP_MESSAGE_REQUEST' : 'PRIVATE_MESSAGE_REQUEST',
@@ -381,6 +436,7 @@ export const useHistoryStore = defineStore('history', {
         receiverId,
         isGroup,
         atUsers: message.mentioned_user_ids,
+        replyTo: message.reply_to,
         attempts: 1,
         state: 'sending',
       };
@@ -388,14 +444,6 @@ export const useHistoryStore = defineStore('history', {
       message.delivery_state = 'sending';
       this.sendPendingMessage(item);
       this.schedulePendingRetry(item.clientId);
-    },
-
-    isMessagePending(clientId: string): boolean {
-      return this.pendingMessagesInfo.some(item => item.clientId === clientId);
-    },
-
-    isMessageTimeout(clientId: string): boolean {
-      return this.pendingMessagesInfo.find(item => item.clientId === clientId)?.state === 'failed';
     },
 
     getMessageDeliveryState(message: MessageResponse): DeliveryState {
@@ -502,6 +550,7 @@ export const useHistoryStore = defineStore('history', {
             message_type: item.messageType,
             content: item.content,
             client_message_id: item.clientId,
+            ...(item.replyTo ? { reply_to_message_id: item.replyTo.message_id } : {}),
             ...(item.atUsers ? { at_users: item.atUsers } : {}),
           }
         : {
@@ -510,6 +559,7 @@ export const useHistoryStore = defineStore('history', {
             message_type: item.messageType,
             content: item.content,
             client_message_id: item.clientId,
+            ...(item.replyTo ? { reply_to_message_id: item.replyTo.message_id } : {}),
           };
       websocketService.sendMessage({
         type: item.isGroup ? 'GROUP_MESSAGE_REQUEST' : 'PRIVATE_MESSAGE_REQUEST',
@@ -546,6 +596,16 @@ export const useHistoryStore = defineStore('history', {
       if (pendingIndex !== -1) {
         const pending = this.pendingMessagesInfo[pendingIndex];
         if (pending.timeoutId) clearTimeout(pending.timeoutId);
+        if (
+          pending.replyTo
+          && this.replyTarget?.conversationId === pending.conversationId
+          && this.replyTarget.reference.message_id === pending.replyTo.message_id
+        ) {
+          this.replyTarget = null;
+        }
+        if (this.failedReplyDraft?.clientId === pending.clientId) {
+          this.failedReplyDraft = null;
+        }
         this.pendingMessagesInfo.splice(pendingIndex, 1);
       }
       this.updateReadStateLatest(payload.conversation_id, payload.seq_id);
@@ -557,6 +617,60 @@ export const useHistoryStore = defineStore('history', {
 
     handleGroupWebSocketMessage(message: MessageResponse) {
       this.handleIncomingMessage(message, true);
+    },
+
+    async jumpToMessage(conversationId: string, messageId: string): Promise<MessageResponse | null> {
+      const inMemory = this.messagesForConversation(conversationId)
+        .find(message => message.message_id === messageId);
+      if (inMemory) return inMemory;
+
+      const userId = useUserStore().loggedInUser.user_id;
+      const isGroup = conversationId.startsWith('grp_')
+        || (this.activeConversationId === conversationId && this.activeConversationIsGroup);
+      const cached = await dbService.getHistoryMessage(userId, conversationId, messageId);
+      if (cached) {
+        this.processMessages([cached], isGroup);
+        return this.messagesForConversation(conversationId)
+          .find(message => message.message_id === messageId) || null;
+      }
+
+      const context = await MessageService.getMessageContext(conversationId, messageId);
+      if (context.messages.length > 0) {
+        await dbService.putHistory(context.messages);
+        this.processMessages(context.messages, isGroup);
+      }
+      return this.messagesForConversation(conversationId)
+        .find(message => message.message_id === messageId) || null;
+    },
+
+    async handleMessageRecalled(payload: MessageRecalledPayload): Promise<void> {
+      if (!payload?.message_id || !payload.conversation_id) return;
+      for (const message of this.messagesForConversation(payload.conversation_id)) {
+        if (message.message_id === payload.message_id) {
+          message.status = 3;
+          message.is_recalled = true;
+          message.content = '';
+        }
+        if (message.reply_to?.message_id === payload.message_id) {
+          message.reply_to = {
+            ...message.reply_to,
+            state: 'recalled',
+            preview_text: null,
+          };
+        }
+      }
+      if (this.replyTarget?.reference.message_id === payload.message_id) {
+        this.replyTarget.reference = {
+          ...this.replyTarget.reference,
+          state: 'recalled',
+          preview_text: null,
+        };
+      }
+      await dbService.markMessageRecalled(
+        useUserStore().loggedInUser.user_id,
+        payload.conversation_id,
+        payload.message_id,
+      );
     },
 
     handleReceipt(payload: ReceiptPayload) {
@@ -604,10 +718,30 @@ export const useHistoryStore = defineStore('history', {
       }
     },
 
-    handleServerError(payload: { client_message_id?: string; message?: string }) {
+    handleServerError(payload: ServerErrorPayload) {
       if (!payload?.client_message_id) return;
       const message = this.findMessage(payload.client_message_id);
       if (message) this.markMessageFailed(message.client_message_id);
+      if (payload.code !== 'REPLY_TARGET_UNAVAILABLE') return;
+      const pending = this.pendingMessagesInfo.find(
+        item => item.clientId === payload.client_message_id,
+      );
+      if (!pending?.replyTo) return;
+      const replyTarget: ReplyComposerTarget = {
+        conversationId: pending.conversationId,
+        reference: { ...pending.replyTo },
+      };
+      this.replyTarget = replyTarget;
+      this.failedReplyDraft = {
+        clientId: pending.clientId,
+        conversationId: pending.conversationId,
+        receiverId: pending.receiverId,
+        content: pending.content,
+        messageType: pending.messageType,
+        isGroup: pending.isGroup,
+        atUsers: pending.atUsers,
+        replyTarget,
+      };
     },
 
     async refreshReadState(conversationId: string) {
@@ -752,10 +886,15 @@ function normalizeDeliveryState(state: DeliveryState | undefined): DeliveryState
 }
 
 function normalizeMessage(message: MessageResponse): MessageResponse {
+  const replyTo = message.reply_to
+    && (message.reply_to.state === 'recalled' || message.reply_to.state === 'unavailable')
+    ? { ...message.reply_to, preview_text: null }
+    : message.reply_to;
   return {
     ...message,
     delivery_state: message.delivery_state || 'sent',
     readers: message.readers,
+    reply_to: replyTo,
   };
 }
 

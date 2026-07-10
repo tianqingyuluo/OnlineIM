@@ -163,7 +163,7 @@ async function handleSendClick() {
     try {
       const response = await MessageService.putMessage(
           groupId.value,
-          0,
+          'text',
           textareaEl.value
       )
       groupMessages.value.push(response)

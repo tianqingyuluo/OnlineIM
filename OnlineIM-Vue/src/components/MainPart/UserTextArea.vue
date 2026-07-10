@@ -1,113 +1,67 @@
 <script setup lang="ts">
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from '@/components/ui/context-menu'
-import { ref, nextTick } from 'vue'
+import MessageActions from '@/components/MainPart/MessageActions.vue'
+import MessageReplyPreview from '@/components/MainPart/MessageReplyPreview.vue'
+import type { ReplyReference } from '@/type/message'
 
-defineProps({
-  message: {
-    type: String,
-    required: true
-  },
-  isSelf: {
-    type: Boolean,
-    default: false
-  },
-  // 移除 avatarUrl 和 userName 属性，因为头像将在父组件中处理
+const props = withDefaults(defineProps<{
+  message: string
+  isSelf?: boolean
+  canReply?: boolean
+  recalled?: boolean
+  replyTo?: ReplyReference
+}>(), {
+  isSelf: false,
+  canReply: true,
+  recalled: false,
+  replyTo: undefined,
 })
 
-const isMenuOpen = ref(false)
-const messageRef = ref<HTMLDivElement | null>(null)
+const emit = defineEmits<{
+  reply: []
+  navigate: [reference: ReplyReference]
+}>()
 
-const functionMenuItems = [
-  {
-    title: "复制",
-  },
-  {
-    title: "撤回",
-  },
-  {
-    title: "删除",
-  },
-  {
-    title: "引用",
-  },
-];
-
-// 当菜单打开时选中文本
-const handleMenuOpenChange = (open: boolean) => {
-  isMenuOpen.value = open
-  if (open && messageRef.value) {
-    nextTick(() => {
-      const range = document.createRange()
-      range.selectNodeContents(messageRef.value!)
-      const selection = window.getSelection()
-      selection?.removeAllRanges()
-      selection?.addRange(range)
-    })
+async function copyMessage() {
+  if (props.recalled || !props.message) return
+  try {
+    await navigator.clipboard.writeText(props.message)
+  } catch (error) {
+    console.error('复制消息失败:', error)
   }
 }
 </script>
 
 <template>
-  <div :class="['max-w-[100%]']">
-    <!-- 对方消息 -->
-    <template v-if="!isSelf">
-      <ContextMenu class="w-full" v-model:open="isMenuOpen" @update:open="handleMenuOpenChange">
-        <ContextMenuTrigger class="w-full">
-          <div
-              ref="messageRef"
-              :class="[
-                'bg-gray-50 rounded-lg p-3 shadow-sm w-full select-text break-words whitespace-pre-wrap',
-                isMenuOpen ? 'bg-gray-200' : ''
-              ]"
-          >
-            {{ message }}
-          </div>
-        </ContextMenuTrigger>
-        <ContextMenuContent class="w-48">
-          <ContextMenuItem v-for="item in functionMenuItems" :key="item.title">
-            {{ item.title }}
-          </ContextMenuItem>
-        </ContextMenuContent>
-      </ContextMenu>
-    </template>
-    <!-- 自己的消息 -->
-    <template v-else>
-      <ContextMenu class="w-full" v-model:open="isMenuOpen" @update:open="handleMenuOpenChange">
-        <ContextMenuTrigger class="w-full">
-          <div
-              ref="messageRef"
-              :class="[
-                'bg-blue-50 rounded-lg p-3 shadow-sm w-full select-text break-all whitespace-pre-wrap',
-                isMenuOpen ? 'bg-gray-200' : ''
-              ]"
-          >
-            {{ message }}
-          </div>
-        </ContextMenuTrigger>
-        <ContextMenuContent class="w-48">
-          <ContextMenuItem v-for="item in functionMenuItems" :key="item.title">
-            {{ item.title }}
-          </ContextMenuItem>
-        </ContextMenuContent>
-      </ContextMenu>
-    </template>
-  </div>
+  <MessageActions
+    :can-reply="canReply && !recalled"
+    :align="isSelf ? 'end' : 'start'"
+    @reply="emit('reply')"
+    @copy="copyMessage"
+  >
+    <div
+      :class="[
+        'min-w-24 max-w-full rounded-xl px-3 py-2.5 shadow-sm ring-1 ring-black/[0.04]',
+        isSelf ? 'rounded-tr-sm bg-blue-50' : 'rounded-tl-sm bg-slate-50',
+      ]"
+    >
+      <MessageReplyPreview
+        v-if="replyTo"
+        :reference="replyTo"
+        class="mb-2"
+        @navigate="emit('navigate', $event)"
+      />
+      <div
+        v-if="recalled"
+        class="select-none text-sm italic text-slate-400"
+      >
+        消息已撤回
+      </div>
+      <div
+        v-else
+        class="select-text whitespace-pre-wrap break-words text-[15px] leading-6 text-slate-800"
+      >
+        {{ message }}
+      </div>
+    </div>
+  </MessageActions>
 </template>
-
-<style scoped>
-/* 气泡样式微调 */
-.bg-white {
-  border-top-left-radius: 0;
-}
-.bg-blue-50, .bg-gray-100 {
-  border-top-right-radius: 0;
-}
-.select-text {
-  user-select: text;
-}
-</style>

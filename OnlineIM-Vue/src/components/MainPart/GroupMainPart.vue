@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Ellipsis, CircleEllipsis, AlertCircle, Check, CheckCheck } from 'lucide-vue-next'
-import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, provide, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, provide, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
@@ -17,6 +17,10 @@ import type { MessageResponse } from '@/type/message'
 import { useUserStore } from '@/stores/user'
 import { useHistoryStore } from '@/stores/history'
 import { conversationService } from '@/services/conversation.service'
+import ReplyComposerBar from '@/components/MainPart/ReplyComposerBar.vue'
+import type { ReplyReference } from '@/type/message'
+import { focusMessageElement } from '@/utils/message-navigation'
+import { toast } from 'vue-sonner'
 
 const route = useRoute()
 const userStore = useUserStore()
@@ -97,6 +101,10 @@ function scrollToBottom() {
 }
 
 function handleKeyDown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    historyStore.cancelReplyTarget()
+    return
+  }
   if (event.key === 'Enter' && !event.ctrlKey && !event.shiftKey) {
     event.preventDefault()
     void handleSendClick()
@@ -123,6 +131,26 @@ async function handleSendClick() {
 
 function handleRetry(message: MessageResponse) {
   historyStore.retryMessage(message, true, groupId.value)
+}
+
+function handleReply(message: MessageResponse) {
+  if (historyStore.selectReplyTarget(message)) messageInputRef.value?.focus()
+}
+
+async function handleReplyNavigate(reference: ReplyReference) {
+  const container = messageScrollRef.value
+  const previousScrollTop = container?.scrollTop
+  try {
+    const target = await historyStore.jumpToMessage(groupId.value, reference.message_id)
+    if (!target) throw new Error('message unavailable')
+    await nextTick()
+    if (!container || !focusMessageElement(container, target.message_id)) {
+      throw new Error('message element unavailable')
+    }
+  } catch (error) {
+    if (container && previousScrollTop !== undefined) container.scrollTop = previousScrollTop
+    toast.error('原消息不可用')
+  }
 }
 
 function toggleReaders(message: MessageResponse) {
@@ -164,6 +192,20 @@ onMounted(() => {
   void loadConversation()
 })
 
+watch(groupId, (nextId, previousId) => {
+  if (previousId && nextId !== previousId) void loadConversation()
+})
+
+watch(() => historyStore.failedReplyDraft, async draft => {
+  if (!draft || draft.conversationId !== groupId.value) return
+  await nextTick()
+  const textarea = messageInputRef.value
+  if (!textarea || textarea.value.trim()) return
+  textarea.value = draft.content
+  textarea.focus()
+  historyStore.consumeFailedReplyDraft()
+})
+
 onUpdated(() => {
   installMessageObserver()
 })
@@ -172,6 +214,9 @@ onBeforeUnmount(() => {
   messageObserver?.disconnect()
   visibleTimers.forEach(timer => clearTimeout(timer))
   visibleTimers.clear()
+  if (historyStore.replyTarget?.conversationId === groupId.value) {
+    historyStore.cancelReplyTarget()
+  }
 })
 </script>
 
@@ -198,13 +243,14 @@ onBeforeUnmount(() => {
       </Transition>
     </div>
 
-    <div ref="messageScrollRef" class="flex-1 overflow-y-auto p-4" @scroll="handleScroll">
+    <div ref="messageScrollRef" data-testid="message-scroll" class="flex-1 overflow-y-auto p-4" @scroll="handleScroll">
       <div v-if="historyStore.noMoreInfo" class="flex justify-center py-2 text-sm text-gray-500">没有更多信息</div>
       <div v-if="historyStore.groupMessages.length > 0" ref="messageListRef" class="space-y-4">
         <div
           v-for="message in historyStore.groupMessages"
           :key="message.message_id"
           :data-message-id="message.message_id"
+          class="rounded-xl transition-shadow duration-300"
         >
           <div class="flex justify-center">
             <span class="text-[13px] text-gray-500 truncate">{{ message.timestamp }}</span>
@@ -218,7 +264,15 @@ onBeforeUnmount(() => {
               />
               <div class="flex flex-col">
                 <span class="text-xs text-gray-500 mb-1">{{ message.sender_info.nickname || message.sender_info.username }}</span>
-                <UserTextArea :message="message.content" :isSelf="false" />
+                <UserTextArea
+                  :message="message.content"
+                  :is-self="false"
+                  :can-reply="!message.is_recalled && String(message.status) !== '3'"
+                  :recalled="message.is_recalled || String(message.status) === '3'"
+                  :reply-to="message.reply_to"
+                  @reply="handleReply(message)"
+                  @navigate="handleReplyNavigate"
+                />
               </div>
             </div>
             <div v-else class="flex items-end max-w-[80%]">
@@ -255,7 +309,15 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
               </div>
-              <UserTextArea :message="message.content" :isSelf="true" />
+              <UserTextArea
+                :message="message.content"
+                :is-self="true"
+                :can-reply="!message.is_recalled && String(message.status) !== '3'"
+                :recalled="message.is_recalled || String(message.status) === '3'"
+                :reply-to="message.reply_to"
+                @reply="handleReply(message)"
+                @navigate="handleReplyNavigate"
+              />
               <img :src="currentUser.avatar_url" :alt="currentUser.username" class="w-10 h-10 rounded-full ml-2 object-cover" />
             </div>
           </div>
@@ -266,6 +328,11 @@ onBeforeUnmount(() => {
     </div>
 
     <Tools @select="handleEmojiSelect" />
+    <ReplyComposerBar
+      v-if="historyStore.replyTarget?.conversationId === groupId"
+      :reference="historyStore.replyTarget.reference"
+      @cancel="historyStore.cancelReplyTarget()"
+    />
     <div class="relative h-1/4 border-t">
       <Textarea
         ref="messageInputRef"
@@ -285,4 +352,19 @@ onBeforeUnmount(() => {
 .slide-leave-active { transition: transform 0.3s ease; }
 .slide-enter-from,
 .slide-leave-to { transform: translateX(100%); }
+
+.reply-focus-highlight {
+  animation: reply-focus-pulse 2s ease-out;
+}
+
+@keyframes reply-focus-pulse {
+  0%, 25% {
+    background: rgba(251, 191, 36, 0.22);
+    box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.15);
+  }
+  100% {
+    background: transparent;
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0);
+  }
+}
 </style>

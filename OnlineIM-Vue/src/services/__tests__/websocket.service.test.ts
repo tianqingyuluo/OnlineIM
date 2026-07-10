@@ -12,6 +12,7 @@ const historyStore = {
   handleReceipt: vi.fn(),
   handleReadReceipt: vi.fn(),
   handleServerError: vi.fn(),
+  handleMessageRecalled: vi.fn(),
   syncActiveConversation: vi.fn(),
 }
 
@@ -163,6 +164,50 @@ describe('WebSocketService', () => {
     }))
   })
 
+  it('preserves reply_to_message_id in the offline outbound payload', async () => {
+    const { WebSocketService } = await import('@/services/websocket.service')
+    const service = new WebSocketService()
+
+    service.sendMessage({
+      type: 'PRIVATE_MESSAGE_REQUEST',
+      message: {
+        conversation_id: 'conv_1',
+        content: 'hello',
+        client_message_id: 'client_reply',
+        reply_to_message_id: 'msg_target',
+      },
+    })
+    await vi.waitFor(() => expect(dbServiceMock.addOutboundMessage).toHaveBeenCalledOnce())
+
+    expect(dbServiceMock.addOutboundMessage).toHaveBeenCalledWith(expect.objectContaining({
+      payload: expect.objectContaining({ reply_to_message_id: 'msg_target' }),
+    }))
+  })
+
+  it('uses group_id as the outbound queue conversation key', async () => {
+    const { WebSocketService } = await import('@/services/websocket.service')
+    const service = new WebSocketService()
+
+    service.sendMessage({
+      type: 'GROUP_MESSAGE_REQUEST',
+      message: {
+        group_id: 'grp_1',
+        content: 'group reply',
+        client_message_id: 'client_group_reply',
+        reply_to_message_id: 'msg_target',
+      },
+    })
+    await vi.waitFor(() => expect(dbServiceMock.addOutboundMessage).toHaveBeenCalledOnce())
+
+    expect(dbServiceMock.addOutboundMessage).toHaveBeenCalledWith(expect.objectContaining({
+      conversation_id: 'grp_1',
+      payload: expect.objectContaining({
+        client_message_id: 'client_group_reply',
+        reply_to_message_id: 'msg_target',
+      }),
+    }))
+  })
+
   it('flushes pending messages and syncs history after reconnecting', async () => {
     const { WebSocketService } = await import('@/services/websocket.service')
     const service = new WebSocketService()
@@ -233,6 +278,25 @@ describe('WebSocketService', () => {
       message_id: 'msg_1',
     }))
     await vi.waitFor(() => expect(dbServiceMock.markOutboundSent).toHaveBeenCalledWith('usr_test', 'client_1'))
+  })
+
+  it('routes top-level MESSAGE_RECALLED frames to the history store', async () => {
+    const { WebSocketService } = await import('@/services/websocket.service')
+    const service = new WebSocketService()
+    service.connect()
+    const socket = FakeWebSocket.instances[0]
+    socket.open()
+
+    socket.receive({
+      type: 'MESSAGE_RECALLED',
+      message_id: 'msg_target',
+      conversation_id: 'conv_1',
+    })
+
+    expect(historyStore.handleMessageRecalled).toHaveBeenCalledWith(expect.objectContaining({
+      message_id: 'msg_target',
+      conversation_id: 'conv_1',
+    }))
   })
 
   it('persists read receipts while offline and sends them after reconnect', async () => {

@@ -1,5 +1,24 @@
 import type { DeliveryState } from '@/utils/message-state'
 
+export type ReplyState = 'active' | 'edited' | 'recalled' | 'unavailable';
+
+export interface ReplyReference {
+    message_id: string;
+    seq_id: string;
+    sender_id: string;
+    sender_display_name: string;
+    message_type: string;
+    preview_text?: string | null;
+    state: ReplyState;
+}
+
+export interface MessageContextResponse {
+    target_message_id: string;
+    messages: MessageResponse[];
+    has_more_before: boolean;
+    has_more_after: boolean;
+}
+
 export interface MessageUserBrief {
     user_id: string;
     username?: string;
@@ -20,6 +39,7 @@ export interface MessageResponse {
     timestamp: string;
     is_recalled: boolean;
     client_message_id: string;
+    reply_to?: ReplyReference;
     // 以下字段由前端在收到群聊已读回执后填充，不会破坏后端历史消息格式。
     readers?: MessageUserBrief[];
     readers_expanded?: boolean;
@@ -36,6 +56,7 @@ export interface PrivateMessageResponse {
     status: number | string;
     delivery_state?: DeliveryState;
     client_message_id: string;
+    reply_to?: ReplyReference;
     timestamp: string;
     created_at: string;
     updated_at: string;
@@ -78,4 +99,11 @@ export interface ServerErrorPayload {
     code?: string;
     message?: string;
     details?: Record<string, unknown>;
+}
+
+export interface MessageRecalledPayload {
+    message_id: string;
+    conversation_id: string;
+    recall_user_id?: string;
+    timestamp?: number;
 }

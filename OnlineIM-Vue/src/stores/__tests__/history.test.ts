@@ -14,6 +14,14 @@ const userStoreMock = {
     avatar_url: '/me.png',
   },
 }
+const messageServiceMock = {
+  getMessageContext: vi.fn(),
+}
+const dbServiceMock = {
+  getHistoryMessage: vi.fn(),
+  putHistory: vi.fn(),
+  markMessageRecalled: vi.fn(),
+}
 
 vi.mock('@/services/websocket.service', () => ({ websocketService: websocketMock }))
 vi.mock('@/stores/user', () => ({ useUserStore: () => userStoreMock }))
@@ -29,13 +37,15 @@ vi.mock('@/services/conversation.service', () => ({
     getMessageReaders: vi.fn(),
   },
 }))
-vi.mock('@/services/message.service', () => ({ MessageService: {} }))
-vi.mock('@/utils/indexedDB', () => ({ dbService: {} }))
+vi.mock('@/services/message.service', () => ({ MessageService: messageServiceMock }))
+vi.mock('@/utils/indexedDB', () => ({ dbService: dbServiceMock }))
 
 describe('history store message receipt flow', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.clearAllMocks()
+    dbServiceMock.putHistory.mockResolvedValue(undefined)
+    dbServiceMock.markMessageRecalled.mockResolvedValue(undefined)
     setActivePinia(createPinia())
   })
 
@@ -116,6 +126,157 @@ describe('history store message receipt flow', () => {
     store.retryMessage(message, false, 'usr_peer')
     expect(message.delivery_state).toBe('sending')
     expect(websocketMock.sendMessage).toHaveBeenCalledTimes(4)
+  })
+
+  it('keeps the same direct reply target through optimistic send and retries', async () => {
+    const { useHistoryStore } = await import('@/stores/history')
+    const store = useHistoryStore()
+    const target = {
+      message_id: 'msg_target',
+      conversation_id: 'conv_1',
+      sender_info: { user_id: 'usr_peer', nickname: '小明' },
+      message_type: 'text',
+      seq_id: '100',
+      content: '原消息',
+      status: 1,
+      delivery_state: 'sent' as const,
+      timestamp: new Date().toISOString(),
+      is_recalled: false,
+      client_message_id: 'target_client',
+    }
+    expect(store.selectReplyTarget(target)).toBe(true)
+
+    store.sendMessage('conv_1', 'usr_peer', 'text', '回复正文', false)
+    const optimistic = store.chatMessages.at(-1)
+
+    expect(optimistic?.reply_to?.message_id).toBe('msg_target')
+    expect(websocketMock.sendMessage).toHaveBeenLastCalledWith(expect.objectContaining({
+      message: expect.objectContaining({ reply_to_message_id: 'msg_target' }),
+    }))
+
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(websocketMock.sendMessage).toHaveBeenLastCalledWith(expect.objectContaining({
+      message: expect.objectContaining({ reply_to_message_id: 'msg_target' }),
+    }))
+  })
+
+  it('restores the composer snapshot when the reply target becomes unavailable', async () => {
+    const { useHistoryStore } = await import('@/stores/history')
+    const store = useHistoryStore()
+    const target = {
+      message_id: 'msg_target',
+      conversation_id: 'conv_1',
+      sender_info: { user_id: 'usr_peer', nickname: '小明' },
+      message_type: 'text',
+      seq_id: '100',
+      content: '原消息',
+      status: 1,
+      timestamp: new Date().toISOString(),
+      is_recalled: false,
+      client_message_id: 'target_client',
+    }
+    store.selectReplyTarget(target)
+    const clientId = store.sendMessage('conv_1', 'usr_peer', 'text', '回复正文', false)
+    store.cancelReplyTarget()
+
+    store.handleServerError({
+      client_message_id: clientId,
+      code: 'REPLY_TARGET_UNAVAILABLE',
+      message: '原消息不可用',
+    })
+
+    expect(store.replyTarget?.reference.message_id).toBe('msg_target')
+    expect(store.failedReplyDraft).toEqual(expect.objectContaining({
+      clientId,
+      content: '回复正文',
+    }))
+    expect(store.chatMessages.at(-1)?.delivery_state).toBe('failed')
+  })
+
+  it('loads a missing reply target with one context request and merges the window', async () => {
+    const { useHistoryStore } = await import('@/stores/history')
+    const store = useHistoryStore()
+    dbServiceMock.getHistoryMessage.mockResolvedValue(null)
+    const target = {
+      message_id: 'msg_target',
+      conversation_id: 'conv_1',
+      sender_info: { user_id: 'usr_peer', nickname: '小明' },
+      message_type: 'text',
+      seq_id: '100',
+      content: '原消息',
+      status: 1,
+      timestamp: new Date().toISOString(),
+      is_recalled: false,
+      client_message_id: 'target_client',
+    }
+    messageServiceMock.getMessageContext.mockResolvedValue({
+      target_message_id: 'msg_target',
+      messages: [target],
+      has_more_before: true,
+      has_more_after: true,
+    })
+
+    const found = await store.jumpToMessage('conv_1', 'msg_target')
+
+    expect(found?.message_id).toBe('msg_target')
+    expect(messageServiceMock.getMessageContext).toHaveBeenCalledOnce()
+    expect(dbServiceMock.putHistory).toHaveBeenCalledWith([target])
+    expect(store.chatMessages.some(message => message.message_id === 'msg_target')).toBe(true)
+  })
+
+  it('redacts recalled targets and every direct reply in memory and IndexedDB', async () => {
+    const { useHistoryStore } = await import('@/stores/history')
+    const store = useHistoryStore()
+    store.chatMessages.push(
+      {
+        message_id: 'msg_target',
+        conversation_id: 'conv_1',
+        sender_info: { user_id: 'usr_peer', nickname: '小明' },
+        message_type: 'text',
+        seq_id: '100',
+        content: '原消息',
+        status: 1,
+        timestamp: new Date().toISOString(),
+        is_recalled: false,
+        client_message_id: 'target_client',
+      },
+      {
+        message_id: 'msg_reply',
+        conversation_id: 'conv_1',
+        sender_info: { user_id: 'usr_me', nickname: '我' },
+        message_type: 'text',
+        seq_id: '101',
+        content: '回复',
+        status: 1,
+        timestamp: new Date().toISOString(),
+        is_recalled: false,
+        client_message_id: 'reply_client',
+        reply_to: {
+          message_id: 'msg_target',
+          seq_id: '100',
+          sender_id: 'usr_peer',
+          sender_display_name: '小明',
+          message_type: 'text',
+          preview_text: '不能继续显示',
+          state: 'active',
+        },
+      },
+    )
+
+    await store.handleMessageRecalled({
+      message_id: 'msg_target',
+      conversation_id: 'conv_1',
+    })
+
+    expect(store.chatMessages[0]?.is_recalled).toBe(true)
+    expect(store.chatMessages[0]?.content).toBe('')
+    expect(store.chatMessages[1]?.reply_to).toEqual(expect.objectContaining({
+      state: 'recalled',
+      preview_text: null,
+    }))
+    expect(dbServiceMock.markMessageRecalled).toHaveBeenCalledWith(
+      'usr_me', 'conv_1', 'msg_target',
+    )
   })
 
   it('does not skip an unseen message when advancing a continuous read cursor', async () => {

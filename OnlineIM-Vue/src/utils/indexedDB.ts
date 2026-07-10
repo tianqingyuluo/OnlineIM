@@ -1,6 +1,7 @@
 import {type IDBPDatabase, openDB} from 'idb';
 import {useUserStore} from '@/stores/user';
 import { compareSeqId } from '@/utils/seq-id';
+import type { MessageResponse } from '@/type/message';
 
 const DB_NAME = 'im_db';
 const DB_VERSION = 3;
@@ -254,6 +255,52 @@ export const dbService = {
       store.put(clonedItem);
     }
     // 等待事务完成
+    await tx.done;
+  },
+
+  async getHistoryMessage(
+    userId: string,
+    conversationId: string,
+    messageId: string,
+  ): Promise<MessageResponse | null> {
+    const db = await initDB();
+    const record = await db.get(HISTORY_STORE, messageId);
+    if (!record || record.user_id !== userId || record.conversation_id !== conversationId) {
+      return null;
+    }
+    return record as MessageResponse;
+  },
+
+  async markMessageRecalled(
+    userId: string,
+    conversationId: string,
+    messageId: string,
+  ): Promise<void> {
+    const db = await initDB();
+    const records = await db.getAllFromIndex(
+      HISTORY_STORE,
+      'user_conversation',
+      [userId, conversationId],
+    );
+    const tx = db.transaction(HISTORY_STORE, 'readwrite');
+    for (const record of records) {
+      let changed = false;
+      if (record.message_id === messageId) {
+        record.status = 3;
+        record.is_recalled = true;
+        record.content = '';
+        changed = true;
+      }
+      if (record.reply_to?.message_id === messageId) {
+        record.reply_to = {
+          ...record.reply_to,
+          state: 'recalled',
+          preview_text: null,
+        };
+        changed = true;
+      }
+      if (changed) await tx.store.put(record);
+    }
     await tx.done;
   },
 
