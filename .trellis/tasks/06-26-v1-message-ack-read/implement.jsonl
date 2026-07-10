@@ -1,1 +1,6 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"本任务跨越 WebSocket、Redis、MongoDB、HTTP API、Pinia、IndexedDB 和消息 UI，需要按数据流和边界检查协议字段一致性。"}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"新增 MongoDB 已读游标文档、索引和消息/会话派生字段时需要遵循双存储与文档建模约定。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"实现回执权限校验、幂等更新、线程安全和集成测试时需要遵循后端质量门槛。"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"消息状态、会话游标、群成员阅读游标和 IndexedDB 恢复均属于 Pinia/本地缓存状态管理。"}
+{"file":".trellis/spec/frontend/hook-guidelines.md","reason":"WebSocket 单例服务、API service 和可视检测 composable 需要遵循前端服务边界与生命周期约定。"}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"新增 WS envelope、回执 payload、delivery_state 和 read state 字段需要保持 snake_case 与类型安全。"}

@@ -119,3 +119,11 @@ This dual-layer cache (Pinia + IndexedDB) enables offline-first message viewing.
 3. **`useHistoryStore` mixes concerns**: message state management, IndexedDB sync, WebSocket message handling, pending message tracking, and send-message logic are all in one 559-line store. Consider splitting into separate stores or composables.
 
 4. **Empty catch blocks**: `useUserStore.clearUser` has `catch (error) { }` — at minimum log the error.
+
+## Message Receipt Queue and Remote Cursor Invariants
+
+- `useHistoryStore.readStates[conversationId]` always represents the **current logged-in user's** `delivered_seq`/`read_seq`; never overwrite it with a remote member's `RECEIPT` or `READ_RECEIPT` event.
+- Store remote delivery/read cursors separately (`deliveredCursors` / `groupReadCursors`) and apply them only to messages authored by the current user when rendering sent-message state.
+- `READ_RECEIPT` records use `dedupe_key = READ_RECEIPT:<conversation_id>` and are merged by numeric BigInt `read_seq`; an older pending cursor must not replace a newer one.
+- Sending or flushing a receipt may delete an IndexedDB record only when its `id`, `dedupe_key`, and payload still match the record that was transmitted. This prevents an in-flight older receipt from deleting a newer cursor queued concurrently.
+- `seq_id` comparisons must use the shared `@/utils/seq-id` BigInt helper; never use `Number`, subtraction, lexical comparison, or `localeCompare` for Snowflake IDs.

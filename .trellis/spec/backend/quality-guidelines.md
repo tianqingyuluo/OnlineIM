@@ -233,3 +233,85 @@ if (!websocketPath.equals(requestPath)) {
     return;
 }
 ```
+
+## Scenario: Message ACK and Read-Receipt Consistency
+
+### 1. Scope / Trigger
+
+- Trigger: changing `WebSocketMessageRouter`, message senders/receivers, `ReceiptService`, `ConversationReadState`, or the conversation read-state HTTP endpoints.
+- Applies to private and group messages routed through Redis Stream and MongoDB.
+
+### 2. Signatures
+
+```java
+boolean ReceiptService.handleDelivered(String receiverId, ReceiptRequest request);
+boolean ReceiptService.handleRead(String readerId, ReadReceiptRequest request);
+ConversationReadStateService.advanceDelivered(
+    String conversationId, String userId, String conversationType, String deliveredSeq);
+ConversationReadStateService.advanceRead(
+    String conversationId, String userId, String conversationType, String readSeq);
+```
+
+- `WebSocketMessageRouter.route(WebSocketSession, String)` must pass the authenticated session to every business sender.
+- `ConversationReadState` is keyed by `(conversationId, userId)` and stores string `deliveredSeq`/`readSeq`; both are non-negative integer cursors.
+- `GET /api/v1/conversations/{conversationId}/read-state` returns the current authenticated user's cursors.
+- `GET /api/v1/conversations/{conversationId}/messages/{messageId}/readers` derives group readers from member `readSeq` values.
+
+### 3. Contracts
+
+- `MESSAGE_ACK` is emitted only after Mongo persistence and Redis Stream publication both succeed. A repeated `(senderId, clientMessageId)` returns the original message ACK and does not save or publish again.
+- `RECEIPT` derives `receiverId` from `WebSocketSession.userId`; the payload must identify an existing message in the same conversation and must match its `seqId`.
+- `READ_RECEIPT` derives `readerId` from `WebSocketSession.userId`; the reader must belong to the conversation and the cursor must not exceed the latest conversation sequence.
+- Cursor updates use numeric max semantics. A duplicate or older cursor returns no state-change event; a newer cursor is persisted once and then published through Redis Stream.
+- A group `READ_RECEIPT` event includes `conversation_id`, `reader_id`, and `read_seq`; a `RECEIPT` event includes `receiver_id`, `message_id`, and `seq_id`.
+- The legacy message `status` field remains compatible with recall behavior; `delivery_state` is the reliable send/delivery/read state.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required behavior |
+|---|---|
+| Payload user ID differs from authenticated session | Ignore payload identity and use session identity |
+| Sender is not a private-conversation participant | Reject request; do not persist or publish |
+| Group sender/receipt user is not a member | Reject request; do not persist or publish |
+| Receipt message, conversation, or `seqId` does not match | Reject request; do not advance state |
+| Invalid, negative, or too-large read cursor | Reject request; do not publish |
+| Cursor is equal to or older than stored cursor | Return no-op; do not publish a duplicate event |
+| Mongo save or Redis publish fails | Do not send `MESSAGE_ACK`; router returns structured `ERROR` for requests carrying `client_message_id` |
+
+### 5. Good / Base / Bad Cases
+
+- Good: the receiver writes the message to IndexedDB, sends `RECEIPT`, and the sender receives a routed event with the persisted receiver ID.
+- Base: a client reconnects and obtains its own `read-state`; missing read-state documents are lazily initialized to zero cursors.
+- Good: readers are computed from `readSeq >= message.seqId` and existing group member profile data, without storing a member array per message.
+- Bad: trusting `sender_id` or `reader_id` from a WebSocket payload, using string ordering for Snowflake cursors, or treating a Redis Stream publish as proof that a client has received a message.
+
+### 6. Tests Required
+
+- Unit: numeric seq comparison, zero/negative/invalid validation, max-only cursor updates, and no duplicate Redis publish for repeated cursors.
+- Unit: private/group sender identity, membership checks, client-message idempotency, ACK emission order, and structured error correlation.
+- Unit: receipt and read-receipt Redis receiver routing to every local target.
+- Integration: Mongo read-state unique/index behavior, Redis Stream multi-instance routing, offline synchronization, and real WebSocket delivery.
+- Assertions must verify no persistence/publication on rejection, exact event type and payload identity fields, and no downgrade after duplicate or out-of-order events.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```java
+// The client can impersonate another sender/reader and string order is incorrect.
+String senderId = request.getSenderId();
+if (request.getReadSeq().compareTo(state.getReadSeq()) > 0) {
+    state.setReadSeq(request.getReadSeq());
+}
+```
+
+#### Correct
+
+```java
+String readerId = session.getUserId();
+String nextReadSeq = SeqIdComparator.requireValid(request.getReadSeq());
+if (SeqIdComparator.compare(nextReadSeq, latestSeq) > 0) {
+    return false;
+}
+readStateService.advanceRead(conversationId, readerId, "group", nextReadSeq);
+```

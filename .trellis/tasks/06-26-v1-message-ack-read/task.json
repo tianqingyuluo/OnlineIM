@@ -3,7 +3,7 @@
   "name": "v1-message-ack-read",
   "title": "消息ACK与已读回执",
   "description": "",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
