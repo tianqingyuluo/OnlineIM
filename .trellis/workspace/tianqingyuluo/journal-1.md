@@ -106,3 +106,38 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 4: 完成消息 ACK 与已读回执
+
+**Date**: 2026-07-10
+**Task**: 完成消息 ACK 与已读回执
+**Branch**: `v1`
+
+### Summary
+
+完成消息 ACK、送达回执、已读回执和群成员阅读明细的全链路实现；新增 read state 与 readers 查询、前端五态消息状态、离线回执队列、重试和可视已读；通过后端编译、定向测试、前端 49 项测试、Trellis 校验和 diff 检查。完整测试仍有 Docker、网络 socket 及既有前端 TypeScript 错误导致的环境阻塞，已记录在任务完成文档。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2c6209c` | (see git log) |
+| `22fa67f` | (see git log) |
+| `0fb7a5e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
