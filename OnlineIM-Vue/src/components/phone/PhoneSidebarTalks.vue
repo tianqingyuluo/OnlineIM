@@ -4,7 +4,6 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem
@@ -28,7 +27,6 @@ function handleChatClick(conversation: Conversation) {
 import { useRoute } from 'vue-router'
 import UserMainPart from '@/components/MainPart/UserMainPart.vue'
 import GroupMainPart from '@/components/MainPart/GroupMainPart.vue'
-import PhoneGroupMainPart from "@/components/phone/phoneGroupMainPart.vue";
 
 const route = useRoute()
 const chatType = computed(() => {
@@ -101,7 +99,7 @@ const chatId = computed(() => {
       :key="`private-${chatId}`"
       class="chat-content w-full"
   />
-  <phoneGroupMainPart
+  <GroupMainPart
       v-else-if="chatType === 'group'"
       :key="`group-${chatId}`"
       class="chat-content w-full"

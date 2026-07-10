@@ -1,13 +1,15 @@
 import {type IDBPDatabase, openDB} from 'idb';
 import {useUserStore} from '@/stores/user';
+import { compareSeqId } from '@/utils/seq-id';
 
 const DB_NAME = 'im_db';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const DB_PERSISTENCE_KEY = 'im_db_persistence';
 const IMAGE_STORE = 'images';
 const HISTORY_STORE = 'history';
 const PENDING_MESSAGES_STORE = 'pending_messages';
 const OUTBOUND_QUEUE_STORE = 'outbound_queue';
+const RECEIPT_QUEUE_STORE = 'receipt_queue';
 
 export const STORES = {
   CONVERSATIONS: 'conversations',
@@ -17,7 +19,8 @@ export const STORES = {
   BLACKLIST: 'blacklist',
   HISTORY: HISTORY_STORE,
   PENDING_MESSAGES: PENDING_MESSAGES_STORE,
-  OUTBOUND_QUEUE: OUTBOUND_QUEUE_STORE
+  OUTBOUND_QUEUE: OUTBOUND_QUEUE_STORE,
+  RECEIPTS: RECEIPT_QUEUE_STORE
 };
 
 export const initDB = async (): Promise<IDBPDatabase> => {
@@ -80,6 +83,16 @@ export const initDB = async (): Promise<IDBPDatabase> => {
         store.createIndex('client_local_id', 'client_local_id');
         store.createIndex('status', 'status');
       }
+      // v3: 送达/已读回执离线队列。READ_RECEIPT 按会话去重，保留最新游标。
+      if (!db.objectStoreNames.contains(RECEIPT_QUEUE_STORE)) {
+        const store = db.createObjectStore(RECEIPT_QUEUE_STORE, {
+          keyPath: 'id',
+          autoIncrement: true
+        });
+        store.createIndex('user_id', 'user_id');
+        store.createIndex('user_conversation', ['user_id', 'conversation_id']);
+        store.createIndex('dedupe_key', 'dedupe_key');
+      }
     }
   });
 };
@@ -103,6 +116,8 @@ export const dbService = {
       case STORES.HISTORY:
         return db.getAllFromIndex(storeName, 'user_id', userId);
       case STORES.PENDING_MESSAGES:
+        return db.getAllFromIndex(storeName, 'user_id', userId);
+      case STORES.RECEIPTS:
         return db.getAllFromIndex(storeName, 'user_id', userId);
       default:
         return db.getAll(storeName);
@@ -212,12 +227,12 @@ export const dbService = {
     if (seqId &&last_message_id) {
       // 只保留小于seqId且大于等于last_message_id的记录
       filtered = allMessages.filter(
-          r => r.seq_id < seqId && r.seq_id >= last_message_id
+          r => compareSeqId(r.seq_id, seqId) < 0 && compareSeqId(r.seq_id, last_message_id) >= 0
       );
     }
     if (seqId){
       filtered=allMessages.filter(
-          r => r.seq_id <seqId
+          r => compareSeqId(r.seq_id, seqId) < 0
       )
     }
     return filtered.slice(-50)
@@ -231,18 +246,12 @@ export const dbService = {
     const tx = db.transaction(HISTORY_STORE, 'readwrite');
     const store = tx.objectStore(HISTORY_STORE);
 
-    // 在事务内部获取现有消息ID集合
-    const existingIds = new Set(
-        await store.getAllKeys()
-    );
-
-    // 过滤并处理需要插入的项
+    // 使用 put 覆盖同一消息的最新回执状态，保证重复同步/回执不会产生脏缓存。
     for (const item of items) {
-      if (!existingIds.has(item.message_id)) {
-        const clonedItem = JSON.parse(JSON.stringify(item));
-        clonedItem.user_id = userId;
-        store.put(clonedItem); // 注意：这里不需要 await，因为我们会在最后 await tx.done
-      }
+      if (!item?.message_id) continue;
+      const clonedItem = JSON.parse(JSON.stringify(item));
+      clonedItem.user_id = userId;
+      store.put(clonedItem);
     }
     // 等待事务完成
     await tx.done;
@@ -310,7 +319,7 @@ export const dbService = {
 
     // 按 seq_id 降序排序后取第一条
     return records
-        .sort((a, b) => b.seq_id.localeCompare(a.seq_id))[0]
+        .sort((a, b) => compareSeqId(b.seq_id, a.seq_id))[0]
         .seq_id;
   },
 
@@ -335,13 +344,22 @@ export const dbService = {
     user_id: string;
     conversation_id: string;
     type: string;
-    payload: any;
+    payload: Record<string, unknown>;
     client_local_id: string;
     status: string;
     created_at: number;
+    attempts?: number;
   }) {
     const db = await initDB();
-    await db.put(OUTBOUND_QUEUE_STORE, item);
+    const existing = await db.getFromIndex(
+      OUTBOUND_QUEUE_STORE,
+      'client_local_id',
+      item.client_local_id,
+    );
+    const record = existing && existing.user_id === item.user_id
+      ? { ...existing, ...item, id: existing.id }
+      : item;
+    await db.put(OUTBOUND_QUEUE_STORE, record);
   },
 
   async markOutboundSent(userId: string, clientLocalId: string) {
@@ -354,6 +372,66 @@ export const dbService = {
       await tx.store.put(record);
     }
     await tx.done;
+  },
+
+  async enqueueReceipt(item: {
+    user_id: string;
+    conversation_id: string;
+    type: 'RECEIPT' | 'READ_RECEIPT';
+    payload: Record<string, unknown>;
+    dedupe_key: string;
+    created_at: number;
+  }): Promise<number | undefined> {
+    const db = await initDB();
+    const tx = db.transaction(RECEIPT_QUEUE_STORE, 'readwrite');
+    const existing = (await tx.store.index('dedupe_key').getAll(item.dedupe_key))
+      .find(record => record.user_id === item.user_id);
+
+    let record = item as typeof item & { id?: number };
+    if (existing) {
+      const oldReadSeq = existing.type === 'READ_RECEIPT'
+        ? String(existing.payload?.read_seq || '0')
+        : '0';
+      const nextReadSeq = item.type === 'READ_RECEIPT'
+        ? String(item.payload?.read_seq || '0')
+        : '0';
+      const isOlderReadCursor = item.type === 'READ_RECEIPT'
+        && compareSeqId(nextReadSeq, oldReadSeq) < 0;
+      record = isOlderReadCursor
+        ? existing
+        : { ...existing, ...item, id: existing.id };
+    }
+
+    const id = await tx.store.put(record);
+    await tx.done;
+    return typeof id === 'number' ? id : record.id;
+  },
+
+  async getPendingReceipts(userId: string) {
+    const db = await initDB();
+    return db.getAllFromIndex(RECEIPT_QUEUE_STORE, 'user_id', userId);
+  },
+
+  async deleteReceipt(id: number) {
+    const db = await initDB();
+    await db.delete(RECEIPT_QUEUE_STORE, id);
+  },
+
+  async deleteReceiptIfCurrent(
+    userId: string,
+    receipt: { id?: number; dedupe_key: string; payload: Record<string, unknown> },
+  ): Promise<boolean> {
+    if (typeof receipt.id !== 'number') return false;
+    const db = await initDB();
+    const tx = db.transaction(RECEIPT_QUEUE_STORE, 'readwrite');
+    const current = await tx.store.get(receipt.id);
+    const samePayload = current
+      && current.user_id === userId
+      && current.dedupe_key === receipt.dedupe_key
+      && JSON.stringify(current.payload) === JSON.stringify(receipt.payload);
+    if (samePayload) await tx.store.delete(receipt.id);
+    await tx.done;
+    return Boolean(samePayload);
   },
 
   async clearOutboundQueue(userId: string, conversationId?: string) {

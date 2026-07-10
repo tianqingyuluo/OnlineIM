@@ -1,5 +1,5 @@
 import api from './api.service';
-import type {MessageResponse} from "@/type/message.ts";
+import type { MessageHistoryResponse, MessageResponse } from '@/type/message.ts';
 import { dbService } from "@/utils/indexedDB.ts";
 import {useUserStore} from "@/stores/user.ts";
 
@@ -7,7 +7,7 @@ export const MessageService = {
     async getMessageHistory(
         conversation_id: string,
         seq_id?: string,
-    ): Promise<{messages: MessageResponse[], has_more_before: boolean, has_more_after: boolean}> {
+    ): Promise<MessageHistoryResponse> {
         try {
             const params = {
                 seq_id:seq_id,
@@ -16,21 +16,21 @@ export const MessageService = {
                 `/messages/${conversation_id}`,
                 { params }
             );
-            return response.data;
+            return normalizeHistoryResponse(response.data);
         } catch (error: any) {
             throw error;
         }
     },async getPrivateHistory(
         conversation_id: string,
         seq_id?: string,
-    ):Promise<{messages: MessageResponse[], has_more_before: boolean}>{
+    ): Promise<MessageHistoryResponse> {
         try {
             const params = {seq_id:seq_id};
             const response =await api.get(
                 `/messages/${conversation_id}`,
                 {params}
             )
-            return response.data;
+            return normalizeHistoryResponse(response.data);
         }catch (error: any) {
             throw error;
         }
@@ -58,7 +58,7 @@ export const MessageService = {
             throw error;
         }
     },
-    async getHistoryByIndexDB(conversation_id: string, last_message_id?:string,before_message_id?: string): Promise<{messages: MessageResponse[], has_more_before: boolean}> {
+    async getHistoryByIndexDB(conversation_id: string, last_message_id?: string,before_message_id?: string): Promise<MessageHistoryResponse> {
         if (last_message_id==='0'){
             last_message_id=undefined;
         }
@@ -77,3 +77,13 @@ export const MessageService = {
         return response.data.messages || [];
     }
 };
+function normalizeHistoryResponse(data: MessageHistoryResponse | MessageResponse[]): MessageHistoryResponse {
+    if (Array.isArray(data)) {
+        return {
+            messages: data,
+            has_more_before: data.length >= 20,
+            has_more_after: false,
+        };
+    }
+    return data;
+}

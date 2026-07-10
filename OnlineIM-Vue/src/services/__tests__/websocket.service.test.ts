@@ -8,6 +8,10 @@ const userStore = {
 const historyStore = {
   handleWebSocketMessage: vi.fn(),
   handleGroupWebSocketMessage: vi.fn(),
+  handleMessageAck: vi.fn(),
+  handleReceipt: vi.fn(),
+  handleReadReceipt: vi.fn(),
+  handleServerError: vi.fn(),
   syncActiveConversation: vi.fn(),
 }
 
@@ -16,6 +20,10 @@ const dbServiceMock = {
   getAllOutboundQueue: vi.fn(),
   addOutboundMessage: vi.fn(),
   markOutboundSent: vi.fn(),
+  enqueueReceipt: vi.fn(),
+  getPendingReceipts: vi.fn(),
+  deleteReceipt: vi.fn(),
+  deleteReceiptIfCurrent: vi.fn(),
 }
 
 vi.mock('@/stores/user', () => ({ useUserStore: () => userStore }))
@@ -69,6 +77,8 @@ describe('WebSocketService', () => {
     FakeWebSocket.instances = []
     dbServiceMock.getOutboundQueue.mockResolvedValue([])
     dbServiceMock.getAllOutboundQueue.mockResolvedValue([])
+    dbServiceMock.getPendingReceipts.mockResolvedValue([])
+    dbServiceMock.enqueueReceipt.mockResolvedValue(1)
     vi.stubGlobal('WebSocket', FakeWebSocket)
     vi.stubGlobal('crypto', { randomUUID: () => 'generated-client-id' })
     vi.spyOn(Math, 'random').mockReturnValue(0.5)
@@ -198,4 +208,46 @@ describe('WebSocketService', () => {
 
     expect(dbServiceMock.markOutboundSent).toHaveBeenCalledWith('usr_test', 'client_1')
   })
+
+  it('routes MESSAGE_ACK and advances the local send confirmation', async () => {
+    const { WebSocketService } = await import('@/services/websocket.service')
+    const service = new WebSocketService()
+    service.connect()
+    const socket = FakeWebSocket.instances[0]
+    socket.open()
+
+    socket.receive({
+      type: 'MESSAGE_ACK',
+      message: {
+        client_message_id: 'client_1',
+        message_id: 'msg_1',
+        conversation_id: 'conv_1',
+        seq_id: '10',
+        delivery_state: 'sent',
+        server_time: 1,
+      },
+    })
+
+    expect(historyStore.handleMessageAck).toHaveBeenCalledWith(expect.objectContaining({
+      client_message_id: 'client_1',
+      message_id: 'msg_1',
+    }))
+    await vi.waitFor(() => expect(dbServiceMock.markOutboundSent).toHaveBeenCalledWith('usr_test', 'client_1'))
+  })
+
+  it('persists read receipts while offline and sends them after reconnect', async () => {
+    const { WebSocketService } = await import('@/services/websocket.service')
+    const service = new WebSocketService()
+
+    service.sendReadReceipt({ conversation_id: 'conv_1', read_seq: '20' })
+    await vi.waitFor(() => expect(dbServiceMock.enqueueReceipt).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'READ_RECEIPT',
+      dedupe_key: 'READ_RECEIPT:conv_1',
+    })))
+
+    service.connect()
+    FakeWebSocket.instances[0].open()
+    expect(historyStore.handleReadReceipt).not.toHaveBeenCalled()
+  })
+
 })
