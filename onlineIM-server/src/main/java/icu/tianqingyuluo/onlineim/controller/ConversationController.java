@@ -8,6 +8,7 @@ import icu.tianqingyuluo.onlineim.pojo.dto.response.ReadStateResponse;
 import icu.tianqingyuluo.onlineim.repository.ConversationRepository;
 import icu.tianqingyuluo.onlineim.service.ConversationReadStateService;
 import icu.tianqingyuluo.onlineim.service.ConversationService;
+import icu.tianqingyuluo.onlineim.util.ConversationIdUtil;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -124,9 +125,7 @@ public class ConversationController {
             conversation.setUpdatedAt(new Date());
         }
         else {
-            conversation.setId("conv_" + ( (userId.compareTo(request.getTargetId())) < 0
-                    ? userId + request.getTargetId() :
-                    request.getTargetId() + userId) ); // 谁id字典序小谁在前面
+            conversation.setId(ConversationIdUtil.privateConversationId(userId, request.getTargetId()));
             conversation.setUserId(userId);
             conversation.setTargetId(request.getTargetId());
             conversation.setConversationType(request.getType());

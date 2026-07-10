@@ -1,11 +1,14 @@
 package icu.tianqingyuluo.onlineim.websocket.listener.handler.sender;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import icu.tianqingyuluo.onlineim.exception.ReplyTargetUnavailableException;
 import icu.tianqingyuluo.onlineim.pojo.document.GroupMessage;
+import icu.tianqingyuluo.onlineim.pojo.document.MessageReplySnapshot;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.GroupMemberResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
 import icu.tianqingyuluo.onlineim.repository.GroupMessageRepository;
 import icu.tianqingyuluo.onlineim.service.GroupMemberService;
+import icu.tianqingyuluo.onlineim.service.MessageReplyService;
 import icu.tianqingyuluo.onlineim.service.RedisStreamService;
 import icu.tianqingyuluo.onlineim.websocket.handler.WebSocketFrameSender;
 import icu.tianqingyuluo.onlineim.websocket.session.WebSocketSession;
@@ -16,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -28,6 +32,7 @@ class GroupMessageSenderTest {
     private GroupMemberService groupMemberService;
     private RedisStreamService redisStreamService;
     private WebSocketFrameSender frameSender;
+    private MessageReplyService messageReplyService;
     private GroupMessageSender sender;
     private WebSocketSession session;
 
@@ -37,8 +42,9 @@ class GroupMessageSenderTest {
         groupMemberService = mock(GroupMemberService.class);
         redisStreamService = mock(RedisStreamService.class);
         frameSender = mock(WebSocketFrameSender.class);
+        messageReplyService = mock(MessageReplyService.class);
         sender = new GroupMessageSender(
-                new ObjectMapper(), messageRepository, redisStreamService, groupMemberService, frameSender);
+                new ObjectMapper(), messageRepository, redisStreamService, groupMemberService, frameSender, messageReplyService);
 
         ServerWebSocket socket = mock(ServerWebSocket.class);
         when(socket.isClosed()).thenReturn(false);

@@ -2,12 +2,15 @@ package icu.tianqingyuluo.onlineim.websocket.listener.handler.sender;
 
 import cn.hutool.core.util.IdUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import icu.tianqingyuluo.onlineim.exception.ReplyTargetUnavailableException;
 import icu.tianqingyuluo.onlineim.pojo.document.Conversation;
+import icu.tianqingyuluo.onlineim.pojo.document.MessageReplySnapshot;
 import icu.tianqingyuluo.onlineim.pojo.document.PrivateMessage;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.websocket.PrivateMessageRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageAckPayload;
 import icu.tianqingyuluo.onlineim.repository.ConversationRepository;
 import icu.tianqingyuluo.onlineim.repository.PrivateMessageRepository;
+import icu.tianqingyuluo.onlineim.service.MessageReplyService;
 import icu.tianqingyuluo.onlineim.service.RedisStreamService;
 import icu.tianqingyuluo.onlineim.websocket.handler.WebSocketFrameSender;
 import icu.tianqingyuluo.onlineim.websocket.session.WebSocketSession;
@@ -24,17 +27,20 @@ public class PrivateMessageSender implements MessageSenderHandler {
     private final ConversationRepository conversationRepository;
     private final RedisStreamService redisStreamService;
     private final WebSocketFrameSender frameSender;
+    private final MessageReplyService messageReplyService;
 
     public PrivateMessageSender(ObjectMapper objectMapper,
                                 PrivateMessageRepository privateMessageRepository,
                                 ConversationRepository conversationRepository,
                                 RedisStreamService redisStreamService,
-                                WebSocketFrameSender frameSender) {
+                                WebSocketFrameSender frameSender,
+                                MessageReplyService messageReplyService) {
         this.objectMapper = objectMapper;
         this.privateMessageRepository = privateMessageRepository;
         this.conversationRepository = conversationRepository;
         this.redisStreamService = redisStreamService;
         this.frameSender = frameSender;
+        this.messageReplyService = messageReplyService;
     }
 
     @Override
@@ -65,6 +71,11 @@ public class PrivateMessageSender implements MessageSenderHandler {
                 return true;
             }
 
+            MessageReplySnapshot replyTo = isBlank(request.getReplyToMessageId())
+                    ? null
+                    : messageReplyService.createSnapshot(
+                            request.getConversationId(), request.getReplyToMessageId(), senderId);
+
             PrivateMessage privateMessage = new PrivateMessage();
             privateMessage.setId("msg_" + IdUtil.getSnowflakeNextIdStr());
             privateMessage.setConversationId(request.getConversationId());
@@ -72,6 +83,8 @@ public class PrivateMessageSender implements MessageSenderHandler {
             privateMessage.setReceiverId(request.getReceiverId());
             privateMessage.setMessageType(request.getMessageType());
             privateMessage.setContent(request.getContent());
+            privateMessage.setReplyTo(replyTo);
+            privateMessage.setContentRevision(1);
             privateMessage.setStatus(0);
             privateMessage.setClientMessageId(request.getClientMessageId());
             privateMessage.setSeqId(IdUtil.getSnowflakeNextIdStr());
@@ -88,6 +101,8 @@ public class PrivateMessageSender implements MessageSenderHandler {
 
             sendAck(session, privateMessage);
             return true;
+        } catch (ReplyTargetUnavailableException ex) {
+            throw ex;
         } catch (Exception ex) {
             log.warn("处理私聊消息失败: userId={}, error={}", session.getUserId(), ex.getMessage());
             return false;

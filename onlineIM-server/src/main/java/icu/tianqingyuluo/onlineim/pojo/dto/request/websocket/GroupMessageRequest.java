@@ -31,4 +31,8 @@ public class GroupMessageRequest {
     @JsonProperty("client_message_id")
     private String clientMessageId;
 
+
+    @JsonProperty("reply_to_message_id")
+    private String replyToMessageId;
+
 }

@@ -64,6 +64,27 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
     }
 
+    @ExceptionHandler(MessageContextUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleMessageContextUnavailable(MessageContextUnavailableException e) {
+        log.warn("消息上下文不可用: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ErrorResponse(e.getCode(), e.getMessage()));
+    }
+
+    @ExceptionHandler(ReplyTargetUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleReplyTargetUnavailable(ReplyTargetUnavailableException e) {
+        log.warn("引用目标不可用: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ErrorResponse(e.getCode(), e.getMessage()));
+    }
+
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ErrorResponse> handleForbidden(ForbiddenException e) {
+        log.warn("权限不足: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ErrorResponse("403", e.getMessage()));
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException e) {
         log.warn("非法参数: {}", e.getMessage());

@@ -47,6 +47,9 @@ public class MessageResponse {
      */
     private Object content;
 
+    @JsonProperty("reply_to")
+    private ReplyReferenceResponse replyTo;
+
     /**
      * 提及的用户ID列表
      */

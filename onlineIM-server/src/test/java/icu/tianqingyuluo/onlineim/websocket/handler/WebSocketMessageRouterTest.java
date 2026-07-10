@@ -1,6 +1,7 @@
 package icu.tianqingyuluo.onlineim.websocket.handler;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import icu.tianqingyuluo.onlineim.exception.ReplyTargetUnavailableException;
 import icu.tianqingyuluo.onlineim.service.UserSessionService;
 import icu.tianqingyuluo.onlineim.websocket.listener.handler.MessageTypeSenderRegistry;
 import icu.tianqingyuluo.onlineim.websocket.listener.handler.sender.MessageSenderHandler;
@@ -94,6 +95,20 @@ class WebSocketMessageRouterTest {
 
         verify(mockSocket).writeTextMessage(contains("client_message_id"));
         verify(mockSocket).writeTextMessage(contains("client_1"));
+    }
+
+    @Test
+    void replyTargetErrorPreservesBusinessCodeAndClientMessageId() {
+        when(senderRegistry.supportMessageType("PRIVATE_MESSAGE_REQUEST")).thenReturn(true);
+        MessageSenderHandler handler = mock(MessageSenderHandler.class);
+        when(handler.publishMessage(eq(session), any())).thenThrow(new ReplyTargetUnavailableException());
+        when(senderRegistry.getHandler("PRIVATE_MESSAGE_REQUEST")).thenReturn(handler);
+
+        router.route(session, "{\"type\":\"PRIVATE_MESSAGE_REQUEST\",\"message\":{"
+                + "\"client_message_id\":\"client_reply\"}}");
+
+        verify(mockSocket).writeTextMessage(contains("REPLY_TARGET_UNAVAILABLE"));
+        verify(mockSocket).writeTextMessage(contains("client_reply"));
     }
 
     @Test

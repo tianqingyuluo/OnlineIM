@@ -1,20 +1,31 @@
 package icu.tianqingyuluo.onlineim.service.impl;
 
 import cn.hutool.core.util.IdUtil;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import icu.tianqingyuluo.onlineim.exception.ForbiddenException;
+import icu.tianqingyuluo.onlineim.exception.MessageContextUnavailableException;
+import icu.tianqingyuluo.onlineim.pojo.document.Conversation;
 import icu.tianqingyuluo.onlineim.pojo.document.GroupMessage;
+import icu.tianqingyuluo.onlineim.pojo.document.MessageReplySnapshot;
 import icu.tianqingyuluo.onlineim.pojo.document.PrivateMessage;
 import icu.tianqingyuluo.onlineim.pojo.document.RecallLog;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.MessageSendRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.GroupMemberResponse;
+import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageContextResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageResponse;
+import icu.tianqingyuluo.onlineim.pojo.dto.response.ReplyReferenceResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
-import icu.tianqingyuluo.onlineim.pojo.entity.GroupMember;
+import icu.tianqingyuluo.onlineim.repository.ConversationRepository;
 import icu.tianqingyuluo.onlineim.repository.GroupMessageRepository;
 import icu.tianqingyuluo.onlineim.repository.PrivateMessageRepository;
 import icu.tianqingyuluo.onlineim.repository.RecallLogRepository;
 import icu.tianqingyuluo.onlineim.service.GroupMemberService;
+import icu.tianqingyuluo.onlineim.service.MessageReplyService;
 import icu.tianqingyuluo.onlineim.service.MessageService;
+import icu.tianqingyuluo.onlineim.service.RedisStreamService;
 import icu.tianqingyuluo.onlineim.service.UserService;
+import icu.tianqingyuluo.onlineim.util.ConversationIdUtil;
 import icu.tianqingyuluo.onlineim.util.SeqIdComparator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
@@ -23,7 +34,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.text.SimpleDateFormat;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -32,23 +44,36 @@ import java.util.stream.Collectors;
  */
 @Service
 public class MessageServiceImpl implements MessageService {
+    private static final DateTimeFormatter MESSAGE_TIMESTAMP_FORMATTER =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final PrivateMessageRepository privateMessageRepository;
     private final GroupMessageRepository groupMessageRepository;
     private final RecallLogRepository recallLogRepository;
-    private final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     private final GroupMemberService groupMemberService;
     private final UserService userService;
+    private final MessageReplyService messageReplyService;
+    private final ConversationRepository conversationRepository;
+    private final RedisStreamService redisStreamService;
+    private final ObjectMapper objectMapper;
 
     @Autowired
     public MessageServiceImpl(PrivateMessageRepository privateMessageRepository,
                               GroupMessageRepository groupMessageRepository,
-                              RecallLogRepository recallLogRepository, GroupMemberService groupMemberService, UserService userService) {
+                              RecallLogRepository recallLogRepository, GroupMemberService groupMemberService,
+                              UserService userService, MessageReplyService messageReplyService,
+                              ConversationRepository conversationRepository,
+                              RedisStreamService redisStreamService,
+                              ObjectMapper objectMapper) {
         this.privateMessageRepository = privateMessageRepository;
         this.groupMessageRepository = groupMessageRepository;
         this.recallLogRepository = recallLogRepository;
         this.groupMemberService = groupMemberService;
         this.userService = userService;
+        this.messageReplyService = messageReplyService;
+        this.conversationRepository = conversationRepository;
+        this.redisStreamService = redisStreamService;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -89,9 +114,7 @@ public class MessageServiceImpl implements MessageService {
         }
         
         // 转换为响应对象
-        return messages.stream()
-                .map(this::convertPrivateMessageToResponse)
-                .collect(Collectors.toList());
+        return convertPrivateMessagesToResponses(messages);
     }
 
     @Override
@@ -120,9 +143,93 @@ public class MessageServiceImpl implements MessageService {
         }
         
         // 转换为响应对象
-        return messages.stream()
-                .map(this::convertGroupMessageToResponse)
-                .collect(Collectors.toList());
+        return convertGroupMessagesToResponses(messages);
+    }
+
+    @Override
+    public MessageContextResponse getContext(String conversationId, String messageId,
+                                             Integer before, Integer after, String userId) {
+        int beforeLimit = clampWindow(before);
+        int afterLimit = clampWindow(after);
+        assertContextAccess(conversationId, userId);
+
+        List<MessageResponse> responses = new ArrayList<>();
+        boolean hasMoreBefore;
+        boolean hasMoreAfter;
+        if (conversationId.startsWith("grp_")) {
+            GroupMessage target = groupMessageRepository.findByIdAndGroupId(messageId, conversationId);
+            if (target == null) {
+                throw new MessageContextUnavailableException();
+            }
+            String targetSeqId = requireContextSeqId(target.getSeqId());
+            List<GroupMessage> beforeMessages = groupMessageRepository.findMessagesBeforeSeqId(
+                    conversationId, targetSeqId, contextPage(beforeLimit));
+            List<GroupMessage> afterMessages = groupMessageRepository.findMessagesAfterSeqId(
+                    conversationId, targetSeqId, contextPage(afterLimit));
+            hasMoreBefore = beforeMessages.size() > beforeLimit;
+            hasMoreAfter = afterMessages.size() > afterLimit;
+            List<GroupMessage> window = new ArrayList<>();
+            beforeMessages.stream().limit(beforeLimit).forEach(window::add);
+            window.add(target);
+            afterMessages.stream().limit(afterLimit).forEach(window::add);
+            responses.addAll(convertGroupMessagesToResponses(window));
+        } else {
+            PrivateMessage target = privateMessageRepository.findByIdAndConversationId(messageId, conversationId);
+            if (target == null) {
+                throw new MessageContextUnavailableException();
+            }
+            String targetSeqId = requireContextSeqId(target.getSeqId());
+            List<PrivateMessage> beforeMessages = privateMessageRepository.findMessagesBeforeSeqId(
+                    conversationId, targetSeqId, contextPage(beforeLimit));
+            List<PrivateMessage> afterMessages = privateMessageRepository.findMessagesAfterSeqId(
+                    conversationId, targetSeqId, contextPage(afterLimit));
+            hasMoreBefore = beforeMessages.size() > beforeLimit;
+            hasMoreAfter = afterMessages.size() > afterLimit;
+            List<PrivateMessage> window = new ArrayList<>();
+            beforeMessages.stream().limit(beforeLimit).forEach(window::add);
+            window.add(target);
+            afterMessages.stream().limit(afterLimit).forEach(window::add);
+            responses.addAll(convertPrivateMessagesToResponses(window));
+        }
+        responses.sort((left, right) -> SeqIdComparator.compare(left.getSeqId(), right.getSeqId()));
+        return MessageContextResponse.builder()
+                .targetMessageId(messageId)
+                .messages(responses)
+                .hasMoreBefore(hasMoreBefore)
+                .hasMoreAfter(hasMoreAfter)
+                .build();
+    }
+
+    private Pageable contextPage(int requested) {
+        return PageRequest.of(0, requested + 1);
+    }
+
+    private String requireContextSeqId(String seqId) {
+        try {
+            return SeqIdComparator.requireValid(seqId);
+        } catch (IllegalArgumentException e) {
+            throw new MessageContextUnavailableException();
+        }
+    }
+
+    private int clampWindow(Integer value) {
+        if (value == null) return 20;
+        return Math.max(0, Math.min(50, value));
+    }
+
+    private void assertContextAccess(String conversationId, String userId) {
+        boolean allowed = conversationId != null && userId != null && (conversationId.startsWith("grp_")
+                ? groupMemberService.isGroupMember(conversationId, userId)
+                : conversationRepository.findByIdAndUserIDOrTargetId(conversationId, userId) != null);
+        if (!allowed) {
+            throw new MessageContextUnavailableException();
+        }
+    }
+
+    private MessageReplySnapshot createReplySnapshot(String conversationId, String messageId, String userId) {
+        return messageId == null || messageId.isBlank()
+                ? null
+                : messageReplyService.createSnapshot(conversationId, messageId, userId);
     }
 
     @Override
@@ -139,6 +246,7 @@ public class MessageServiceImpl implements MessageService {
             privateMessage.setStatus(3);
             privateMessage.setUpdatedAt(new Date());
             privateMessageRepository.save(privateMessage);
+            messageReplyService.markTargetRecalled(privateMessage.getConversationId(), messageId);
             
             // 创建撤回日志记录
             RecallLog recallLog = RecallLog.builder()
@@ -168,6 +276,7 @@ public class MessageServiceImpl implements MessageService {
             groupMessage.setStatus(3);
             groupMessage.setUpdatedAt(new Date());
             groupMessageRepository.save(groupMessage);
+            messageReplyService.markTargetRecalled(groupMessage.getGroupId(), messageId);
             
             // 创建撤回日志记录
             RecallLog recallLog = RecallLog.builder()
@@ -234,10 +343,10 @@ public class MessageServiceImpl implements MessageService {
                     conversationId, normalizedSeqId);
             
             // 转换为响应对象
-            messages = groupMessages.stream()
+            List<GroupMessage> sortedMessages = groupMessages.stream()
                     .sorted((left, right) -> SeqIdComparator.compare(left.getSeqId(), right.getSeqId()))
-                    .map(this::convertGroupMessageToResponse)
-                    .collect(Collectors.toList());
+                    .toList();
+            messages = convertGroupMessagesToResponses(sortedMessages);
         } else {
             // 单聊消息
             // 查询序列号大于 normalizedSeqId 的单聊消息
@@ -245,10 +354,10 @@ public class MessageServiceImpl implements MessageService {
                     conversationId, normalizedSeqId);
             
             // 转换为响应对象
-            messages = privateMessages.stream()
+            List<PrivateMessage> sortedMessages = privateMessages.stream()
                     .sorted((left, right) -> SeqIdComparator.compare(left.getSeqId(), right.getSeqId()))
-                    .map(this::convertPrivateMessageToResponse)
-                    .collect(Collectors.toList());
+                    .toList();
+            messages = convertPrivateMessagesToResponses(sortedMessages);
         }
         
         return messages;
@@ -256,72 +365,155 @@ public class MessageServiceImpl implements MessageService {
 
     @Override
     public MessageResponse sendMessage(MessageSendRequest request, String userId) {
-        // 根据targetId的前缀判断是私聊还是群聊
+        validateSendRequest(request, userId);
         String targetId = request.getTargetId();
-        
+
         if (targetId.startsWith("usr_")) {
-            // 私聊消息
+            if (userId.equals(targetId)) {
+                throw new IllegalArgumentException("不能给自己发送私聊消息");
+            }
+            String conversationId = ConversationIdUtil.privateConversationId(userId, targetId);
+            assertPrivateConversationAccess(conversationId, userId, targetId);
+
+            PrivateMessage existing = privateMessageRepository.findBySenderIdAndClientMessageId(
+                    userId, request.getClientMsgId());
+            if (existing != null) {
+                return convertPrivateMessageToResponse(existing);
+            }
+
             PrivateMessage message = new PrivateMessage();
             message.setId("msg_" + IdUtil.getSnowflakeNextIdStr());
             message.setSenderId(userId);
             message.setReceiverId(targetId);
-            
-            // 生成会话ID (确保两个用户之间的会话ID是唯一的且一致的)
-            String[] ids = new String[]{userId, targetId};
-            Arrays.sort(ids);
-            String conversationId = "conv_" + ids[0] + "_" + ids[1];
             message.setConversationId(conversationId);
-            
             message.setMessageType(request.getMessageType());
             message.setContent(request.getContent());
-            message.setStatus(0); // 发送中
-            message.setSeqId(IdUtil.getSnowflakeNextIdStr()); // 使用雪花ID作为序列号
+            message.setReplyTo(createReplySnapshot(conversationId, request.getReplyToMessageId(), userId));
+            message.setContentRevision(1);
+            message.setClientMessageId(request.getClientMsgId());
+            message.setStatus(0);
+            message.setSeqId(IdUtil.getSnowflakeNextIdStr());
             message.setTimestamp(new Date());
             message.setCreatedAt(new Date());
             message.setUpdatedAt(new Date());
-            
-            // 保存消息
+            message.setExt(request.getExt());
+
             privateMessageRepository.save(message);
-            
-            // TODO: 使用WebSocket或其他方式通知接收者
-            
-            // 返回消息响应
+            redisStreamService.publishPrivateMessage(
+                    "PRIVATE_MESSAGE",
+                    userId,
+                    serializeMessage(message),
+                    targetId);
+
             return convertPrivateMessageToResponse(message);
-            
         } else if (targetId.startsWith("grp_")) {
-            // 群聊消息
+            if (!groupMemberService.isGroupMember(targetId, userId)) {
+                throw new ForbiddenException("无权在该群聊发送消息");
+            }
+
+            GroupMessage existing = groupMessageRepository.findBySenderIdAndClientMessageId(
+                    userId, request.getClientMsgId());
+            if (existing != null) {
+                return convertGroupMessageToResponse(existing);
+            }
+
             GroupMessage message = new GroupMessage();
             message.setId("msg_" + IdUtil.getSnowflakeNextIdStr());
             message.setGroupId(targetId);
             message.setSenderId(userId);
             message.setMessageType(request.getMessageType());
             message.setContent(request.getContent());
-            message.setStatus(0); // 发送中
-            message.setSeqId(IdUtil.getSnowflakeNextIdStr()); // 使用雪花ID作为消息序列号
-            
-            // 处理@用户
+            message.setReplyTo(createReplySnapshot(targetId, request.getReplyToMessageId(), userId));
+            message.setContentRevision(1);
+            message.setClientMessageId(request.getClientMsgId());
+            message.setStatus(0);
+            message.setSeqId(IdUtil.getSnowflakeNextIdStr());
+
             if (request.getAtUserIds() != null && !request.getAtUserIds().isEmpty()) {
                 message.setAtUsers(request.getAtUserIds());
             }
-            
+
             message.setTimestamp(new Date());
             message.setCreatedAt(new Date());
             message.setUpdatedAt(new Date());
-            
-            // 保存消息
+            message.setExt(request.getExt());
+
             groupMessageRepository.save(message);
-            
-            // TODO: 使用WebSocket或其他方式通知群成员
-            
-            // 返回消息响应
+            redisStreamService.publishGroupMessage(
+                    "GROUP_MESSAGE",
+                    userId,
+                    serializeMessage(message),
+                    groupReceiverIds(targetId));
+
             return convertGroupMessageToResponse(message);
         }
-        
-        return null;
+
+        throw new IllegalArgumentException("不支持的接收方ID");
+    }
+
+    private void validateSendRequest(MessageSendRequest request, String userId) {
+        if (request == null) {
+            throw new IllegalArgumentException("消息请求不能为空");
+        }
+        if (userId == null || userId.isBlank()) {
+            throw new ForbiddenException("用户未登录");
+        }
+        if (request.getTargetId() == null || request.getTargetId().isBlank()) {
+            throw new IllegalArgumentException("接收方ID不能为空");
+        }
+        if (request.getMessageType() == null || request.getMessageType().isBlank()) {
+            throw new IllegalArgumentException("消息类型不能为空");
+        }
+        if (request.getContent() == null) {
+            throw new IllegalArgumentException("消息内容不能为空");
+        }
+        if (request.getClientMsgId() == null || request.getClientMsgId().isBlank()) {
+            throw new IllegalArgumentException("客户端消息ID不能为空");
+        }
+    }
+
+    private void assertPrivateConversationAccess(String conversationId, String senderId, String receiverId) {
+        Conversation conversation = conversationRepository.findByIdAndUserIDOrTargetId(conversationId, senderId);
+        boolean participantsMatch = conversation != null
+                && "private".equals(conversation.getConversationType())
+                && ((senderId.equals(conversation.getUserId()) && receiverId.equals(conversation.getTargetId()))
+                || (senderId.equals(conversation.getTargetId()) && receiverId.equals(conversation.getUserId())));
+        if (!participantsMatch) {
+            throw new ForbiddenException("无权访问该私聊会话");
+        }
+    }
+
+    private List<String> groupReceiverIds(String groupId) {
+        List<GroupMemberResponse> members = groupMemberService.getGroupMembers(groupId);
+        if (members == null || members.isEmpty()) {
+            return List.of();
+        }
+        return members.stream()
+                .map(GroupMemberResponse::getUserInfo)
+                .filter(Objects::nonNull)
+                .map(UserBriefResponse::getUserId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+    }
+
+    private String serializeMessage(Object message) {
+        try {
+            return objectMapper.writeValueAsString(message);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("消息序列化失败", e);
+        }
     }
 
     @Override
     public MessageResponse convertPrivateMessageToResponse(PrivateMessage message) {
+        return buildPrivateMessageResponse(
+                message,
+                messageReplyService.resolveForResponse(message.getConversationId(), message.getReplyTo()));
+    }
+
+    private MessageResponse buildPrivateMessageResponse(
+            PrivateMessage message, ReplyReferenceResponse replyReference) {
         // 创建发送者信息
         UserBriefResponse senderInfo = UserBriefResponse.builder()
                 .userId(message.getSenderId())
@@ -347,17 +539,25 @@ public class MessageServiceImpl implements MessageService {
                 .senderInfo(senderInfo)
                 .messageType(message.getMessageType())
                 .content(message.getContent())
+                .replyTo(replyReference)
                 .status(status)
                 .deliveryState("sent")
                 .seqId(message.getSeqId())
                 .clientMessageId(message.getClientMessageId())
                 .isRecalled(message.getStatus() == 3)
-                .timestamp(dateFormat.format(message.getTimestamp()))
+                .timestamp(formatTimestamp(message.getTimestamp()))
                 .build();
     }
 
     @Override
     public MessageResponse convertGroupMessageToResponse(GroupMessage message) {
+        return buildGroupMessageResponse(
+                message,
+                messageReplyService.resolveForResponse(message.getGroupId(), message.getReplyTo()));
+    }
+
+    private MessageResponse buildGroupMessageResponse(
+            GroupMessage message, ReplyReferenceResponse replyReference) {
         // 创建发送者信息
         UserBriefResponse senderInfo = userService.getUserBriefInfoByID(message.getSenderId());
         
@@ -378,14 +578,59 @@ public class MessageServiceImpl implements MessageService {
                 .senderInfo(senderInfo)
                 .messageType(message.getMessageType())
                 .content(message.getContent())
+                .replyTo(replyReference)
                 .mentionedUserIds(message.getAtUsers())
                 .status(status)
                 .deliveryState("sent")
                 .seqId(message.getSeqId())
                 .clientMessageId(message.getClientMessageId())
                 .isRecalled(message.getStatus() == 3)
-                .timestamp(dateFormat.format(message.getTimestamp()))
+                .timestamp(formatTimestamp(message.getTimestamp()))
                 .build();
+    }
+
+    private List<MessageResponse> convertPrivateMessagesToResponses(List<PrivateMessage> messages) {
+        if (messages == null || messages.isEmpty()) {
+            return List.of();
+        }
+        List<ReplyReferenceResponse> replies = resolveBatchReplies(
+                messages.getFirst().getConversationId(),
+                messages.stream().map(PrivateMessage::getReplyTo).toList());
+        List<MessageResponse> responses = new ArrayList<>(messages.size());
+        for (int index = 0; index < messages.size(); index++) {
+            responses.add(buildPrivateMessageResponse(messages.get(index), replies.get(index)));
+        }
+        return responses;
+    }
+
+    private List<MessageResponse> convertGroupMessagesToResponses(List<GroupMessage> messages) {
+        if (messages == null || messages.isEmpty()) {
+            return List.of();
+        }
+        List<ReplyReferenceResponse> replies = resolveBatchReplies(
+                messages.getFirst().getGroupId(),
+                messages.stream().map(GroupMessage::getReplyTo).toList());
+        List<MessageResponse> responses = new ArrayList<>(messages.size());
+        for (int index = 0; index < messages.size(); index++) {
+            responses.add(buildGroupMessageResponse(messages.get(index), replies.get(index)));
+        }
+        return responses;
+    }
+
+    private List<ReplyReferenceResponse> resolveBatchReplies(
+            String conversationId, List<MessageReplySnapshot> snapshots) {
+        if (snapshots.stream().noneMatch(Objects::nonNull)) {
+            return new ArrayList<>(Collections.nCopies(snapshots.size(), null));
+        }
+        return messageReplyService.resolveBatchForResponses(conversationId, snapshots);
+    }
+
+    private String formatTimestamp(Date timestamp) {
+        if (timestamp == null) {
+            return null;
+        }
+        return MESSAGE_TIMESTAMP_FORMATTER.format(
+                timestamp.toInstant().atZone(ZoneId.systemDefault()));
     }
     
     @Override

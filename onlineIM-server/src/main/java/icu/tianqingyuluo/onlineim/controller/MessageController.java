@@ -1,13 +1,17 @@
 package icu.tianqingyuluo.onlineim.controller;
 
 import icu.tianqingyuluo.onlineim.pojo.dto.request.MessageSendRequest;
+import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageContextResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageResponse;
+import icu.tianqingyuluo.onlineim.pojo.entity.UserIDProvider;
 import icu.tianqingyuluo.onlineim.service.MessageService;
 import icu.tianqingyuluo.onlineim.util.ErrorCodeUtil;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -55,6 +59,17 @@ public class MessageController {
         result.put("has_more_before", messages.size() >= size);
         result.put("has_more_after", false);
         return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/{conversationId}/{messageId}/context")
+    public ResponseEntity<MessageContextResponse> getContext(
+            @PathVariable String conversationId,
+            @PathVariable String messageId,
+            @RequestParam(required = false, defaultValue = "20") Integer before,
+            @RequestParam(required = false, defaultValue = "20") Integer after,
+            @AuthenticationPrincipal UserIDProvider principal) {
+        return ResponseEntity.ok(messageService.getContext(
+                conversationId, messageId, before, after, principal.getID()));
     }
     
     /**
@@ -160,19 +175,12 @@ public class MessageController {
      */
     @PostMapping("/send")
     public ResponseEntity<MessageResponse> sendMessage(
-            @RequestBody MessageSendRequest request,
-            @RequestHeader("Authorization") String token) {
-        
-        String userId = jwtUtil.getUserIDFromToken(token);
-        if (userId == null) {
+            @Valid @RequestBody MessageSendRequest request,
+            @AuthenticationPrincipal UserIDProvider principal) {
+        if (principal == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        
-        MessageResponse response = messageService.sendMessage(request, userId);
-        if (response == null) {
-            return ResponseEntity.badRequest().build();
-        }
-        
-        return ResponseEntity.ok(response);
+
+        return ResponseEntity.ok(messageService.sendMessage(request, principal.getID()));
     }
 }

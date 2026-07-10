@@ -4,6 +4,7 @@ import icu.tianqingyuluo.onlineim.pojo.document.GroupMessage;
 import icu.tianqingyuluo.onlineim.pojo.document.PrivateMessage;
 import icu.tianqingyuluo.onlineim.pojo.document.RecallLog;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.MessageSendRequest;
+import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageContextResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageResponse;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -44,6 +45,9 @@ public interface MessageService {
      * @return 消息列表
      */
     List<MessageResponse> getGroupHistory(String groupId, String seqId, Integer size, String userId);
+
+    MessageContextResponse getContext(String conversationId, String messageId,
+                                      Integer before, Integer after, String userId);
 
     /**
      * 撤回消息

@@ -3,11 +3,13 @@ package icu.tianqingyuluo.onlineim.repository;
 import icu.tianqingyuluo.onlineim.pojo.document.PrivateMessage;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.mongodb.repository.Aggregation;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.Date;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -47,6 +49,8 @@ public interface PrivateMessageRepository extends MongoRepository<PrivateMessage
      * 根据消息ID查询
      */
     PrivateMessage findByIdAndConversationId(String id, String conversationId);
+
+    List<PrivateMessage> findByConversationIdAndIdIn(String conversationId, Collection<String> ids);
     
     /**
      * 查询用户发送的消息
@@ -69,6 +73,22 @@ public interface PrivateMessageRepository extends MongoRepository<PrivateMessage
 
     @Query(value = "{ 'conversationId': ?0, 'receiverId': ?1, '$expr': { '$gt': [ { '$toDecimal': '$seqId' }, { '$toDecimal': ?2 } ] } }", count = true)
     long countUnreadByConversationIdAndReceiverIdAndSeqIdGreaterThan(String conversationId, String receiverId, String seqId);
+
+    @Aggregation(pipeline = {
+            "{ '$match': { 'conversationId': ?0, '$expr': { '$lt': [ { '$toDecimal': '$seqId' }, { '$toDecimal': ?1 } ] } } }",
+            "{ '$addFields': { '__numericSeqId': { '$toDecimal': '$seqId' } } }",
+            "{ '$sort': { '__numericSeqId': -1 } }",
+            "{ '$project': { '__numericSeqId': 0 } }"
+    })
+    List<PrivateMessage> findMessagesBeforeSeqId(String conversationId, String seqId, Pageable pageable);
+
+    @Aggregation(pipeline = {
+            "{ '$match': { 'conversationId': ?0, '$expr': { '$gt': [ { '$toDecimal': '$seqId' }, { '$toDecimal': ?1 } ] } } }",
+            "{ '$addFields': { '__numericSeqId': { '$toDecimal': '$seqId' } } }",
+            "{ '$sort': { '__numericSeqId': 1 } }",
+            "{ '$project': { '__numericSeqId': 0 } }"
+    })
+    List<PrivateMessage> findMessagesAfterSeqId(String conversationId, String seqId, Pageable pageable);
 
     PrivateMessage findByConversationIdAndSeqId(String conversationId, String seqId);
 

@@ -3,6 +3,7 @@ package icu.tianqingyuluo.onlineim.websocket.handler;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import icu.tianqingyuluo.onlineim.exception.ReplyTargetUnavailableException;
 import icu.tianqingyuluo.onlineim.websocket.listener.handler.MessageTypeSenderRegistry;
 import icu.tianqingyuluo.onlineim.websocket.listener.handler.sender.MessageSenderHandler;
 import icu.tianqingyuluo.onlineim.websocket.session.WebSocketSession;
@@ -52,13 +53,14 @@ public class WebSocketMessageRouter {
 
         log.info("收到消息: userId={}, connectionId={}, message={}", userId, connectionId, messageText);
 
+        String clientMessageId = null;
         try {
             // 解析JSON消息
             JsonNode jsonNode = objectMapper.readTree(messageText);
             String type = jsonNode.has("type") ? jsonNode.get("type").asText() : "UNKNOWN";
             JsonNode messageNode = jsonNode.get("message");
             String message = messageNode == null ? "" : messageNode.toString();
-            String clientMessageId = messageNode != null && messageNode.has("client_message_id")
+            clientMessageId = messageNode != null && messageNode.has("client_message_id")
                     ? messageNode.get("client_message_id").asText(null) : null;
 
             log.info("解析消息: userId={}, type={}, content={}", userId, type, message);
@@ -76,19 +78,22 @@ public class WebSocketMessageRouter {
                 
                 if (!result) {
                     log.warn("消息处理失败: type={}, userId={}", type, userId);
-                    sendError(session, "消息处理失败", clientMessageId);
+                    sendError(session, "MESSAGE_REJECTED", "消息处理失败", clientMessageId);
                 }
             } else {
                 log.warn("不支持的消息类型: type={}, userId={}", type, userId);
-                sendError(session, "不支持的消息类型: " + type, clientMessageId);
+                sendError(session, "MESSAGE_REJECTED", "不支持的消息类型: " + type, clientMessageId);
             }
 
+        } catch (ReplyTargetUnavailableException e) {
+            log.warn("引用目标不可用: userId={}, error={}", userId, e.getMessage());
+            sendError(session, e.getCode(), e.getMessage(), clientMessageId);
         } catch (JsonProcessingException e) {
             log.error("解析WebSocket消息失败: userId={}, error={}", userId, e.getMessage());
-            sendError(session, "消息格式错误", null);
+            sendError(session, "MESSAGE_REJECTED", "消息格式错误", null);
         } catch (Exception e) {
             log.error("处理WebSocket消息异常: userId={}, error={}", userId, e.getMessage(), e);
-            sendError(session, "服务器内部错误", null);
+            sendError(session, "INTERNAL_ERROR", "服务器内部错误", clientMessageId);
         }
     }
 
@@ -97,10 +102,10 @@ public class WebSocketMessageRouter {
      * @param session WebSocket会话
      * @param errorMessage 错误信息
      */
-    private void sendError(WebSocketSession session, String errorMessage, String clientMessageId) {
+    private void sendError(WebSocketSession session, String code, String errorMessage, String clientMessageId) {
         try {
             Map<String, Object> payload = new LinkedHashMap<>();
-            payload.put("code", "MESSAGE_REJECTED");
+            payload.put("code", code);
             payload.put("message", errorMessage);
             if (clientMessageId != null && !clientMessageId.isBlank()) {
                 payload.put("client_message_id", clientMessageId);
