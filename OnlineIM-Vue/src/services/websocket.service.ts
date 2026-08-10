@@ -1,5 +1,5 @@
 import { ref } from 'vue';
-import { WS_API_URL } from '../../shared/config.ts';
+import { WS_API_URL } from '@/config';
 import { useUserStore } from '@/stores/user';
 import { useHistoryStore } from '@/stores/history'; // 导入 historyStore
 

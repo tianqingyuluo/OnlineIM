@@ -21,8 +21,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-config.ts
-shared/config.js
+/config.ts
 ignore
 test
 memory-bank

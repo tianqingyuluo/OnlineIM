@@ -3,7 +3,7 @@ import type { FormContext } from 'vee-validate';
 import { useUserStore } from '@/stores/user.ts';
 import {type User}from '@/type/User.ts'
 import axios from 'axios';
-import { API_BASE_URL } from '../../shared/config.ts';
+import { API_BASE_URL } from '@/config';
 
 
 

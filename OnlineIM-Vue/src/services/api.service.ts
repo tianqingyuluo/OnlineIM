@@ -1,6 +1,6 @@
 // src/services/api.service.ts
 import axios from 'axios';
-import { API_BASE_URL } from '../../shared/config.ts';
+import { API_BASE_URL } from '@/config';
 import { useUserStore } from '@/stores/user';
 import { toast } from 'vue-sonner';
 // 定义标准API响应格式

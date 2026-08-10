@@ -1,0 +1,102 @@
+# OnlineIM 测试环境部署 (tianqing-dev 分支)
+# 端口规划: nginx 81 / REST API 8082 / WebSocket 8083(与生产隔离)
+# 使用方式: docker compose up -d
+# 环境变量来自同目录 .env 文件(首次部署由 server-setup 创建,参考 deploy/.env.dev.example)
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: online_im
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - redis-data:/data
+
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - mongo-data:/data/db
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      TZ: Asia/Shanghai
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio-data:/data
+    # 测试环境不暴露 MinIO 宿主端口(后端通过内网服务名访问)
+
+  backend:
+    image: eclipse-temurin:21-jre
+    restart: unless-stopped
+    working_dir: /app
+    command: ["java", "-jar", "onlineim.jar"]
+    volumes:
+      # 挂载部署目录,jar 与 db.properties 由 CD 脚本更新
+      - ./backend:/app
+    environment:
+      TZ: Asia/Shanghai
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/online_im?useSSL=false&allowPublicKeyRetrieval=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
+      SPRING_DATA_MONGODB_URI: mongodb://mongo:27017/onlineim
+      OSS_TYPE: ${OSS_TYPE:-minio}
+      OSS_ENDPOINT: http://minio:9000
+      OSS_ACCESS_KEY: ${MINIO_ROOT_USER}
+      OSS_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      OSS_DEFAULT_BUCKET: ${OSS_DEFAULT_BUCKET:-onlineim}
+    ports:
+      - "8082:8080"   # REST API(宿主 8082 → 容器 8080)
+      - "8083:8081"   # WebSocket(宿主 8083 → 容器 8081)
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      mongo:
+        condition: service_started
+      minio:
+        condition: service_started
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      LISTEN_PORT: ${LISTEN_PORT:-81}
+    volumes:
+      - ./frontend/dist:/usr/share/nginx/html:ro
+      - ./nginx/nginx.conf.template:/etc/nginx/templates/onlineim.conf.template:ro
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${LISTEN_PORT:-81}:${LISTEN_PORT:-81}"
+    depends_on:
+      - backend
+
+volumes:
+  mysql-data:
+  redis-data:
+  mongo-data:
+  minio-data:

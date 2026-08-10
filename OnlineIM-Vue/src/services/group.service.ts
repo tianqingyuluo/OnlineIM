@@ -9,7 +9,7 @@ import {
 import { useListStore } from '@/stores/list';
 import { useUserStore } from '@/stores/user';
 import axios from 'axios';
-import { API_BASE_URL } from '../../shared/config.ts';
+import { API_BASE_URL } from '@/config';
 export const groupService = {
   // 创建群组
   async createGroup(

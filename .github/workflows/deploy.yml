@@ -1,0 +1,117 @@
+# OnlineIM CI/CD
+# push 到 main → 构建并部署到生产(prod)
+# push 到 tianqing-dev → 构建并部署到测试(dev)
+# PR 到 main → 仅 CI 构建验证,不部署
+name: CI/CD
+
+on:
+  push:
+    branches: [main, tianqing-dev]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (backend + frontend)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Build backend
+        run: |
+          cd onlineIM-server
+          chmod +x mvnw
+          ./mvnw -B -ntp package -DskipTests
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: OnlineIM-Vue/package-lock.json
+
+      - name: Build frontend
+        run: |
+          cd OnlineIM-Vue
+          npm ci
+          npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ github.sha }}
+          path: |
+            onlineIM-server/target/onlineim-0.0.1-SNAPSHOT.jar
+            OnlineIM-Vue/dist
+          retention-days: 7
+
+  deploy:
+    name: Deploy (${{ matrix.env }})
+    needs: build
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/tianqing-dev')
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - branch: main
+            env: prod
+            compose: docker-compose.yml
+          - branch: tianqing-dev
+            env: dev
+            compose: docker-compose.dev.yml
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-${{ github.sha }}
+          path: artifact
+
+      - name: Prepare staging files
+        run: |
+          ENV=${{ matrix.env }}
+          mkdir -p staging/$ENV/backend staging/$ENV/frontend
+          # 后端产物
+          cp artifact/onlineim-0.0.1-SNAPSHOT.jar staging/$ENV/backend/onlineim.jar
+          # 前端产物
+          cp -r artifact/dist/* staging/$ENV/frontend/
+          # 部署基础设施(compose / nginx / 部署脚本 / 建表 SQL)
+          cp deploy/${{ matrix.compose }} staging/$ENV/docker-compose.yml
+          cp -r deploy/nginx staging/$ENV/nginx
+          cp -r deploy/scripts staging/$ENV/scripts
+          cp onlineIM-server/src/main/resources/onlineIM.sql staging/$ENV/onlineIM.sql
+
+      - name: Upload to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASS }}
+          port: ${{ secrets.SSH_PORT }}
+          source: staging/${{ matrix.env }}
+          target: /opt/onlineim/${{ matrix.env }}/
+
+      - name: Deploy on server
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASS }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            set -e
+            cd /opt/onlineim/${{ matrix.env }}
+            bash scripts/deploy.sh ${{ matrix.env }}
