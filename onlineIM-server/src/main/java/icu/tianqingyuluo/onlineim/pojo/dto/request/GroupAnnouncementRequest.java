@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.pojo.dto.request;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -32,7 +33,8 @@ public class GroupAnnouncementRequest {
     private String content;
     
     /**
-     * 是否置顶
+     * 是否置顶（网页端表单字段名是 pinned，与响应里的 pinned 一致）
      */
+    @JsonAlias("pinned")
     private Boolean pin;
 } 
