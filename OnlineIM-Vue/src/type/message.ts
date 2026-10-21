@@ -110,6 +110,14 @@ export interface ServerErrorPayload {
     details?: Record<string, unknown>;
 }
 
+/** WebSocket OFFLINE_SYNC：连接 / 重连后服务端推送的漏收消息与未读快照 */
+export interface OfflineSyncPayload {
+    conversations?: import('@/type/Conversation').Conversation[];
+    messages?: MessageResponse[];
+    revisions?: MessageResponse[];
+    truncated?: boolean;
+}
+
 export interface MessageRecalledPayload {
     message_id: string;
     conversation_id: string;

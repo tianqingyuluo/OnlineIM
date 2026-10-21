@@ -164,4 +164,70 @@ describe('conversation list live updates', () => {
     live.onConversationRecall('conv_c', 'm_viewing', { recallUserId: 'usr_peer', seqId: '9', activeConversationId: 'conv_c' })
     expect(list.conversations.find(c => c.conversation_id === 'conv_c')!.unread_count).toBe(3)
   })
+
+  it('does not count a group message again when it is already the list preview', async () => {
+    const { list, live } = await setup([conv('grp_1', {
+      unread_count: 1,
+      latest_seq: '9',
+      last_message: { message_id: 'g1', content_preview: 'hello', timestamp: '2026-10-21 22:00:00', is_recalled: false },
+    })])
+    live.onConversationMessage(msg('g1', 'grp_1', 'usr_peer', { seq_id: '9' }) as never, null)
+    expect(list.conversations[0].unread_count).toBe(1)
+  })
+
+  it('applies an offline snapshot and keeps unread added by a newer live message', async () => {
+    const { list, live } = await setup([conv('conv_a', { latest_seq: '10', unread_count: 0 })])
+    const preview = { message_id: 'm20', content_preview: '漏了', timestamp: '2026-10-21 22:05:00', is_recalled: false }
+    live.applyOfflineConversations([
+      conv('conv_a', { unread_count: 3, latest_seq: '20', last_message: preview, last_activity_time: '2026-10-21 22:05:00' }),
+    ], null)
+    expect(list.conversations[0].unread_count).toBe(3)
+    expect(list.conversations[0].last_message.content_preview).toBe('漏了')
+
+    live.onConversationMessage(msg('m21', 'conv_a', 'usr_peer', { seq_id: '21', content: '更新', timestamp: '2026-10-21 22:06:00' }) as never, null)
+    expect(list.conversations[0].unread_count).toBe(4)
+
+    live.applyOfflineConversations([
+      conv('conv_a', { unread_count: 3, latest_seq: '20', last_message: preview, last_activity_time: '2026-10-21 22:05:00' }),
+    ], null)
+    expect(list.conversations[0].unread_count).toBe(4)
+    expect(list.conversations[0].last_message.content_preview).toBe('更新')
+  })
+
+  it('applies a draft preview from the snapshot even when a newer live message is kept', async () => {
+    const { list, live } = await setup([conv('conv_a', {
+      unread_count: 0,
+      latest_seq: '30',
+      draft_preview: '旧草稿',
+      last_message: { message_id: 'm30', content_preview: '新', timestamp: '2026-10-21 23:00:00', is_recalled: false },
+    })])
+    live.applyOfflineConversations([
+      conv('conv_a', {
+        unread_count: 2,
+        latest_seq: '20',
+        draft_preview: '另一台写的',
+        last_message: { message_id: 'm20', content_preview: '旧', timestamp: '2026-10-21 22:00:00', is_recalled: false },
+      }),
+    ], 'conv_a')
+    const a = list.conversations[0]
+    expect(a.unread_count).toBe(0)
+    expect(a.last_message.content_preview).toBe('新')
+    expect(a.draft_preview).toBe('另一台写的')
+
+    live.applyOfflineConversations([
+      conv('conv_a', { unread_count: 2, latest_seq: '20', draft_preview: null }),
+    ], null)
+    expect(a.draft_preview).toBeNull()
+    expect(a.last_message.content_preview).toBe('新')
+    expect(a.unread_count).toBe(2)
+  })
+
+  it('does not raise unread for the conversation currently on screen', async () => {
+    const { list, live } = await setup([conv('conv_a', { unread_count: 0, latest_seq: '1' })])
+    live.applyOfflineConversations([
+      conv('conv_a', { unread_count: 5, latest_seq: '8', last_message: { message_id: 'm8', content_preview: '新', timestamp: '2026-10-21 23:00:00', is_recalled: false }, last_activity_time: '2026-10-21 23:00:00' }),
+    ], 'conv_a')
+    expect(list.conversations[0].unread_count).toBe(0)
+    expect(list.conversations[0].last_message.content_preview).toBe('新')
+  })
 })

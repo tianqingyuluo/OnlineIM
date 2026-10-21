@@ -20,6 +20,8 @@ const historyStore = {
   handleServerError: vi.fn(),
   handleMessageRecalled: vi.fn(),
   syncActiveConversation: vi.fn(),
+  requestOfflineSync: vi.fn(),
+  applyOfflineSync: vi.fn(),
 }
 
 const dbServiceMock = {
@@ -243,6 +245,32 @@ describe('WebSocketService', () => {
       message: { conversation_id: 'conv_1', client_message_id: 'client_1' },
     })
     expect(historyStore.syncActiveConversation).toHaveBeenCalledOnce()
+    expect(historyStore.requestOfflineSync).toHaveBeenCalledTimes(2)
+  })
+
+  it('asks for missed messages on the first successful connect', async () => {
+    const { WebSocketService } = await import('@/services/websocket.service')
+    const service = new WebSocketService()
+    service.connect()
+    FakeWebSocket.instances[0].open()
+    expect(historyStore.requestOfflineSync).toHaveBeenCalledOnce()
+    expect(historyStore.syncActiveConversation).not.toHaveBeenCalled()
+  })
+
+  it('routes OFFLINE_SYNC to the history store', async () => {
+    const { WebSocketService } = await import('@/services/websocket.service')
+    const service = new WebSocketService()
+    service.connect()
+    const socket = FakeWebSocket.instances[0]
+    socket.open()
+    socket.receive({
+      type: 'OFFLINE_SYNC',
+      message: { conversations: [], messages: [{ message_id: 'msg_1' }], revisions: [], truncated: false },
+    })
+    expect(historyStore.applyOfflineSync).toHaveBeenCalledWith(expect.objectContaining({
+      messages: [expect.objectContaining({ message_id: 'msg_1' })],
+      truncated: false,
+    }))
   })
 
   it('marks an outbound message sent when its response arrives', async () => {

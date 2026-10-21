@@ -22,6 +22,7 @@ const dbServiceMock = {
   putHistory: vi.fn(),
   markMessageRecalled: vi.fn(),
   applyMessageEdit: vi.fn(),
+  getLastHistorySeq: vi.fn(),
 }
 
 vi.mock('@/services/websocket.service', () => ({ websocketService: websocketMock }))
@@ -39,7 +40,7 @@ vi.mock('@/services/conversation.service', () => ({
   },
 }))
 vi.mock('@/services/message.service', () => ({ MessageService: messageServiceMock }))
-vi.mock('@/utils/indexedDB', () => ({ dbService: dbServiceMock }))
+vi.mock('@/utils/indexedDB', () => ({ dbService: dbServiceMock, STORES: {} }))
 
 describe('history store message receipt flow', () => {
   beforeEach(() => {
@@ -467,5 +468,135 @@ describe('history store message receipt flow', () => {
     // 乱序到达的旧版本被忽略
     await store.handleMessageEdited({ ...edited, content: '旧版本', content_revision: 2 } as never)
     expect(store.chatMessages[0]?.content).toBe('改过了')
+  })
+
+  it('requests offline sync from local seq, falling back to the list snapshot', async () => {
+    const { useHistoryStore } = await import('@/stores/history')
+    const { useListStore } = await import('@/stores/list')
+    const store = useHistoryStore()
+    useListStore().conversations = [
+      { conversation_id: 'conv_1', latest_seq: '10', type: 'private', target_info: { id: 'usr_peer', name: '对方' }, last_message: null, unread_count: 0, last_activity_time: '' },
+      { conversation_id: 'grp_1', latest_seq: '40', type: 'group', target_info: { id: 'grp_1', name: '群' }, last_message: null, unread_count: 0, last_activity_time: '' },
+    ] as never
+    dbServiceMock.getLastHistorySeq.mockImplementation(async (_userId: string, conversationId: string) => (
+      conversationId === 'conv_1' ? '15' : null
+    ))
+    store.activeConversationId = 'conv_1'
+    store.chatMessages = [{
+      message_id: 'msg_a',
+      conversation_id: 'conv_1',
+      sender_info: { user_id: 'usr_peer' },
+      message_type: 'text',
+      content: '已在屏幕上',
+      seq_id: '12',
+      status: 1,
+      timestamp: '2026-10-21 22:00:00',
+      is_recalled: false,
+    }]
+
+    await store.requestOfflineSync()
+
+    expect(websocketMock.sendMessage).toHaveBeenCalledWith({
+      type: 'SYNC_REQUEST',
+      message: {
+        conversations: [
+          { conversation_id: 'conv_1', last_seq: '15' },
+          { conversation_id: 'grp_1', last_seq: '40' },
+        ],
+        watch: [{ conversation_id: 'conv_1', message_ids: ['msg_a'] }],
+      },
+    }, { persist: false })
+  })
+
+  it('applies an offline snapshot without counting its messages again', async () => {
+    const { useHistoryStore } = await import('@/stores/history')
+    const { useListStore } = await import('@/stores/list')
+    const { resetConversationLiveState } = await import('@/stores/conversation-live')
+    resetConversationLiveState()
+    const store = useHistoryStore()
+    const list = useListStore()
+    list.conversations = [{
+      conversation_id: 'conv_1',
+      type: 'private',
+      target_info: { id: 'usr_peer', name: '对方' },
+      last_message: { message_id: 'msg_old', content_preview: '原文', timestamp: '2026-10-21 22:00:00', is_recalled: false },
+      unread_count: 0,
+      latest_seq: '10',
+      last_activity_time: '2026-10-21 22:00:00',
+    }] as never
+    store.activeConversationId = 'conv_1'
+    store.chatMessages = [{
+      message_id: 'msg_old',
+      conversation_id: 'conv_1',
+      sender_info: { user_id: 'usr_peer', nickname: '对方' },
+      message_type: 'text',
+      content: '原文',
+      seq_id: '10',
+      status: 1,
+      timestamp: '2026-10-21 22:00:00',
+      is_recalled: false,
+      client_message_id: 'old',
+      content_revision: 1,
+    }]
+    dbServiceMock.putHistory.mockResolvedValue(undefined)
+    dbServiceMock.applyMessageEdit.mockResolvedValue(undefined)
+
+    await store.applyOfflineSync({
+      conversations: [{
+        conversation_id: 'conv_1',
+        type: 'private',
+        target_info: { id: 'usr_peer', name: '对方' },
+        last_message: { message_id: 'msg_new', content_preview: '漏收', timestamp: '2026-10-21 22:05:00', is_recalled: false },
+        unread_count: 1,
+        latest_seq: '20',
+        last_activity_time: '2026-10-21 22:05:00',
+      }],
+      revisions: [{
+        message_id: 'msg_old',
+        conversation_id: 'conv_1',
+        sender_info: { user_id: 'usr_peer', nickname: '对方' },
+        message_type: 'text',
+        content: '改过了',
+        seq_id: '10',
+        status: 1,
+        timestamp: '2026-10-21 22:00:00',
+        is_recalled: false,
+        edited: true,
+        edited_at: '2026-10-21 22:04:00',
+        content_revision: 2,
+      }],
+      messages: [{
+        message_id: 'msg_new',
+        conversation_id: 'conv_1',
+        sender_info: { user_id: 'usr_peer', nickname: '对方' },
+        message_type: 'text',
+        content: '漏收',
+        seq_id: '20',
+        status: 1,
+        timestamp: '2026-10-21 22:05:00',
+        is_recalled: false,
+      }],
+      truncated: false,
+    })
+
+    expect(store.chatMessages.map(message => message.message_id)).toEqual(['msg_old', 'msg_new'])
+    expect(store.chatMessages[0]?.content).toBe('改过了')
+    // 正在看这个会话：快照不把未读标上去，和实时消息口径一致
+    expect(list.conversations[0]?.unread_count).toBe(0)
+    expect(list.conversations[0]?.last_message.content_preview).toBe('漏收')
+
+    store.activeConversationId = null
+    store.handleWebSocketMessage({
+      message_id: 'msg_new',
+      conversation_id: 'conv_1',
+      sender_info: { user_id: 'usr_peer', nickname: '对方' },
+      message_type: 'text',
+      content: '漏收',
+      seq_id: '20',
+      status: 1,
+      timestamp: '2026-10-21 22:05:00',
+      is_recalled: false,
+    })
+    expect(list.conversations[0]?.unread_count).toBe(0)
   })
 })

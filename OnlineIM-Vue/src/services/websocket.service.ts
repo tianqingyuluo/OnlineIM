@@ -10,6 +10,7 @@ import type {
   MessageAckPayload,
   MessageRecalledPayload,
   MessageResponse,
+  OfflineSyncPayload,
   ReadReceiptPayload,
   ReceiptPayload,
   ServerErrorPayload,
@@ -106,6 +107,8 @@ export class WebSocketService {
       // 首次连接也要恢复上一次页面会话留下的消息/回执队列。
       void this.flushOutboundQueue();
       void this.flushReceiptQueue();
+      // 首次连接也要补齐：登录后、套接字连上前到达的消息不会走实时推送
+      this.requestCatchUp();
       if (this.hasConnectedBefore) {
         this.triggerReconnectSync();
         this.reconnectHandlers.forEach(handler => handler());
@@ -172,6 +175,9 @@ export class WebSocketService {
             break;
           case 'PRESENCE_UPDATE':
             usePresenceStore().applyUpdate(payload as unknown as PresenceUpdate);
+            break;
+          case 'OFFLINE_SYNC':
+            void historyStore.applyOfflineSync(payload as unknown as OfflineSyncPayload);
             break;
           default:
             break;
@@ -441,6 +447,14 @@ export class WebSocketService {
       await dbService.markOutboundSent(useUserStore().loggedInUser.user_id, clientLocalId);
     } catch (error) {
       console.error('标记出站消息已确认失败:', error);
+    }
+  }
+
+  private requestCatchUp(): void {
+    try {
+      void useHistoryStore().requestOfflineSync();
+    } catch (error) {
+      console.error('上线补齐触发失败:', error);
     }
   }
 

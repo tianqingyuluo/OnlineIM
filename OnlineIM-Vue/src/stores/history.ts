@@ -4,15 +4,18 @@ import type {
   MessageRecalledPayload,
   MessageResponse,
   MessageUserBrief,
+  OfflineSyncPayload,
   ReadReceiptPayload,
   ReplyReference,
   ReceiptPayload,
   ServerErrorPayload,
 } from '@/type/message';
+import type { Conversation } from '@/type/Conversation';
 import { advanceDeliveryState, type DeliveryState } from '@/utils/message-state';
 import { dbService } from '@/utils/indexedDB';
 import { MessageService } from '@/services/message.service';
 import { useUserStore } from '@/stores/user';
+import { useListStore } from '@/stores/list';
 import { websocketService } from '@/services/websocket.service';
 import { conversationService } from '@/services/conversation.service';
 import { compareSeqId, maxSeqId } from '@/utils/seq-id';
@@ -20,6 +23,8 @@ import { buildReplyReference } from '@/utils/reply-preview';
 import { toServerTimestamp } from '@/utils/conversation-time';
 import { isNewerRevision } from '@/utils/message-edit';
 import {
+  applyOfflineConversations,
+  noteCountedMessages,
   onConversationAck,
   onConversationEdit,
   onConversationMessage,
@@ -715,13 +720,17 @@ export const useHistoryStore = defineStore('history', {
       return this.recalledOriginals[messageId] || null;
     },
 
-    async handleMessageRecalled(payload: MessageRecalledPayload): Promise<void> {
+    async handleMessageRecalled(
+      payload: MessageRecalledPayload,
+      options: { adjustUnread?: boolean } = {},
+    ): Promise<void> {
       if (!payload?.message_id || !payload.conversation_id) return;
       const me = useUserStore().loggedInUser.user_id;
       onConversationRecall(payload.conversation_id, payload.message_id, {
         recallUserId: payload.recall_user_id,
         seqId: payload.seq_id,
         activeConversationId: this.activeConversationId,
+        adjustUnread: options.adjustUnread,
       });
       for (const message of this.messagesForConversation(payload.conversation_id)) {
         if (message.message_id === payload.message_id) {
@@ -937,6 +946,135 @@ export const useHistoryStore = defineStore('history', {
         this.activeConversationIsGroup = false;
       }
       scheduleConversationRefresh(conversationId, 300);
+    },
+
+    /**
+     * 每次连接或重连成功后上报本地游标。登录后、WebSocket 尚未连上时到达的消息，
+     * 会落在会话列表快照的 latest_seq（或 IndexedDB 里的最大 seq）之后，由服务端补推。
+     */
+    async requestOfflineSync(): Promise<void> {
+      try {
+        const userId = useUserStore().loggedInUser?.user_id;
+        if (!userId) return;
+        const cursors = await this.collectSyncCursors(userId);
+        const watch = this.collectWatch();
+        websocketService.sendMessage({
+          type: 'SYNC_REQUEST',
+          message: {
+            conversations: cursors,
+            ...(watch ? { watch: [watch] } : {}),
+          },
+        }, { persist: false });
+      } catch (error) {
+        console.error('发送上线补齐请求失败:', error);
+      }
+    },
+
+    async applyOfflineSync(payload: OfflineSyncPayload): Promise<void> {
+      const revisions = payload?.revisions ?? [];
+      const messages = payload?.messages ?? [];
+      noteCountedMessages([...revisions, ...messages].map(message => message?.message_id));
+      for (const revision of revisions) {
+        await this.applySyncedRevision(revision);
+      }
+      for (const message of messages) {
+        await this.absorbSyncedMessage(message);
+      }
+      applyOfflineConversations(payload?.conversations ?? [], this.activeConversationId);
+      if (payload?.truncated) {
+        await this.syncActiveConversation();
+      }
+    },
+
+    async collectSyncCursors(userId: string): Promise<{ conversation_id: string, last_seq: string }[]> {
+      const list = useListStore().conversations || [];
+      const picked: Conversation[] = list.slice(0, 100);
+      if (this.activeConversationId && !picked.some(item => item.conversation_id === this.activeConversationId)) {
+        const active = list.find(item => item.conversation_id === this.activeConversationId);
+        if (active) picked.push(active);
+      }
+      const cursors: { conversation_id: string, last_seq: string }[] = [];
+      for (const conversation of picked) {
+        if (!conversation?.conversation_id) continue;
+        cursors.push({
+          conversation_id: conversation.conversation_id,
+          last_seq: await this.cursorFor(userId, conversation.conversation_id, conversation.latest_seq),
+        });
+      }
+      if (this.activeConversationId && !cursors.some(item => item.conversation_id === this.activeConversationId)) {
+        cursors.push({
+          conversation_id: this.activeConversationId,
+          last_seq: await this.cursorFor(userId, this.activeConversationId, '0'),
+        });
+      }
+      return cursors;
+    },
+
+    async cursorFor(userId: string, conversationId: string, latestSeq?: string): Promise<string> {
+      let stored = '0';
+      try {
+        stored = await dbService.getLastHistorySeq(userId, conversationId) || '0';
+      } catch (error) {
+        console.warn('读取本地消息游标失败:', error);
+      }
+      const memory = this.messagesForConversation(conversationId)
+        .reduce((max, message) => maxSeqId(max, message.seq_id), '0');
+      const local = maxSeqId(stored, memory);
+      return local !== '0' ? local : (latestSeq || '0');
+    },
+
+    collectWatch(): { conversation_id: string, message_ids: string[] } | null {
+      if (!this.activeConversationId) return null;
+      const messageIds = this.messagesForConversation(this.activeConversationId)
+        .map(message => message.message_id)
+        .filter(messageId => Boolean(messageId) && !messageId.startsWith('local_'))
+        .slice(-100);
+      if (messageIds.length === 0) return null;
+      return { conversation_id: this.activeConversationId, message_ids: messageIds };
+    },
+
+    async applySyncedRevision(message: MessageResponse): Promise<void> {
+      if (!message?.message_id || !message.conversation_id) return;
+      if (message.is_recalled || String(message.status) === '3') {
+        await this.handleMessageRecalled({
+          message_id: message.message_id,
+          conversation_id: message.conversation_id,
+          recall_user_id: message.sender_info?.user_id,
+          seq_id: message.seq_id,
+        }, { adjustUnread: false });
+        return;
+      }
+      await this.handleMessageEdited(message);
+    },
+
+    async absorbSyncedMessage(message: MessageResponse): Promise<void> {
+      if (!message?.message_id || !message.conversation_id) return;
+      const normalized = normalizeMessage(message);
+      const isGroup = normalized.conversation_id.startsWith('grp_')
+        || (normalized.conversation_id === this.activeConversationId && this.activeConversationIsGroup);
+      const existing = this.findMessage(normalized.client_message_id, normalized.message_id);
+      if (existing) {
+        if (normalized.is_recalled || String(normalized.status) === '3') {
+          await this.handleMessageRecalled({
+            message_id: normalized.message_id,
+            conversation_id: normalized.conversation_id,
+            recall_user_id: normalized.sender_info?.user_id,
+            seq_id: normalized.seq_id,
+          }, { adjustUnread: false });
+        } else if (normalized.edited) {
+          await this.handleMessageEdited(normalized);
+        } else {
+          Object.assign(existing, normalized);
+        }
+      } else if (normalized.conversation_id === this.activeConversationId) {
+        this.processMessages([normalized], isGroup);
+      }
+      try {
+        await dbService.putHistory([normalized]);
+        await this.sendDeliveredReceipts([normalized]);
+      } catch (error) {
+        console.error('保存补齐消息失败:', error);
+      }
     },
 
     async syncActiveConversation() {
