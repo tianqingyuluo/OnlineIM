@@ -255,6 +255,8 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 
 - `GET /api/v1/messages/{conversationId}/{messageId}/context?before=20&after=20`
 - `GET /api/v1/messages/search?q=关键字&conversation_id=可选&cursor=可选&size=20`（见下方“消息搜索”）
+- `DELETE /api/v1/messages/{messageId}`：撤回自己 2 分钟内发送的消息（见下方“撤回事件与引用联动”）
+- `PUT /api/v1/friends/{friendId}/group`：`friendId` 可以是好友关系 ID（`rel_`）或好友用户 ID（`usr_`）；`friend_group_id` 必须是自己的分组，否则 `404`
 
 消息上下文接口使用认证主体校验私聊参与者或群成员身份，`before`、`after` 默认 20 且分别限制为 0-50。目标前后窗口按数值型 `seq_id` 排序，一次返回目标及相邻消息：
 
@@ -269,7 +271,7 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 
 目标不存在或不可访问时统一返回 `404 Not Found` 和 `code=MESSAGE_CONTEXT_UNAVAILABLE`。已撤回目标可作为撤回占位消息返回。
 
-会话响应同时返回 `delivered_seq`、`read_seq`、`latest_seq` 和权威 `unread_count`。readers 接口仅允许会话成员访问；群聊按成员 `read_seq >= message.seq_id` 推导阅读成员。同时返回可选的 `delivered_readers`，按成员 `delivered_seq >= message.seq_id` 推导，用于发送者离线重连后的送达状态恢复。
+会话响应同时返回 `delivered_seq`、`read_seq`、`latest_seq` 和权威 `unread_count`（已撤回的消息不计入未读）；`last_message` 带 `sender_id` / `sender_nickname` / `is_recalled`（见下方“撤回事件与引用联动”）。readers 接口仅允许会话成员访问；群聊按成员 `read_seq >= message.seq_id` 推导阅读成员。同时返回可选的 `delivered_readers`，按成员 `delivered_seq >= message.seq_id` 推导，用于发送者离线重连后的送达状态恢复。
 
 ## 图片 / 文件消息
 
@@ -622,6 +624,7 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
   "message_id": "msg_target",
   "conversation_id": "conv_xxx",
   "recall_user_id": "usr_xxx",
+  "seq_id": "2112967705294336001",
   "timestamp": 1710000000000
 }
 ```
@@ -629,6 +632,33 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 撤回请求 `RECALL_MESSAGE_REQUEST` 的 `message` 只需 `message_id`（可带 `conversation_id`、`client_message_id`）；操作者取自已认证连接，忽略客户端自报的 `operator_id`/`sender_id`。WebSocket 与 REST `DELETE /api/v1/messages/{messageId}` 共用同一套规则：只能撤回自己发送的消息（否则 `403`），不存在返回 `MESSAGE_NOT_FOUND`（REST 404），重复撤回返回 `MESSAGE_ALREADY_RECALLED`（REST 409），超过撤回时间窗返回 `RECALL_WINDOW_EXPIRED`（REST 400）。时间窗默认 120 秒，由 `im.message.recall-window-seconds` 配置，小于等于 0 表示不限制。WebSocket 失败时返回 `ERROR` 帧，`message.code` 为上述错误码并回带 `client_message_id`。撤回成功后（无论经 REST 还是 WebSocket）服务端经 Redis Stream 推送：撤回者收到 `RECALL_MESSAGE_RESPONSE`，私聊对方或其他群成员收到 `MESSAGE_RECALLED`。
 
 收到撤回事件后，客户端必须：将原消息改为撤回占位；将当前会话所有 `reply_to.message_id` 等于目标的引用改为 `recalled`；清空 `preview_text`；同步写回 IndexedDB。服务端同时批量清理 MongoDB 中的直接引用快照，并在历史/上下文响应时再次解析目标状态，保证错过实时事件的客户端刷新后也不会看到旧正文。
+
+### 撤回后的数据（服务端）
+
+- **原文不再返回**：历史、上下文、同步等所有 `MessageResponse` 中，已撤回消息（`status = 3`、`is_recalled = true`）的 `content` 为空串，`at_users`、`reply_to`、`forwarded_from` 为空，对发送者本人也一样。搜索、转发、引用本来就排除已撤回消息。
+- **未读数**：未读数按读游标实时计算时排除已撤回的消息；撤回时把这条消息从还没读到它的接收者（读游标 < 该消息 `seq_id`，发送者除外）的会话记录未读缓存里减一（不会减成负数），`GET /conversations/unread` 的总数随之下降。被撤回消息上的“有人@我”同时移除。
+- **会话预览**：如果被撤回的是会话最后一条消息，所有参与者记录的预览改为 `[消息已撤回]`、`message_type = "recalled"`。
+
+会话列表 / 会话详情的 `last_message`（`MessagePreviewResponse`）字段：
+
+| 字段 | 说明 |
+|------|------|
+| `message_id` | 最后一条消息 ID |
+| `sender_id` | 发送者 ID（本版本起写入；之前的旧记录为 `null`，直到会话有新消息） |
+| `sender_nickname` | 发送者显示名：私聊对方为当前用户给他的备注（无备注为昵称），其他情况为昵称（无昵称为用户名）；`sender_id` 为空时为 `null` |
+| `content_preview` | 预览文字（文本截断 100 字，其他类型为 `[图片]`、`[文件]` 等，撤回为 `[消息已撤回]`） |
+| `message_type` | 消息类型；被撤回时为 `recalled` |
+| `is_recalled` | 是否已撤回 |
+| `timestamp` | 发送时间 |
+
+### Web 端撤回（Step9）
+
+- **入口**：自己发出、已送达服务端的消息（任何类型），发送 2 分钟内右键（手机长按）菜单最后一项“撤回”；菜单打开时判断时间窗，超时不再显示。群主 / 管理员不能撤回别人的消息（服务端也不支持）。
+- **确认**：弹出“撤回这条消息？”对话框（取消 / 撤回，Esc 或点遮罩取消），确认后调用 `DELETE /api/v1/messages/{messageId}`。超时（400）、无权（403）由通用拦截器提示服务端文案；409 提示“消息已撤回”并在本地也换成撤回提示；404 提示“消息不存在或已被删除”。
+- **聊天里的表现**：消息整行换成居中的灰色提示——自己看到“你撤回了一条消息”，私聊对方看到“<备注或昵称> 撤回了一条消息”，群成员看到“<昵称> 撤回了一条消息”。不再显示头像、气泡和菜单；本地缓存（IndexedDB）同步清空原文。
+- **重新编辑**：自己撤回的文本消息，在本页面内（未刷新前）撤回提示后带“重新编辑”，点击把原文放回输入框（输入框已有内容时接在后面），群聊里原来 @ 的成员仍然生效；原文只保存在内存中，刷新页面后不再提供。
+- **引用**：引用了它的消息显示“原消息已撤回”；正在回复它时，回复条同样变为“原消息已撤回”。正在编辑它时撤回会退出编辑。
+- **会话列表**：预览实时变为“你撤回了一条消息 / <名字> 撤回了一条消息”（旧记录没有发送者时显示 `[消息已撤回]`）；群聊里别人发的消息预览带“昵称: ”前缀。别人撤回我还没读到的消息时，未读角标立即减一，随后以服务端值校正。
 
 ## 控制帧详情
 
