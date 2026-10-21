@@ -1,6 +1,7 @@
 import api from './api.service';
 import type {
     MessageContextResponse,
+    MessageEditRequest,
     MessageForwardRequest,
     MessageForwardResponse,
     MessageHistoryResponse,
@@ -46,6 +47,11 @@ export const MessageService = {
     /** 逐条 / 合并转发到一个或多个好友、群；整体校验，失败时不产生任何消息 */
     async forwardMessages(request: MessageForwardRequest): Promise<MessageForwardResponse> {
         const response = await api.post<MessageForwardResponse>('/messages/forward', request);
+        return response.data;
+    },
+    /** 编辑自己发送的文本消息（时间窗内），返回编辑后的消息 */
+    async editMessage(messageId: string, request: MessageEditRequest): Promise<MessageResponse> {
+        const response = await api.put<MessageResponse>(`/messages/${encodeURIComponent(messageId)}`, request);
         return response.data;
     },
     //错误的put方法

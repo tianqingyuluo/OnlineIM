@@ -43,6 +43,12 @@ export interface MessageResponse {
     reply_to?: ReplyReference;
     /** 逐条转发的消息：原作者（转发链上最初的发送者） */
     forwarded_from?: ForwardedFrom | null;
+    /** 文本消息被编辑过 */
+    edited?: boolean;
+    /** 最近一次编辑时间（格式同 timestamp） */
+    edited_at?: string | null;
+    /** 内容版本：从 1 开始，每次编辑 +1 */
+    content_revision?: number;
     // 以下字段由前端在收到群聊已读回执后填充，不会破坏后端历史消息格式。
     readers?: MessageUserBrief[];
     readers_expanded?: boolean;
@@ -135,4 +141,17 @@ export interface MessageForwardTargetResult {
 export interface MessageForwardResponse {
     mode: 'separate' | 'merged';
     results: MessageForwardTargetResult[];
+}
+
+/** PUT /messages/{message_id} 请求体 */
+export interface MessageEditRequest {
+    content: string;
+    /** 群聊：编辑后的 @ 列表；省略表示保持原列表 */
+    at_users?: string[];
+}
+
+/** WebSocket MESSAGE_EDITED 帧（message 与历史接口格式相同） */
+export interface MessageEditedFrame {
+    message: MessageResponse;
+    at_me?: boolean;
 }

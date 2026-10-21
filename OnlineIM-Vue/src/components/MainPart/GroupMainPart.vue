@@ -30,6 +30,9 @@ import ForwardTargetPicker from '@/components/MainPart/ForwardTargetPicker.vue'
 import ForwardSelectionBar from '@/components/MainPart/ForwardSelectionBar.vue'
 import MessageSelectOverlay from '@/components/MainPart/MessageSelectOverlay.vue'
 import { isForwardable } from '@/utils/chat-record'
+import { useMessageEdit } from '@/composables/useMessageEdit'
+import { mentionLabelsForEdit } from '@/utils/message-edit'
+import EditComposerBar from '@/components/MainPart/EditComposerBar.vue'
 import { useListStore } from '@/stores/list'
 import type { GroupMemberAll } from '@/type/group'
 import {
@@ -74,6 +77,8 @@ const groupId = computed(() => {
 /** 转发：右键“转发”/“多选”，多选后逐条或合并转发 */
 const forward = reactive(useMessageForward(() => groupId.value, () => historyStore.groupMessages))
 const currentUser = computed(() => userStore.loggedInUser)
+/** 编辑：右键“编辑”把原文放进输入框，回车 / 保存提交；@ 成员按文本里仍存在的 `@名字` 重新计算 */
+const edit = reactive(useMessageEdit(draft, () => userStore.loggedInUser.user_id, () => inputElement()?.focus()))
 const deliveryLabels: Record<string, string> = {
   sending: '发送中',
   failed: '发送失败',
@@ -272,7 +277,8 @@ function handleKeyDown(event: KeyboardEvent) {
   }
   if (event.isComposing) return
   if (event.key === 'Escape') {
-    historyStore.cancelReplyTarget()
+    if (edit.isEditing) cancelEdit()
+    else historyStore.cancelReplyTarget()
     return
   }
   if (event.key === 'Enter' && !event.ctrlKey && !event.shiftKey) {
@@ -310,7 +316,31 @@ function handleSaveEmoji(message: MessageResponse) {
   void emojiStore.saveFromMessage(groupId.value, message.message_id)
 }
 
+function startEdit(message: MessageResponse) {
+  edit.start(message)
+  if (!edit.isEditing) return
+  pickedMentions.clear()
+  for (const [userId, label] of mentionLabelsForEdit(message.content, message.at_users, mentionNames.value)) {
+    pickedMentions.set(userId, label)
+  }
+  mention.value = null
+}
+
+function cancelEdit() {
+  edit.cancel()
+  pickedMentions.clear()
+  mention.value = null
+}
+
 async function handleSendClick() {
+  if (edit.isEditing) {
+    const atUsers = collectAtUsers(draft.value.trim(), pickedMentions) ?? []
+    if (await edit.save(atUsers)) {
+      pickedMentions.clear()
+      mention.value = null
+    }
+    return
+  }
   const content = draft.value.trim()
   if (!content) return
   const atUsers = collectAtUsers(content, pickedMentions)
@@ -327,6 +357,7 @@ function handleRetry(message: MessageResponse) {
 }
 
 function handleReply(message: MessageResponse) {
+  if (edit.isEditing) cancelEdit()
   if (historyStore.selectReplyTarget(message)) messageInputRef.value?.focus()
 }
 
@@ -388,6 +419,7 @@ onMounted(() => {
 watch(groupId, (nextId, previousId) => {
   if (previousId && nextId !== previousId) {
     forward.cancelSelect()
+    edit.reset()
     draft.value = ''
     pickedMentions.clear()
     mention.value = null
@@ -484,6 +516,8 @@ onBeforeUnmount(() => {
                   :forwarded-from="message.forwarded_from"
                   :can-forward="!forward.selecting && isForwardable(message)"
                   :can-select="!forward.selecting"
+                  :edited="message.edited"
+                  :edited-at="message.edited_at"
                   @forward="forward.forwardOne(message)"
                   @select="forward.startSelect(message)"
                   @reply="handleReply(message)"
@@ -539,6 +573,10 @@ onBeforeUnmount(() => {
                 :forwarded-from="message.forwarded_from"
                 :can-forward="!forward.selecting && isForwardable(message)"
                 :can-select="!forward.selecting"
+                :edited="message.edited"
+                :edited-at="message.edited_at"
+                :edit-until="forward.selecting ? 0 : edit.editUntil(message)"
+                @edit="startEdit(message)"
                 @forward="forward.forwardOne(message)"
                 @select="forward.startSelect(message)"
                 @reply="handleReply(message)"
@@ -562,8 +600,13 @@ onBeforeUnmount(() => {
       @cancel="forward.cancelSelect()"
     />
     <Tools v-show="!forward.selecting" @select="handleEmojiSelect" @uploaded="handleMediaUploaded" @sticker="handleStickerSend" />
+    <EditComposerBar
+      v-if="!forward.selecting && edit.editing"
+      :original="edit.editing.original"
+      @cancel="cancelEdit()"
+    />
     <ReplyComposerBar
-      v-if="!forward.selecting && historyStore.replyTarget?.conversationId === groupId"
+      v-else-if="!forward.selecting && historyStore.replyTarget?.conversationId === groupId"
       :reference="historyStore.replyTarget.reference"
       @cancel="historyStore.cancelReplyTarget()"
     />
@@ -628,7 +671,7 @@ onBeforeUnmount(() => {
         @pointerdown.prevent
         @click="openMentionPicker"
       >@</button>
-      <Button class="absolute bottom-4 right-4" @click="handleSendClick">发送</Button>
+      <Button class="absolute bottom-4 right-4" data-testid="send-button" :disabled="edit.saving" @click="handleSendClick">{{ edit.isEditing ? '保存' : '发送' }}</Button>
     </div>
     <ForwardTargetPicker
       :open="forward.pickerOpen"

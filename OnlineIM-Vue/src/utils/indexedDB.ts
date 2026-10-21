@@ -304,6 +304,35 @@ export const dbService = {
     await tx.done;
   },
 
+  /** 消息被编辑：更新缓存里的内容/标记，引用了它的回复标成“原消息已编辑” */
+  async applyMessageEdit(userId: string, edited: MessageResponse): Promise<void> {
+    const db = await initDB();
+    const records = await db.getAllFromIndex(
+      HISTORY_STORE,
+      'user_conversation',
+      [userId, edited.conversation_id],
+    );
+    const tx = db.transaction(HISTORY_STORE, 'readwrite');
+    for (const record of records) {
+      let changed = false;
+      if (record.message_id === edited.message_id
+        && (edited.content_revision ?? 1) >= (record.content_revision ?? 1)) {
+        record.content = edited.content;
+        record.edited = true;
+        record.edited_at = edited.edited_at ?? null;
+        record.content_revision = edited.content_revision;
+        if (edited.at_users !== undefined) record.at_users = edited.at_users;
+        changed = true;
+      }
+      if (record.reply_to?.message_id === edited.message_id && record.reply_to.state === 'active') {
+        record.reply_to = { ...record.reply_to, state: 'edited' };
+        changed = true;
+      }
+      if (changed) await tx.store.put(record);
+    }
+    await tx.done;
+  },
+
   // 新增的多段区间支持方法
   async getPendingRanges(userId: string, conversationId: string) {
     const db = await initDB();

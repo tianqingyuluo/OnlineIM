@@ -148,6 +148,13 @@ export class WebSocketService {
             historyStore.handleServerError(payload as ServerErrorPayload);
             toast.error((payload as ServerErrorPayload).message || '消息处理失败');
             break;
+          case 'MESSAGE_EDITED':
+            // 帧形如 MessageEditedFrame：message 为编辑后的完整消息，群聊带顶层 at_me
+            void historyStore.handleMessageEdited(
+              payload as unknown as MessageResponse,
+              typeof frame.at_me === 'boolean' ? frame.at_me : undefined,
+            );
+            break;
           case 'MESSAGE_RECALLED':
           case 'RECALL_MESSAGE_RESPONSE':
             void historyStore.handleMessageRecalled(payload as unknown as MessageRecalledPayload);

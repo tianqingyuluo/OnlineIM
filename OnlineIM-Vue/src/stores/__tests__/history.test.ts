@@ -21,6 +21,7 @@ const dbServiceMock = {
   getHistoryMessage: vi.fn(),
   putHistory: vi.fn(),
   markMessageRecalled: vi.fn(),
+  applyMessageEdit: vi.fn(),
 }
 
 vi.mock('@/services/websocket.service', () => ({ websocketService: websocketMock }))
@@ -390,5 +391,47 @@ describe('history store message receipt flow', () => {
     expect(priv.at_users).toBeUndefined()
     const lastFrame = websocketMock.sendMessage.mock.calls.at(-1)![0] as { message: Record<string, unknown> }
     expect(lastFrame.message).not.toHaveProperty('at_users')
+  })
+
+  it('applies an edit to the message, replies quoting it, the reply target and the cache', async () => {
+    const { useHistoryStore } = await import('@/stores/history')
+    const store = useHistoryStore()
+    dbServiceMock.applyMessageEdit.mockResolvedValue(undefined)
+    const base = {
+      conversation_id: 'conv_1',
+      message_type: 'text',
+      status: 1,
+      timestamp: new Date().toISOString(),
+      is_recalled: false,
+    }
+    store.chatMessages.push(
+      { ...base, message_id: 'msg_target', sender_info: { user_id: 'usr_peer', nickname: '小明' }, seq_id: '100', content: '原文', client_message_id: 't', content_revision: 1 },
+      {
+        ...base, message_id: 'msg_reply', sender_info: { user_id: 'usr_me', nickname: '我' }, seq_id: '101', content: '回复', client_message_id: 'r',
+        reply_to: { message_id: 'msg_target', seq_id: '100', sender_id: 'usr_peer', sender_display_name: '小明', message_type: 'text', preview_text: '原文', state: 'active' },
+      },
+    )
+    store.replyTarget = {
+      conversationId: 'conv_1',
+      reference: { message_id: 'msg_target', seq_id: '100', sender_id: 'usr_peer', sender_display_name: '小明', message_type: 'text', preview_text: '原文', state: 'active' },
+    } as never
+
+    const edited = {
+      ...base, message_id: 'msg_target', sender_info: { user_id: 'usr_peer', nickname: '小明' }, seq_id: '100',
+      content: '改过了', client_message_id: 't', edited: true, edited_at: '2026-10-22 01:00:00', content_revision: 3,
+    }
+    await store.handleMessageEdited(edited as never)
+
+    expect(store.chatMessages[0]).toEqual(expect.objectContaining({
+      content: '改过了', edited: true, edited_at: '2026-10-22 01:00:00', content_revision: 3,
+    }))
+    // 引用保留引用时的快照，只标成“原消息已编辑”
+    expect(store.chatMessages[1]?.reply_to).toEqual(expect.objectContaining({ state: 'edited', preview_text: '原文' }))
+    expect(store.replyTarget?.reference.state).toBe('edited')
+    expect(dbServiceMock.applyMessageEdit).toHaveBeenCalledWith('usr_me', edited)
+
+    // 乱序到达的旧版本被忽略
+    await store.handleMessageEdited({ ...edited, content: '旧版本', content_revision: 2 } as never)
+    expect(store.chatMessages[0]?.content).toBe('改过了')
   })
 })

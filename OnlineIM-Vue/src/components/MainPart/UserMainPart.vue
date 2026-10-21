@@ -28,6 +28,8 @@ import ForwardTargetPicker from '@/components/MainPart/ForwardTargetPicker.vue'
 import ForwardSelectionBar from '@/components/MainPart/ForwardSelectionBar.vue'
 import MessageSelectOverlay from '@/components/MainPart/MessageSelectOverlay.vue'
 import { isForwardable } from '@/utils/chat-record'
+import { useMessageEdit } from '@/composables/useMessageEdit'
+import EditComposerBar from '@/components/MainPart/EditComposerBar.vue'
 
 const route = useRoute()
 const userStore = useUserStore()
@@ -54,6 +56,8 @@ const conversationId = computed(() => {
 })
 /** 转发：右键“转发”/“多选”，多选后逐条或合并转发 */
 const forward = reactive(useMessageForward(() => conversationId.value, () => historyStore.chatMessages))
+/** 编辑：右键“编辑”把原文放进输入框，回车 / 保存提交 */
+const edit = reactive(useMessageEdit(draft, () => userStore.loggedInUser.user_id, () => inputElement()?.focus()))
 // 对方 ID 以会话详情为准；直接打开/刷新聊天地址时侧栏列表可能还没加载，不能只依赖列表
 const targetUserId = computed(() =>
   conversation.value?.target_info?.id
@@ -122,7 +126,8 @@ function scrollToBottom() {
 
 function handleKeyDown(event: KeyboardEvent) {
   if (event.key === 'Escape') {
-    historyStore.cancelReplyTarget()
+    if (edit.isEditing) edit.cancel()
+    else historyStore.cancelReplyTarget()
     return
   }
   if (event.key === 'Enter' && !event.ctrlKey && !event.shiftKey) {
@@ -170,6 +175,10 @@ function handleSaveEmoji(message: MessageResponse) {
 }
 
 async function handleSendClick() {
+  if (edit.isEditing) {
+    await edit.save()
+    return
+  }
   const content = draft.value.trim()
   if (!content || !conversation.value) return
   historyStore.sendMessage(conversation.value.conversation_id, targetUserId.value, 'text', content, false)
@@ -183,6 +192,7 @@ function handleRetry(message: MessageResponse) {
 }
 
 function handleReply(message: MessageResponse) {
+  if (edit.isEditing) edit.cancel()
   if (historyStore.selectReplyTarget(message)) inputElement()?.focus()
 }
 
@@ -240,6 +250,7 @@ onMounted(() => {
 watch(conversationId, (nextId, previousId) => {
   if (previousId && nextId !== previousId) {
     forward.cancelSelect()
+    edit.reset()
     draft.value = ''
     void loadConversation()
   }
@@ -320,6 +331,10 @@ onBeforeUnmount(() => {
                 :forwarded-from="message.forwarded_from"
                 :can-forward="!forward.selecting && isForwardable(message)"
                 :can-select="!forward.selecting"
+                :edited="message.edited"
+                :edited-at="message.edited_at"
+                :edit-until="forward.selecting ? 0 : edit.editUntil(message)"
+                @edit="edit.start(message)"
                 @forward="forward.forwardOne(message)"
                 @select="forward.startSelect(message)"
                 @reply="handleReply(message)"
@@ -349,6 +364,10 @@ onBeforeUnmount(() => {
                 :forwarded-from="message.forwarded_from"
                 :can-forward="!forward.selecting && isForwardable(message)"
                 :can-select="!forward.selecting"
+                :edited="message.edited"
+                :edited-at="message.edited_at"
+                :edit-until="forward.selecting ? 0 : edit.editUntil(message)"
+                @edit="edit.start(message)"
                 @forward="forward.forwardOne(message)"
                 @select="forward.startSelect(message)"
                 @reply="handleReply(message)"
@@ -372,8 +391,13 @@ onBeforeUnmount(() => {
       @cancel="forward.cancelSelect()"
     />
     <Tools v-show="!forward.selecting" @select="handleEmojiSelect" @uploaded="handleMediaUploaded" @sticker="handleStickerSend" />
+    <EditComposerBar
+      v-if="!forward.selecting && edit.editing"
+      :original="edit.editing.original"
+      @cancel="edit.cancel()"
+    />
     <ReplyComposerBar
-      v-if="!forward.selecting && historyStore.replyTarget?.conversationId === conversationId"
+      v-else-if="!forward.selecting && historyStore.replyTarget?.conversationId === conversationId"
       :reference="historyStore.replyTarget.reference"
       @cancel="historyStore.cancelReplyTarget()"
     />
@@ -387,7 +411,7 @@ onBeforeUnmount(() => {
         placeholder="输入消息..."
         @keydown="handleKeyDown"
       />
-      <Button class="absolute bottom-4 right-4" @click="handleSendClick">发送</Button>
+      <Button class="absolute bottom-4 right-4" data-testid="send-button" :disabled="edit.saving" @click="handleSendClick">{{ edit.isEditing ? '保存' : '发送' }}</Button>
     </div>
     <ForwardTargetPicker
       :open="forward.pickerOpen"

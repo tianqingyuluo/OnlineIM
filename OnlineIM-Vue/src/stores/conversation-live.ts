@@ -128,6 +128,17 @@ export function onConversationAck(conversationId: string, clientMessageId: strin
   }
 }
 
+/** 消息被编辑：如果它是会话的最后一条，预览换成新内容（不改时间、不重新排序） */
+export function onConversationEdit(conversationId: string, message: MessageResponse): void {
+  const conversation = findConversation(conversationId)
+  if (conversation?.last_message?.message_id === message.message_id && !conversation.last_message.is_recalled) {
+    conversation.last_message = {
+      ...conversation.last_message,
+      content_preview: previewOfMessage(message),
+    }
+  }
+}
+
 export function onConversationRecall(conversationId: string, messageId: string): void {
   const conversation = findConversation(conversationId)
   if (conversation?.last_message?.message_id === messageId) {

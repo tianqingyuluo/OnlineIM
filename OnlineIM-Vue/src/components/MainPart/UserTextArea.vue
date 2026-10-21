@@ -10,6 +10,7 @@ import { computed } from 'vue'
 import { isMediaMessageType } from '@/utils/media-message'
 import { canSaveAsEmoji, isStickerMessageType } from '@/utils/sticker-message'
 import { splitMentionSegments } from '@/utils/mention'
+import { editedTitle } from '@/utils/message-edit'
 
 const props = withDefaults(defineProps<{
   message: string
@@ -26,6 +27,11 @@ const props = withDefaults(defineProps<{
   forwardedFrom?: ForwardedFrom | null
   canForward?: boolean
   canSelect?: boolean
+  /** 文本消息被编辑过：气泡里显示“已编辑” */
+  edited?: boolean
+  editedAt?: string | null
+  /** 自己的文本消息可编辑截止时间（毫秒），0 不可编辑 */
+  editUntil?: number
 }>(), {
   isSelf: false,
   canReply: true,
@@ -38,6 +44,9 @@ const props = withDefaults(defineProps<{
   forwardedFrom: undefined,
   canForward: false,
   canSelect: false,
+  edited: false,
+  editedAt: undefined,
+  editUntil: 0,
 })
 
 const isMedia = computed(() => isMediaMessageType(props.messageType))
@@ -47,6 +56,7 @@ const isSticker = computed(() => isStickerMessageType(props.messageType) && !pro
 const isChatRecord = computed(() => isChatRecordType(props.messageType) && !props.recalled)
 const forwardLabel = computed(() =>
   !props.recalled && props.forwardedFrom?.display_name ? `转发自 ${props.forwardedFrom.display_name}` : '')
+const showEdited = computed(() => props.edited && !props.recalled && !isMedia.value)
 const canSaveEmoji = computed(() => !props.recalled && canSaveAsEmoji(props.messageType))
 
 const segments = computed(() =>
@@ -60,6 +70,7 @@ const emit = defineEmits<{
   saveEmoji: []
   forward: []
   select: []
+  edit: []
 }>()
 
 async function copyMessage() {
@@ -81,6 +92,8 @@ async function copyMessage() {
     :can-save-emoji="canSaveEmoji"
     :can-forward="canForward && !recalled"
     :can-select="canSelect"
+    :edit-until="recalled ? 0 : editUntil"
+    @edit="emit('edit')"
     @reply="emit('reply')"
     @copy="copyMessage"
     @save-emoji="emit('saveEmoji')"
@@ -140,6 +153,12 @@ async function copyMessage() {
           segment.userId === currentUserId ? 'bg-amber-100 text-amber-700' : 'text-blue-600',
         ]"
       >{{ segment.text }}</span><template v-else>{{ segment.text }}</template></template></div>
+      <div
+        v-if="showEdited"
+        data-testid="edited-marker"
+        :title="editedTitle(editedAt)"
+        :class="['mt-0.5 select-none text-[11px] leading-4 text-slate-400', isSelf ? 'text-right' : 'text-left']"
+      >已编辑</div>
     </div>
   </MessageActions>
 </template>

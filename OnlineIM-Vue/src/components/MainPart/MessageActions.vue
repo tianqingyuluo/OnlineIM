@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Copy, Forward, ListChecks, Reply, SmilePlus } from 'lucide-vue-next'
+import { computed, ref } from 'vue'
+import { Copy, Forward, ListChecks, Pencil, Reply, SmilePlus } from 'lucide-vue-next'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -7,12 +8,14 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu'
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   canReply?: boolean
   canCopy?: boolean
   canSaveEmoji?: boolean
   canForward?: boolean
   canSelect?: boolean
+  /** 可编辑截止时间（毫秒时间戳），0 表示不可编辑；菜单打开时判断，过了时间窗自动不再显示“编辑” */
+  editUntil?: number
   align?: 'start' | 'end'
 }>(), {
   canReply: true,
@@ -20,6 +23,7 @@ withDefaults(defineProps<{
   canSaveEmoji: false,
   canForward: false,
   canSelect: false,
+  editUntil: 0,
   align: 'start',
 })
 
@@ -29,11 +33,35 @@ const emit = defineEmits<{
   saveEmoji: []
   forward: []
   select: []
+  edit: []
 }>()
+
+const openedAt = ref(Date.now())
+const canEdit = computed(() => props.editUntil > 0 && openedAt.value <= props.editUntil)
+
+function handleOpenChange(open: boolean) {
+  if (open) {
+    openedAt.value = Date.now()
+    movesFocus = false
+  }
+}
+
+/** 选了“编辑”/“回复”后焦点要留在输入框，不让菜单关闭时把焦点还给消息气泡 */
+let movesFocus = false
+function selectMovingFocus(action: 'edit' | 'reply') {
+  movesFocus = true
+  if (action === 'edit') emit('edit')
+  else emit('reply')
+}
+
+function handleCloseAutoFocus(event: Event) {
+  if (movesFocus) event.preventDefault()
+  movesFocus = false
+}
 </script>
 
 <template>
-  <ContextMenu>
+  <ContextMenu @update:open="handleOpenChange">
     <ContextMenuTrigger class="block min-w-0" :disabled="!canCopy && !canReply && !canSaveEmoji && !canForward && !canSelect">
       <div class="group/message relative min-w-0">
         <button
@@ -52,12 +80,16 @@ const emit = defineEmits<{
         <slot />
       </div>
     </ContextMenuTrigger>
-    <ContextMenuContent class="w-40">
+    <ContextMenuContent class="w-40" @close-auto-focus="handleCloseAutoFocus">
       <ContextMenuItem v-if="canCopy" class="gap-2" @select="emit('copy')">
         <Copy class="h-4 w-4" aria-hidden="true" />
         复制
       </ContextMenuItem>
-      <ContextMenuItem v-if="canReply" class="gap-2" @select="emit('reply')">
+      <ContextMenuItem v-if="canEdit" class="gap-2" data-testid="edit-action" @select="selectMovingFocus('edit')">
+        <Pencil class="h-4 w-4" aria-hidden="true" />
+        编辑
+      </ContextMenuItem>
+      <ContextMenuItem v-if="canReply" class="gap-2" @select="selectMovingFocus('reply')">
         <Reply class="h-4 w-4" aria-hidden="true" />
         回复
       </ContextMenuItem>

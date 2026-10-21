@@ -18,8 +18,10 @@ import { conversationService } from '@/services/conversation.service';
 import { compareSeqId, maxSeqId } from '@/utils/seq-id';
 import { buildReplyReference } from '@/utils/reply-preview';
 import { toServerTimestamp } from '@/utils/conversation-time';
+import { isNewerRevision } from '@/utils/message-edit';
 import {
   onConversationAck,
+  onConversationEdit,
   onConversationMessage,
   onConversationRead,
   onConversationRecall,
@@ -655,6 +657,49 @@ export const useHistoryStore = defineStore('history', {
       }
       return this.messagesForConversation(conversationId)
         .find(message => message.message_id === messageId) || null;
+    },
+
+    /**
+     * 消息被编辑（MESSAGE_EDITED 帧，或自己编辑成功后的 REST 返回）：
+     * 更新已加载的消息、引用了它的回复（“原消息已编辑”）、正在回复它的输入框引用、会话预览与本地缓存。
+     * 乱序到达的旧版本（content_revision 更小）被忽略。
+     */
+    async handleMessageEdited(edited: MessageResponse, atMe?: boolean): Promise<void> {
+      if (!edited?.message_id || !edited.conversation_id) return;
+      const me = useUserStore().loggedInUser.user_id;
+      let mentionChanged = false;
+      let applied = false;
+      for (const message of this.messagesForConversation(edited.conversation_id)) {
+        if (message.message_id === edited.message_id) {
+          if (!isNewerRevision(edited.content_revision, message.content_revision)) continue;
+          const before = !!message.at_users?.includes(me);
+          message.content = edited.content;
+          message.edited = true;
+          message.edited_at = edited.edited_at ?? null;
+          message.content_revision = edited.content_revision;
+          if (edited.at_users !== undefined) message.at_users = edited.at_users;
+          mentionChanged = before !== !!message.at_users?.includes(me);
+          applied = true;
+        }
+        if (message.reply_to?.message_id === edited.message_id && message.reply_to.state === 'active') {
+          message.reply_to = { ...message.reply_to, state: 'edited' };
+        }
+      }
+      if (!applied && atMe !== undefined) mentionChanged = true;
+      if (this.replyTarget?.reference.message_id === edited.message_id
+        && this.replyTarget.reference.state === 'active') {
+        this.replyTarget.reference = { ...this.replyTarget.reference, state: 'edited' };
+      }
+      onConversationEdit(edited.conversation_id, edited);
+      // @我 变化（被新 @ 或不再被 @）以服务端会话记录为准
+      if (mentionChanged && edited.sender_info?.user_id !== me) {
+        scheduleConversationRefresh(edited.conversation_id, 600);
+      }
+      try {
+        await dbService.applyMessageEdit(me, edited);
+      } catch (error) {
+        console.warn('更新本地缓存的编辑失败:', error);
+      }
     },
 
     async handleMessageRecalled(payload: MessageRecalledPayload): Promise<void> {
