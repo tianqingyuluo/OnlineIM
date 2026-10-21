@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { toast } from 'vue-sonner'
 
 const userStore = {
   token: 'test-token',
   loggedInUser: { user_id: 'usr_test' },
+  clearLocalSession: vi.fn(),
 }
 
 const presenceStore = {
@@ -10,6 +12,7 @@ const presenceStore = {
   onConnected: vi.fn(() => Promise.resolve()),
   setSelf: vi.fn(),
 }
+const routerPush = vi.hoisted(() => vi.fn())
 
 const historyStore = {
   handleWebSocketMessage: vi.fn(),
@@ -36,6 +39,7 @@ const dbServiceMock = {
 }
 
 vi.mock('@/stores/user', () => ({ useUserStore: () => userStore }))
+vi.mock('@/router', () => ({ default: { push: routerPush } }))
 vi.mock('@/stores/history', () => ({ useHistoryStore: () => historyStore }))
 vi.mock('@/stores/presence', () => ({ usePresenceStore: () => presenceStore }))
 vi.mock('@/utils/indexedDB.ts', () => ({ dbService: dbServiceMock }))
@@ -422,6 +426,33 @@ describe('WebSocketService', () => {
     service.connect()
     FakeWebSocket.instances[0].open()
     expect(historyStore.handleReadReceipt).not.toHaveBeenCalled()
+  })
+
+  it('logs the current device out when the server kicks the session', async () => {
+    const { WebSocketService } = await import('@/services/websocket.service')
+    const service = new WebSocketService()
+    service.connect()
+    const socket = FakeWebSocket.instances[0]
+    socket.open()
+
+    socket.receive({
+      type: 'SESSION_KICKED',
+      message: {
+        reason: 'SAME_DEVICE_TYPE_LOGIN',
+        message: '您的账号已在其他网页端登录，当前设备已下线',
+        device_type: 'web',
+      },
+    })
+
+    expect(userStore.clearLocalSession).toHaveBeenCalledOnce()
+    expect(toast.error).toHaveBeenCalledWith('您的账号已在其他网页端登录，当前设备已下线')
+    expect(routerPush).toHaveBeenCalledWith('/login')
+    expect(service.connectionState.value).toBe('offline')
+    const syncCalls = historyStore.requestOfflineSync.mock.calls.length
+
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(FakeWebSocket.instances).toHaveLength(1)
+    expect(historyStore.requestOfflineSync).toHaveBeenCalledTimes(syncCalls)
   })
 
 })

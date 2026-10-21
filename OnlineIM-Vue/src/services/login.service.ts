@@ -5,6 +5,7 @@ import { toast } from 'vue-sonner';
 import router from "@/router";
 import { websocketService } from '@/services/websocket.service';
 import { UAParser } from 'ua-parser-js';
+import { buildDeviceLoginFields, rememberDeviceId, type DeviceType } from '@/utils/device-session';
 
 export const LoginService = {
     validationRules: {
@@ -38,11 +39,14 @@ export const LoginService = {
         try {
             const parser = new UAParser;
             const uaResult = parser.getResult();
-
-            const deviceId = `web-${uaResult.browser.name}-${uaResult.os.name}-${Date.now()}`;
+            const device = buildDeviceLoginFields({
+                uaDeviceType: uaResult.device.type,
+                override: localStorage.getItem('onlineim.device_type'),
+            });
             const requestBody = {
                 ...credentials,
-                device_id: deviceId
+                device_id: device.device_id,
+                device_type: device.device_type,
             };
             const response = await api.post('/auth/login', requestBody);
 
@@ -57,6 +61,11 @@ export const LoginService = {
                 });
                 userStore.loggedInUser.user_id=response.data.user_info.user_id
                 userStore.token = response.data.access_token
+                const deviceType = (response.data.device_type || device.device_type) as DeviceType
+                const deviceId = response.data.device_id || device.device_id
+                userStore.deviceType = deviceType
+                userStore.deviceId = deviceId
+                rememberDeviceId(deviceType, deviceId)
 
                 console.log("token:\n"+response.data.access_token);
 

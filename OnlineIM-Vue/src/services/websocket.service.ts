@@ -6,6 +6,7 @@ import { usePresenceStore } from '@/stores/presence';
 import type { PresenceUpdate } from '@/utils/presence';
 import { dbService } from '@/utils/indexedDB.ts';
 import { toast } from 'vue-sonner';
+import router from '@/router';
 import type {
   MessageAckPayload,
   MessageRecalledPayload,
@@ -56,6 +57,7 @@ export class WebSocketService {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts = 0;
   private isManualDisconnect = false;
+  private sessionKicked = false;
   private hasConnectedBefore = false;
 
   private messageHandlers: ((event: MessageEvent) => void)[] = [];
@@ -86,6 +88,7 @@ export class WebSocketService {
     }
 
     this.isManualDisconnect = false;
+    this.sessionKicked = false;
     if (!preserveOfflineState) {
       this.setConnectionState(this.hasConnectedBefore ? 'reconnecting' : 'connecting');
     }
@@ -162,6 +165,14 @@ export class WebSocketService {
           case 'DRAFT_UPDATED':
             publishDraftUpdate(payload as unknown as DraftPayload);
             break;
+          case 'SESSION_KICKED': {
+            const kicked = payload as { message?: unknown };
+            const text = typeof kicked.message === 'string' && kicked.message
+              ? kicked.message
+              : '您的账号已在其他设备登录，当前设备已下线';
+            this.handleSessionKicked(text);
+            break;
+          }
           case 'MESSAGE_EDITED':
             // 帧形如 MessageEditedFrame：message 为编辑后的完整消息，群聊带顶层 at_me
             void historyStore.handleMessageEdited(
@@ -202,8 +213,40 @@ export class WebSocketService {
       const selfId = useUserStore().loggedInUser?.user_id;
       if (selfId) usePresenceStore().setSelf(selfId, false);
       this.closeHandlers.forEach(handler => handler(event));
+      if (event.code === 4001) {
+        this.handleSessionKicked('您的账号已在其他设备登录，当前设备已下线');
+        return;
+      }
+      // 4000：同一台设备的新页面接过了连接，停在离线，避免两个页面互相抢连接
+      if (event.code === 4000) {
+        this.isManualDisconnect = true;
+        this.stopReconnectTimer();
+        this.connectionState.value = 'offline';
+        return;
+      }
       if (!this.isManualDisconnect) this.startReconnect();
     };
+  }
+
+  /**
+   * 会话被挤下线或远程登出：停止重连，清掉本地登录态，并提示原因。
+   */
+  private handleSessionKicked(message: string): void {
+    if (this.sessionKicked) return;
+    this.sessionKicked = true;
+    this.isManualDisconnect = true;
+    this.stopHeartbeat();
+    this.stopReconnectTimer();
+    const socket = this.ws;
+    this.ws = null;
+    if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+      socket.close();
+    }
+    this.connectionState.value = 'offline';
+    const userStore = useUserStore();
+    userStore.clearLocalSession();
+    toast.error(message);
+    void router.push('/login');
   }
 
   disconnect(): void {

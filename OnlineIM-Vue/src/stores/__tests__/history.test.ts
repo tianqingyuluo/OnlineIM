@@ -649,4 +649,69 @@ describe('history store message receipt flow', () => {
     })
     expect(list.conversations[0]?.unread_count).toBe(0)
   })
+
+  it('shows a message sent from another signed-in device without adding unread', async () => {
+    const { useHistoryStore } = await import('@/stores/history')
+    const { useListStore } = await import('@/stores/list')
+    const store = useHistoryStore()
+    const list = useListStore()
+    list.conversations = [{
+      conversation_id: 'conv_1',
+      type: 'private',
+      target_info: { id: 'usr_peer', name: '对方' },
+      last_message: null,
+      unread_count: 0,
+      last_activity_time: '2026-10-21 10:00:00',
+    }] as never
+    store.activeConversationId = 'conv_1'
+
+    store.handleWebSocketMessage({
+      message_id: 'msg_phone',
+      conversation_id: 'conv_1',
+      sender_info: { user_id: 'usr_me', nickname: '我' },
+      message_type: 'text',
+      content: '手机上发出的',
+      seq_id: '11',
+      client_message_id: 'c-phone',
+      timestamp: '2026-10-21 22:00:00',
+      status: 1,
+    } as never)
+
+    expect(store.chatMessages.map(message => message.message_id)).toContain('msg_phone')
+    expect(list.conversations[0]?.unread_count).toBe(0)
+    expect(list.conversations[0]?.last_message?.content_preview).toBe('手机上发出的')
+  })
+
+  it('clears unread when another of my devices reads without marking my own messages as read by the peer', async () => {
+    const { useHistoryStore } = await import('@/stores/history')
+    const { useListStore } = await import('@/stores/list')
+    const store = useHistoryStore()
+    const list = useListStore()
+    list.conversations = [{
+      conversation_id: 'conv_1',
+      type: 'private',
+      target_info: { id: 'usr_peer', name: '对方' },
+      last_message: null,
+      unread_count: 3,
+      read_seq: '1',
+      last_activity_time: '2026-10-21 10:00:00',
+    }] as never
+    store.sendMessage('conv_1', 'usr_peer', 'text', 'hello', false)
+    const message = store.chatMessages[0]
+    store.handleMessageAck({
+      client_message_id: message.client_message_id,
+      message_id: 'msg_1',
+      conversation_id: 'conv_1',
+      seq_id: '10',
+      delivery_state: 'sent',
+      server_time: 1,
+    })
+
+    store.handleReadReceipt({ conversation_id: 'conv_1', reader_id: 'usr_me', read_seq: '12' })
+
+    expect(message.delivery_state).toBe('sent')
+    expect(list.conversations[0]?.unread_count).toBe(0)
+    expect(list.conversations[0]?.read_seq).toBe('12')
+    expect(store.readStates.conv_1?.read_seq).toBe('12')
+  })
 })

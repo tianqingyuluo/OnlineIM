@@ -221,6 +221,15 @@ export function onConversationRecall(
   if (adjustUnread) scheduleConversationRefresh(conversationId, 600)
 }
 
+/** 自己的另一台设备把会话读到了 readSeq，这边的未读角标跟着清掉 */
+export function onOwnDeviceRead(conversationId: string, readSeq: string): void {
+  const conversation = findConversation(conversationId)
+  if (conversation) {
+    conversation.read_seq = maxSeqId(conversation.read_seq || '0', readSeq)
+  }
+  onConversationRead(conversationId, 0)
+}
+
 /** 当前用户把会话读到 remaining 条未读（通常为 0），稍后用服务端值校正 */
 export function onConversationRead(conversationId: string, remaining = 0): void {
   const conversation = findConversation(conversationId)

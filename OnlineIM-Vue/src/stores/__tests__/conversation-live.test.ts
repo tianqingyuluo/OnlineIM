@@ -230,4 +230,11 @@ describe('conversation list live updates', () => {
     expect(list.conversations[0].unread_count).toBe(0)
     expect(list.conversations[0].last_message.content_preview).toBe('新')
   })
+
+  it('clears unread when another device of the same account advances the read cursor', async () => {
+    const { list, live } = await setup([conv('conv_a', { unread_count: 4, read_seq: '3' })])
+    live.onOwnDeviceRead('conv_a', '9')
+    expect(list.conversations[0]?.unread_count).toBe(0)
+    expect(list.conversations[0]?.read_seq).toBe('9')
+  })
 })

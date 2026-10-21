@@ -5,17 +5,19 @@ import { websocketService } from '@/services/websocket.service'
 import { usePresenceStore } from '@/stores/presence'
 import UserProfile from "@/components/independent/profile/UserProfile.vue";
 import {ref} from "vue";
-import {LogIn,UserRoundPen} from 'lucide-vue-next'
+import {LogIn,UserRoundPen,MonitorSmartphone} from 'lucide-vue-next'
+import DeviceSessionPanel from '@/components/settings/DeviceSessionPanel.vue'
 
 const userStore = useUserStore()
 const router = useRouter()
 const showProfile = ref(false)
+const showDevices = ref(false)
 
-const handleLogout = () => {
+const handleLogout = async () => {
    // 退出前断开 WebSocket：否则好友一直看到“在线”，同一页面换账号登录还会沿用旧连接
    websocketService.logout()
    usePresenceStore().$reset()
-   userStore.clearUser()
+   await userStore.clearUser()
    userStore.token = ''
   router.push('/login')
 }
@@ -55,6 +57,16 @@ const handleProfile = () => {
       </button>
     </div>
     
+    <div class="py-2">
+      <button
+        class="w-full flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gray-100"
+        @click="showDevices = true"
+      >
+        <MonitorSmartphone/>
+        <span>登录设备</span>
+      </button>
+    </div>
+
     <!-- 信息按钮 -->
     <div class="py-2">
 
@@ -66,6 +78,7 @@ const handleProfile = () => {
         <span>信息</span>
       </button>
     </div>
+    <DeviceSessionPanel v-if="showDevices" @close="showDevices = false" />
     <Transition name="fade-slide">
     <div v-if="showProfile" class="fixed inset-0 bg-white/80 flex justify-center content-center z-[9999]" >
       <UserProfile @close="showProfile = false" />

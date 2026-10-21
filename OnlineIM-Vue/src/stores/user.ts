@@ -28,6 +28,8 @@ export const useUserStore = defineStore('user', {
   state: () => ({
     loggedInUser: JSON.parse(JSON.stringify(DEFAULT_USER)) as User,
     token: "",
+    deviceId: "",
+    deviceType: "web" as 'web' | 'desktop' | 'phone',
   }),
   persist: true, // 启用持久化存储
   actions: {
@@ -41,8 +43,13 @@ export const useUserStore = defineStore('user', {
       catch (error) {
 
       }
+      this.clearLocalSession()
+    },
+    /** 被挤下线时 token 已经失效，只清本地状态，不再请求登出接口。 */
+    clearLocalSession() {
       this.loggedInUser = JSON.parse(JSON.stringify(DEFAULT_USER))
       this.token = ""
+      this.deviceId = ""
       const listStore = useListStore()
       listStore.conversations = [] as Conversation[]
       listStore.total = 0
@@ -57,7 +64,6 @@ export const useUserStore = defineStore('user', {
       listStore.FriendRequestsList=[]
       useEmojiStore().reset()
       TokenService.clear()
-
     },
     isAuthenticated(): boolean {//是否拥有token
       return !!this.token

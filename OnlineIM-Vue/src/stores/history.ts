@@ -30,6 +30,7 @@ import {
   onConversationMessage,
   onConversationRead,
   onConversationRecall,
+  onOwnDeviceRead,
   scheduleConversationRefresh,
 } from '@/stores/conversation-live';
 
@@ -816,6 +817,14 @@ export const useHistoryStore = defineStore('history', {
     handleReadReceipt(payload: ReadReceiptPayload) {
       if (!payload?.conversation_id || !payload.read_seq) return;
       const currentUserId = useUserStore().loggedInUser.user_id;
+      // 自己另一台设备读过了：同步未读，不要把“我发出的消息”标成对方已读
+      if (payload.reader_id && payload.reader_id === currentUserId) {
+        const state = this.readStates[payload.conversation_id] || emptyReadState(payload.conversation_id);
+        state.read_seq = maxSeqId(state.read_seq, payload.read_seq);
+        this.readStates[payload.conversation_id] = state;
+        onOwnDeviceRead(payload.conversation_id, payload.read_seq);
+        return;
+      }
       const readerId = payload.reader_id || currentUserId;
       const cursors = this.groupReadCursors[payload.conversation_id] || {};
       cursors[readerId] = maxSeqId(cursors[readerId], payload.read_seq);
