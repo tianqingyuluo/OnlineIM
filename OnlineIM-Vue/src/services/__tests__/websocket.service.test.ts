@@ -7,6 +7,8 @@ const userStore = {
 
 const presenceStore = {
   applyUpdate: vi.fn(),
+  onConnected: vi.fn(() => Promise.resolve()),
+  setSelf: vi.fn(),
 }
 
 const historyStore = {
@@ -303,6 +305,44 @@ describe('WebSocketService', () => {
       last_seen_at: 1700000000000,
       server_time: 1700000001000,
     })
+  })
+
+  it('tells the presence store when the socket opens and closes', async () => {
+    const { WebSocketService } = await import('@/services/websocket.service')
+    const service = new WebSocketService()
+    service.connect()
+    const socket = FakeWebSocket.instances[0]
+
+    socket.open()
+    expect(presenceStore.onConnected).toHaveBeenCalledWith('usr_test')
+
+    socket.close()
+    expect(presenceStore.setSelf).toHaveBeenCalledWith('usr_test', false)
+  })
+
+  it('logout closes the socket quietly and the next login is a fresh connection', async () => {
+    const { toast } = await import('vue-sonner')
+    const { WebSocketService } = await import('@/services/websocket.service')
+    const service = new WebSocketService()
+    service.connect()
+    const first = FakeWebSocket.instances[0]
+    first.open()
+    vi.mocked(toast.warning).mockClear()
+    vi.mocked(toast.success).mockClear()
+
+    service.logout()
+
+    expect(first.readyState).toBe(FakeWebSocket.CLOSED)
+    expect(toast.warning).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(FakeWebSocket.instances).toHaveLength(1)
+
+    service.connect()
+    const second = FakeWebSocket.instances[1]
+    expect(service.connectionState.value).toBe('connecting')
+    second.open()
+    expect(service.connectionState.value).toBe('online')
+    expect(toast.success).not.toHaveBeenCalled()
   })
 
   it('routes top-level MESSAGE_RECALLED frames to the history store', async () => {

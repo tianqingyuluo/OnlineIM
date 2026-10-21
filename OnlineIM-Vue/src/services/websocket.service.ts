@@ -109,6 +109,10 @@ export class WebSocketService {
         this.reconnectHandlers.forEach(handler => handler());
       }
       this.hasConnectedBefore = true;
+      const selfId = useUserStore().loggedInUser?.user_id;
+      if (selfId) {
+        void usePresenceStore().onConnected(selfId).catch(error => console.error('同步在线状态失败:', error));
+      }
       this.openHandlers.forEach(handler => handler(event));
     };
 
@@ -184,6 +188,8 @@ export class WebSocketService {
       if (this.ws !== socket) return;
       this.ws = null;
       this.stopHeartbeat();
+      const selfId = useUserStore().loggedInUser?.user_id;
+      if (selfId) usePresenceStore().setSelf(selfId, false);
       this.closeHandlers.forEach(handler => handler(event));
       if (!this.isManualDisconnect) this.startReconnect();
     };
@@ -199,6 +205,25 @@ export class WebSocketService {
       socket.close();
     }
     this.setConnectionState('offline');
+  }
+
+  /**
+   * 退出登录：关闭连接（好友随即看到离线），不提示“网络离线”，
+   * 下次登录按首次连接处理（不弹“已重新连接”、不做重连补拉）。
+   */
+  logout(): void {
+    this.isManualDisconnect = true;
+    this.stopHeartbeat();
+    this.stopReconnectTimer();
+    const socket = this.ws;
+    this.ws = null;
+    if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+      socket.close();
+    }
+    this.connectionState.value = 'connecting';
+    this.hasConnectedBefore = false;
+    this.reconnectAttempts = 0;
+    this.missedAckCount = 0;
   }
 
   /**

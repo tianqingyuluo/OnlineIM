@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { useUserStore } from '@/stores/user.ts'
 import { useRouter } from 'vue-router'
+import { websocketService } from '@/services/websocket.service'
+import { usePresenceStore } from '@/stores/presence'
 import UserProfile from "@/components/independent/profile/UserProfile.vue";
 import {ref} from "vue";
 import {LogIn,UserRoundPen} from 'lucide-vue-next'
@@ -12,6 +14,9 @@ const router = useRouter()
 const showProfile = ref(false)
 
 const handleLogout = () => {
+  // 退出前断开 WebSocket：否则好友一直看到“在线”，同一页面换账号登录还会沿用旧连接
+  websocketService.logout()
+  usePresenceStore().$reset()
   userStore.clearUser()
   router.push('/login')
 }
