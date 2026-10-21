@@ -26,6 +26,8 @@
 | `MESSAGE_EDITED` | S→C | 业务·编辑通知 | v1 | message-edit |
 | `NOTICE_MESSAGE_REQUEST` | C→S | 业务·发送 | v1 | — |
 | `NOTICE_MESSAGE` | S→C | 业务·接收 | v1 | — |
+| `SYNC_REQUEST` | C→S | 控制·上线补齐 | v1 | offline-push |
+| `OFFLINE_SYNC` | S→C | 控制·上线补齐 | v1 | offline-push |
 | `HEARTBEAT` | C→S | 控制·心跳 | v1 | ws-heartbeat-reconnect |
 | `HEARTBEAT_ACK` | S→C | 控制·心跳 | v1 | ws-heartbeat-reconnect |
 | `PRESENCE_UPDATE` | S→C | 业务·在线状态 | v1 | user-presence |
@@ -803,6 +805,69 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 - 会话列表（桌面和手机共用同一行）有草稿时用红色 `[草稿]` 加摘要代替最后一条消息预览；若同时有人 @ 我，`[有人@我]` 仍留在前面。
 - 编辑消息时先把当前草稿（含回复目标；群聊还有 @）暂存，编辑的原文不写进草稿。保存或取消后恢复；切换会话时丢掉编辑态，服务端仍是编辑前的草稿。
 
+## 上线补齐（离线未读）
+
+WebSocket **每次**连接成功（含第一次连接和断线重连）后，客户端立刻发送 `SYNC_REQUEST`。服务端只按该连接回复 `OFFLINE_SYNC`，不广播给该用户的其他连接。身份取自已认证会话，忽略载荷里自报的用户 ID。这一帧不进 Redis Stream，也不表示已读：已读仍由用户看到消息后的 `READ_RECEIPT` 推进。
+
+用来补上两类漏收：
+
+- 用户离线期间的新消息、以及这些消息在离线期间被编辑或撤回后的当前内容；
+- 登录成功、会话列表已经拉下来，但 WebSocket 还没连上的那一小段时间里到达的消息。这段时间没有实时帧，刷新前客户端原本看不到。
+
+### SYNC_REQUEST（客户端 → 服务端）
+
+```json
+{
+  "type": "SYNC_REQUEST",
+  "message": {
+    "conversations": [
+      { "conversation_id": "conv_xxx", "last_seq": "100" },
+      { "conversation_id": "grp_xxx", "last_seq": "0" }
+    ],
+    "watch": [
+      { "conversation_id": "conv_xxx", "message_ids": ["msg_a", "msg_b"] }
+    ]
+  }
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `conversations` | 客户端已知会话。`last_seq` 是该会话本地已经有的最大 seq（IndexedDB 与当前打开的消息列表取较大值）；本地没有消息时用会话列表上的 `latest_seq`，这样只补列表快照之后的缺口。缺省或空串按 `0`。非法 seq 的该条游标被忽略 |
+| `watch` | 可选。当前屏幕上已经加载的消息 ID（最多取 100 个），用于把这些消息在离线期间的编辑 / 撤回带回来 |
+
+不在 `conversations` 里的会话也会出现在响应的会话列表中（未读数和最新预览），只是不会按游标回放消息正文。单次最多处理 100 个游标。
+
+### OFFLINE_SYNC（服务端 → 客户端）
+
+```json
+{
+  "type": "OFFLINE_SYNC",
+  "message": {
+    "conversations": [],
+    "messages": [],
+    "revisions": [],
+    "truncated": false
+  }
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `conversations` | 当前用户可见会话，形状与 `GET /api/v1/conversations` 的元素相同。`unread_count` 是按已读游标算出的权威值（已撤回的不计入），`last_message` 已是编辑或撤回之后的预览 |
+| `messages` | `seq_id` 大于该会话 `last_seq` 的消息，**已经是当前内容**（离线期间被编辑或撤回的，直接是编辑后 / 撤回态）。每个会话最多 50 条、全部会话合计最多 200 条，取最新的一段，帧内按 seq 升序 |
+| `revisions` | 客户端已经见过（`seq_id` 不超过游标）但之后被编辑或撤回的消息，以及 `watch` 里点名的这类消息。每会话按更新时间最多 30 条。与 `messages` 重复的 ID 不会再出现 |
+| `truncated` | 上面的条数上限不够装下全部漏收时为 `true`。客户端应对**正在查看**的会话再调用既有 `GET /api/v1/messages/sync/{conversationId}?seq_id=` |
+
+`messages` / `revisions` 的元素与历史接口的 `MessageResponse` 相同（含 `is_recalled`、`edited`、`content_revision`、`seq_id`）。
+
+客户端必须按 `message_id`（以及同一会话的 `seq_id`）去重：同一条消息可能先随本帧到达，随后又被实时帧再推一次。未读数以 `conversations` 里的权威值为准，**不要**把本帧里的消息再逐条加到未读上。快照生成之后才到达的更新实时消息仍然加未读。正在查看的会话不加未读，和实时消息一致。
+
+多端各自用自己的 `last_seq` 请求，互不影响。重复推送由客户端丢掉，不会重复加未读，也不会把消息插进聊天窗口两次。
+
+不使用 `user_timelines` 另存一份漏收记录：消息本来就在私聊 / 群聊集合里，按 seq 读取即可，因此也没有额外的清理任务。
+
+`conversations` 里的 `draft_preview` 与会话列表接口相同。客户端应用快照时采用这份草稿摘要，即使因为本地有更新的消息而保留了原来的预览和未读。在线状态不放进本帧：连接成功后仍由客户端查询 presence，变更继续用 `PRESENCE_UPDATE` 扇出到该用户的每条连接。用户有多条连接时，`OFFLINE_SYNC` 只发给发出 `SYNC_REQUEST` 的那一条。
 
 ## 控制帧详情
 
