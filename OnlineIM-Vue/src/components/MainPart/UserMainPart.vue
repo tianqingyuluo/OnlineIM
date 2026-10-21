@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Ellipsis, CircleEllipsis, AlertCircle, Check, CheckCheck, Search } from 'lucide-vue-next'
 import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, provide, reactive, ref, watch } from 'vue'
+import { useLoadedConversation } from '@/composables/useLoadedConversation'
 import { useRoute, useRouter } from 'vue-router'
 import ConversationSearchPanel from '@/components/search/ConversationSearchPanel.vue'
 import type { MessageSearchItem } from '@/type/message'
@@ -69,6 +70,8 @@ const conversationId = computed(() => {
   const id = route.params.id
   return Array.isArray(id) ? id[0] : id
 })
+/** 本窗口实际加载的会话，卸载时据此离开（不再视为正在查看） */
+const loadedConversation = useLoadedConversation(id => historyStore.leaveConversation(id))
 /** 转发：右键“转发”/“多选”，多选后逐条或合并转发 */
 const forward = reactive(useMessageForward(() => conversationId.value, () => historyStore.chatMessages))
 /** 编辑：右键“编辑”把原文放进输入框，回车 / 保存提交 */
@@ -157,6 +160,7 @@ async function loadConversation() {
     currentUser.value = await userService.getUserById(targetUserId.value)
     await historyStore.init()
     await historyStore.loadInitialHistory(userStore.loggedInUser.user_id, id, false)
+    loadedConversation.enter(id)
     await draftSync.reload()
     await nextTick()
     scrollToBottom()
@@ -378,10 +382,12 @@ onBeforeUnmount(() => {
   messageObserver?.disconnect()
   visibleTimers.forEach(timer => clearTimeout(timer))
   visibleTimers.clear()
-  if (historyStore.replyTarget?.conversationId === conversationId.value) {
+  // 卸载时路由已经切走，conversationId 可能已经是空的：用实际加载的会话
+  const leftId = loadedConversation.current() || conversationId.value
+  if (leftId && historyStore.replyTarget?.conversationId === leftId) {
     historyStore.cancelReplyTarget()
   }
-  historyStore.leaveConversation(conversationId.value)
+  loadedConversation.leave(conversationId.value)
 })
 </script>
 

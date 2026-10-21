@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Ellipsis, CircleEllipsis, AlertCircle, Check, CheckCheck, Search } from 'lucide-vue-next'
 import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, provide, reactive, ref, watch } from 'vue'
+import { useLoadedConversation } from '@/composables/useLoadedConversation'
 import { useRoute, useRouter } from 'vue-router'
 import ConversationSearchPanel from '@/components/search/ConversationSearchPanel.vue'
 import type { MessageSearchItem } from '@/type/message'
@@ -89,6 +90,8 @@ const groupId = computed(() => {
   const id = route.params.id
   return Array.isArray(id) ? id[0] : id
 })
+/** 本窗口实际加载的会话，卸载时据此离开（不再视为正在查看） */
+const loadedConversation = useLoadedConversation(id => historyStore.leaveConversation(id))
 /** 转发：右键“转发”/“多选”，多选后逐条或合并转发 */
 const forward = reactive(useMessageForward(() => groupId.value, () => historyStore.groupMessages))
 const currentUser = computed(() => userStore.loggedInUser)
@@ -309,6 +312,7 @@ async function loadConversation() {
     void loadMembers()
     await historyStore.init()
     await historyStore.loadInitialHistory(userStore.loggedInUser.user_id, groupId.value, true)
+    loadedConversation.enter(groupId.value)
     await draftSync.reload()
     await nextTick()
     scrollToBottom()
@@ -579,10 +583,12 @@ onBeforeUnmount(() => {
   messageObserver?.disconnect()
   visibleTimers.forEach(timer => clearTimeout(timer))
   visibleTimers.clear()
-  if (historyStore.replyTarget?.conversationId === groupId.value) {
+  // 卸载时路由已经切走，groupId 可能已经是空的：用实际加载的会话
+  const leftId = loadedConversation.current() || groupId.value
+  if (leftId && historyStore.replyTarget?.conversationId === leftId) {
     historyStore.cancelReplyTarget()
   }
-  historyStore.leaveConversation(groupId.value)
+  loadedConversation.leave(groupId.value)
 })
 </script>
 
