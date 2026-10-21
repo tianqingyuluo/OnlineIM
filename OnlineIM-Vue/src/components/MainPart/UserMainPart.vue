@@ -37,6 +37,7 @@ const menuButtonRef = ref<HTMLElement | null>(null)
 const messageScrollRef = ref<HTMLElement | null>(null)
 const messageListRef = ref<HTMLElement | null>(null)
 const messageInputRef = ref<HTMLTextAreaElement | null>(null)
+const draft = ref('')
 const visibleTimers = new Map<string, ReturnType<typeof setTimeout>>()
 let messageObserver: IntersectionObserver | null = null
 
@@ -123,13 +124,22 @@ function handleKeyDown(event: KeyboardEvent) {
   }
 }
 
-function handleEmojiSelect(emoji: string) {
-  const textarea = messageInputRef.value
-  if (!textarea) return
-  const start = textarea.selectionStart || 0
-  textarea.value = `${textarea.value.slice(0, start)}${emoji}${textarea.value.slice(start)}`
-  textarea.selectionStart = textarea.selectionEnd = start + emoji.length
-  textarea.focus()
+/** Textarea 组件的根元素就是原生 textarea（其暴露的 element 未绑定，取 $el） */
+function inputElement(): HTMLTextAreaElement | null {
+  const input = messageInputRef.value as unknown as { element?: HTMLTextAreaElement | null; $el?: Element } | null
+  const element = input?.element ?? input?.$el
+  return typeof HTMLTextAreaElement !== 'undefined' && element instanceof HTMLTextAreaElement ? element : null
+}
+
+/** 在光标处插入表情（之前读不到原生 textarea 的 selectionStart，总是插到开头） */
+async function handleEmojiSelect(emoji: string) {
+  const element = inputElement()
+  const start = element?.selectionStart ?? draft.value.length
+  const end = element?.selectionEnd ?? start
+  draft.value = `${draft.value.slice(0, start)}${emoji}${draft.value.slice(end)}`
+  await nextTick()
+  element?.focus()
+  element?.setSelectionRange(start + emoji.length, start + emoji.length)
 }
 
 async function handleMediaUploaded(kind: ChatMediaKind, media: ChatMedia) {
@@ -153,10 +163,10 @@ function handleSaveEmoji(message: MessageResponse) {
 }
 
 async function handleSendClick() {
-  const content = messageInputRef.value?.value.trim()
+  const content = draft.value.trim()
   if (!content || !conversation.value) return
   historyStore.sendMessage(conversation.value.conversation_id, targetUserId.value, 'text', content, false)
-  if (messageInputRef.value) messageInputRef.value.value = ''
+  draft.value = ''
   await nextTick()
   scrollToBottom()
 }
@@ -166,7 +176,7 @@ function handleRetry(message: MessageResponse) {
 }
 
 function handleReply(message: MessageResponse) {
-  if (historyStore.selectReplyTarget(message)) messageInputRef.value?.focus()
+  if (historyStore.selectReplyTarget(message)) inputElement()?.focus()
 }
 
 async function handleReplyNavigate(reference: ReplyReference) {
@@ -221,16 +231,18 @@ onMounted(() => {
 })
 
 watch(conversationId, (nextId, previousId) => {
-  if (previousId && nextId !== previousId) void loadConversation()
+  if (previousId && nextId !== previousId) {
+    draft.value = ''
+    void loadConversation()
+  }
 })
 
-watch(() => historyStore.failedReplyDraft, async draft => {
-  if (!draft || draft.conversationId !== conversationId.value) return
+watch(() => historyStore.failedReplyDraft, async failed => {
+  if (!failed || failed.conversationId !== conversationId.value) return
   await nextTick()
-  const textarea = messageInputRef.value
-  if (!textarea || textarea.value.trim()) return
-  textarea.value = draft.content
-  textarea.focus()
+  if (draft.value.trim()) return
+  draft.value = failed.content
+  inputElement()?.focus()
   historyStore.consumeFailedReplyDraft()
 })
 
@@ -336,6 +348,8 @@ onBeforeUnmount(() => {
     <div class="relative h-1/4 border-t">
       <Textarea
         ref="messageInputRef"
+        v-model="draft"
+        data-testid="message-input"
         class="h-full w-full resize-none pr-20 rounded-none focus:ring-0 focus:shadow-none whitespace-pre-wrap"
         style="outline: none; box-shadow: none; font-size: 24px; word-break: break-all"
         placeholder="输入消息..."
