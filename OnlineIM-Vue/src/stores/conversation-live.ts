@@ -34,6 +34,7 @@ export function previewOfMessage(message: MessageResponse): string {
     case 'video': return '[视频]'
     case 'emoji':
     case 'sticker': return '[表情]'
+    case 'chat_record': return '[聊天记录]'
     default: return '[消息]'
   }
 }

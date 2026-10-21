@@ -41,6 +41,8 @@ export interface MessageResponse {
     is_recalled: boolean;
     client_message_id: string;
     reply_to?: ReplyReference;
+    /** 逐条转发的消息：原作者（转发链上最初的发送者） */
+    forwarded_from?: ForwardedFrom | null;
     // 以下字段由前端在收到群聊已读回执后填充，不会破坏后端历史消息格式。
     readers?: MessageUserBrief[];
     readers_expanded?: boolean;
@@ -107,4 +109,30 @@ export interface MessageRecalledPayload {
     conversation_id: string;
     recall_user_id?: string;
     timestamp?: number;
+}
+
+export interface ForwardedFrom {
+    user_id: string;
+    display_name: string;
+}
+
+/** POST /messages/forward */
+export interface MessageForwardRequest {
+    source_conversation_id: string;
+    message_ids: string[];
+    /** 好友 user_id 或群 group_id */
+    targets: string[];
+    mode: 'separate' | 'merged';
+    client_request_id: string;
+}
+
+export interface MessageForwardTargetResult {
+    target_id: string;
+    conversation_id: string;
+    messages: MessageResponse[];
+}
+
+export interface MessageForwardResponse {
+    mode: 'separate' | 'merged';
+    results: MessageForwardTargetResult[];
 }

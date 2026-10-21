@@ -1,6 +1,8 @@
 import api from './api.service';
 import type {
     MessageContextResponse,
+    MessageForwardRequest,
+    MessageForwardResponse,
     MessageHistoryResponse,
     MessageResponse,
 } from '@/type/message.ts';
@@ -39,6 +41,11 @@ export const MessageService = {
             `/messages/${conversationId}/${messageId}/context`,
             { params: { before, after } },
         );
+        return response.data;
+    },
+    /** 逐条 / 合并转发到一个或多个好友、群；整体校验，失败时不产生任何消息 */
+    async forwardMessages(request: MessageForwardRequest): Promise<MessageForwardResponse> {
+        const response = await api.post<MessageForwardResponse>('/messages/forward', request);
         return response.data;
     },
     //错误的put方法

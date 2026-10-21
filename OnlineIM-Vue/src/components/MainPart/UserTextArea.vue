@@ -3,7 +3,9 @@ import MessageActions from '@/components/MainPart/MessageActions.vue'
 import MessageReplyPreview from '@/components/MainPart/MessageReplyPreview.vue'
 import MediaMessage from '@/components/MainPart/MediaMessage.vue'
 import StickerMessage from '@/components/MainPart/StickerMessage.vue'
-import type { ReplyReference } from '@/type/message'
+import ChatRecordCard from '@/components/MainPart/ChatRecordCard.vue'
+import type { ForwardedFrom, ReplyReference } from '@/type/message'
+import { isChatRecordType } from '@/utils/chat-record'
 import { computed } from 'vue'
 import { isMediaMessageType } from '@/utils/media-message'
 import { canSaveAsEmoji, isStickerMessageType } from '@/utils/sticker-message'
@@ -20,6 +22,10 @@ const props = withDefaults(defineProps<{
   atUsers?: string[] | null
   mentionNames?: Record<string, string[]>
   currentUserId?: string
+  /** 逐条转发的消息显示“转发自 原作者” */
+  forwardedFrom?: ForwardedFrom | null
+  canForward?: boolean
+  canSelect?: boolean
 }>(), {
   isSelf: false,
   canReply: true,
@@ -29,11 +35,18 @@ const props = withDefaults(defineProps<{
   atUsers: undefined,
   mentionNames: () => ({}),
   currentUserId: undefined,
+  forwardedFrom: undefined,
+  canForward: false,
+  canSelect: false,
 })
 
 const isMedia = computed(() => isMediaMessageType(props.messageType))
 /** 表情消息不套气泡，直接显示较大的图片（GIF 原样播放） */
 const isSticker = computed(() => isStickerMessageType(props.messageType) && !props.recalled)
+/** 合并转发的聊天记录：卡片，点开查看 */
+const isChatRecord = computed(() => isChatRecordType(props.messageType) && !props.recalled)
+const forwardLabel = computed(() =>
+  !props.recalled && props.forwardedFrom?.display_name ? `转发自 ${props.forwardedFrom.display_name}` : '')
 const canSaveEmoji = computed(() => !props.recalled && canSaveAsEmoji(props.messageType))
 
 const segments = computed(() =>
@@ -45,10 +58,13 @@ const emit = defineEmits<{
   reply: []
   navigate: [reference: ReplyReference]
   saveEmoji: []
+  forward: []
+  select: []
 }>()
 
 async function copyMessage() {
-  if (props.recalled || !props.message || isMedia.value || isStickerMessageType(props.messageType)) return
+  if (props.recalled || !props.message || isMedia.value || isStickerMessageType(props.messageType)
+    || isChatRecordType(props.messageType)) return
   try {
     await navigator.clipboard.writeText(props.message)
   } catch (error) {
@@ -61,23 +77,29 @@ async function copyMessage() {
   <MessageActions
     :can-reply="canReply && !recalled"
     :align="isSelf ? 'end' : 'start'"
-    :can-copy="!isMedia && !isStickerMessageType(messageType) && !recalled"
+    :can-copy="!isMedia && !isStickerMessageType(messageType) && !isChatRecordType(messageType) && !recalled"
     :can-save-emoji="canSaveEmoji"
+    :can-forward="canForward && !recalled"
+    :can-select="canSelect"
     @reply="emit('reply')"
     @copy="copyMessage"
     @save-emoji="emit('saveEmoji')"
+    @forward="emit('forward')"
+    @select="emit('select')"
   >
     <div
-      v-if="isSticker"
+      v-if="isSticker || isChatRecord"
       :class="['flex min-w-0 max-w-full flex-col gap-1.5', isSelf ? 'items-end' : 'items-start']"
     >
+      <span v-if="forwardLabel" data-testid="forwarded-label" class="text-[11px] text-slate-400">{{ forwardLabel }}</span>
       <MessageReplyPreview
         v-if="replyTo"
         :reference="replyTo"
         class="max-w-full rounded-lg bg-slate-50 px-2 py-1.5 ring-1 ring-black/[0.04]"
         @navigate="emit('navigate', $event)"
       />
-      <StickerMessage :message-type="messageType" :content="message" />
+      <ChatRecordCard v-if="isChatRecord" :content="message" :is-self="isSelf" />
+      <StickerMessage v-else :message-type="messageType" :content="message" />
     </div>
     <div
       v-else
@@ -86,6 +108,7 @@ async function copyMessage() {
         isSelf ? 'rounded-tr-sm bg-blue-50' : 'rounded-tl-sm bg-slate-50',
       ]"
     >
+      <div v-if="forwardLabel" data-testid="forwarded-label" class="mb-1 text-[11px] text-slate-400">{{ forwardLabel }}</div>
       <MessageReplyPreview
         v-if="replyTo"
         :reference="replyTo"

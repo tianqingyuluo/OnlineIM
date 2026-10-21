@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Copy, Reply, SmilePlus } from 'lucide-vue-next'
+import { Copy, Forward, ListChecks, Reply, SmilePlus } from 'lucide-vue-next'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -11,11 +11,15 @@ withDefaults(defineProps<{
   canReply?: boolean
   canCopy?: boolean
   canSaveEmoji?: boolean
+  canForward?: boolean
+  canSelect?: boolean
   align?: 'start' | 'end'
 }>(), {
   canReply: true,
   canCopy: true,
   canSaveEmoji: false,
+  canForward: false,
+  canSelect: false,
   align: 'start',
 })
 
@@ -23,12 +27,14 @@ const emit = defineEmits<{
   reply: []
   copy: []
   saveEmoji: []
+  forward: []
+  select: []
 }>()
 </script>
 
 <template>
   <ContextMenu>
-    <ContextMenuTrigger class="block min-w-0" :disabled="!canCopy && !canReply && !canSaveEmoji">
+    <ContextMenuTrigger class="block min-w-0" :disabled="!canCopy && !canReply && !canSaveEmoji && !canForward && !canSelect">
       <div class="group/message relative min-w-0">
         <button
           v-if="canReply"
@@ -58,6 +64,14 @@ const emit = defineEmits<{
       <ContextMenuItem v-if="canSaveEmoji" class="gap-2" data-testid="save-emoji-action" @select="emit('saveEmoji')">
         <SmilePlus class="h-4 w-4" aria-hidden="true" />
         添加到表情
+      </ContextMenuItem>
+      <ContextMenuItem v-if="canForward" class="gap-2" data-testid="forward-action" @select="emit('forward')">
+        <Forward class="h-4 w-4" aria-hidden="true" />
+        转发
+      </ContextMenuItem>
+      <ContextMenuItem v-if="canSelect" class="gap-2" data-testid="multi-select-action" @select="emit('select')">
+        <ListChecks class="h-4 w-4" aria-hidden="true" />
+        多选
       </ContextMenuItem>
     </ContextMenuContent>
   </ContextMenu>

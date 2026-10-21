@@ -24,6 +24,8 @@ export function getReplyPreviewText(
       return '[表情]'
     case 'file':
       return fileName?.trim() ? `[文件] ${truncatePreview(fileName.trim())}` : '[文件]'
+    case 'chat_record':
+      return '[聊天记录]'
     default:
       return '[消息]'
   }

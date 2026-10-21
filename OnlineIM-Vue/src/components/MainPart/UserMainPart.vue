@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Ellipsis, CircleEllipsis, AlertCircle, Check, CheckCheck } from 'lucide-vue-next'
-import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, provide, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, provide, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
@@ -23,6 +23,11 @@ import type { ReplyReference } from '@/type/message'
 import { focusMessageElement } from '@/utils/message-navigation'
 import { toast } from 'vue-sonner'
 import { useStickToBottom } from '@/composables/useStickToBottom'
+import { useMessageForward } from '@/composables/useMessageForward'
+import ForwardTargetPicker from '@/components/MainPart/ForwardTargetPicker.vue'
+import ForwardSelectionBar from '@/components/MainPart/ForwardSelectionBar.vue'
+import MessageSelectOverlay from '@/components/MainPart/MessageSelectOverlay.vue'
+import { isForwardable } from '@/utils/chat-record'
 
 const route = useRoute()
 const userStore = useUserStore()
@@ -47,6 +52,8 @@ const conversationId = computed(() => {
   const id = route.params.id
   return Array.isArray(id) ? id[0] : id
 })
+/** 转发：右键“转发”/“多选”，多选后逐条或合并转发 */
+const forward = reactive(useMessageForward(() => conversationId.value, () => historyStore.chatMessages))
 // 对方 ID 以会话详情为准；直接打开/刷新聊天地址时侧栏列表可能还没加载，不能只依赖列表
 const targetUserId = computed(() =>
   conversation.value?.target_info?.id
@@ -232,6 +239,7 @@ onMounted(() => {
 
 watch(conversationId, (nextId, previousId) => {
   if (previousId && nextId !== previousId) {
+    forward.cancelSelect()
     draft.value = ''
     void loadConversation()
   }
@@ -287,8 +295,15 @@ onBeforeUnmount(() => {
           v-for="message in historyStore.chatMessages"
           :key="message.message_id"
           :data-message-id="message.message_id"
-          class="rounded-xl transition-shadow duration-300"
+          :data-selected="forward.selecting ? String(forward.isSelected(message)) : undefined"
+          :class="['rounded-xl transition-shadow duration-300', forward.selecting ? 'relative pl-8' : '']"
         >
+          <MessageSelectOverlay
+            v-if="forward.selecting"
+            :selected="forward.isSelected(message)"
+            :disabled="!isForwardable(message)"
+            @toggle="forward.toggleSelect(message)"
+          />
           <div class="flex justify-center">
             <span class="text-[13px] text-gray-500 truncate">{{ message.timestamp }}</span>
           </div>
@@ -302,6 +317,11 @@ onBeforeUnmount(() => {
                 :can-reply="!message.is_recalled && String(message.status) !== '3'"
                 :recalled="message.is_recalled || String(message.status) === '3'"
                 :reply-to="message.reply_to"
+                :forwarded-from="message.forwarded_from"
+                :can-forward="!forward.selecting && isForwardable(message)"
+                :can-select="!forward.selecting"
+                @forward="forward.forwardOne(message)"
+                @select="forward.startSelect(message)"
                 @reply="handleReply(message)"
                 @navigate="handleReplyNavigate"
                 @save-emoji="handleSaveEmoji(message)"
@@ -326,6 +346,11 @@ onBeforeUnmount(() => {
                 :can-reply="!message.is_recalled && String(message.status) !== '3'"
                 :recalled="message.is_recalled || String(message.status) === '3'"
                 :reply-to="message.reply_to"
+                :forwarded-from="message.forwarded_from"
+                :can-forward="!forward.selecting && isForwardable(message)"
+                :can-select="!forward.selecting"
+                @forward="forward.forwardOne(message)"
+                @select="forward.startSelect(message)"
                 @reply="handleReply(message)"
                 @navigate="handleReplyNavigate"
                 @save-emoji="handleSaveEmoji(message)"
@@ -339,13 +364,20 @@ onBeforeUnmount(() => {
       <div v-if="historyStore.isLoading" class="flex justify-center py-2 text-sm text-gray-500">加载中...</div>
     </div>
 
-    <Tools @select="handleEmojiSelect" @uploaded="handleMediaUploaded" @sticker="handleStickerSend" />
+    <ForwardSelectionBar
+      v-if="forward.selecting"
+      :count="forward.selectedCount"
+      @separate="forward.forwardSelected('separate')"
+      @merged="forward.forwardSelected('merged')"
+      @cancel="forward.cancelSelect()"
+    />
+    <Tools v-show="!forward.selecting" @select="handleEmojiSelect" @uploaded="handleMediaUploaded" @sticker="handleStickerSend" />
     <ReplyComposerBar
-      v-if="historyStore.replyTarget?.conversationId === conversationId"
+      v-if="!forward.selecting && historyStore.replyTarget?.conversationId === conversationId"
       :reference="historyStore.replyTarget.reference"
       @cancel="historyStore.cancelReplyTarget()"
     />
-    <div class="relative h-1/4 border-t">
+    <div v-show="!forward.selecting" class="relative h-1/4 border-t">
       <Textarea
         ref="messageInputRef"
         v-model="draft"
@@ -357,6 +389,14 @@ onBeforeUnmount(() => {
       />
       <Button class="absolute bottom-4 right-4" @click="handleSendClick">发送</Button>
     </div>
+    <ForwardTargetPicker
+      :open="forward.pickerOpen"
+      :mode="forward.pickerMode"
+      :message-count="forward.pickerIds.length"
+      :busy="forward.busy"
+      @close="forward.closePicker()"
+      @confirm="forward.confirm"
+    />
   </div>
   <div v-else class="flex flex-col items-center justify-center h-full gap-3 text-gray-500" data-testid="chat-loading">
     <template v-if="loadError">
