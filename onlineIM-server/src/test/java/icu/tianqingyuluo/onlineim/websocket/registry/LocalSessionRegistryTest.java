@@ -201,17 +201,21 @@ class LocalSessionRegistryTest {
     }
 
     @Test
-    void replacingTheSameDeviceDoesNotDropTheOtherDevice() {
+    void sameDeviceTabsKeepTheirConnections() {
         WebSocketSession web = session("conn_web", "usr_1", "web-1");
         registry.register(web);
         registry.register(session("conn_phone", "usr_1", "phone-1"));
         registry.register(session("conn_web_2", "usr_1", "web-1"));
 
-        assertEquals(2, registry.getOnlineCount());
-        assertNull(registry.getByConnectionId("conn_web"));
+        // 同一浏览器两个标签页共用 device_id，第二个连上后第一个不能被关掉
+        assertEquals(3, registry.getOnlineCount());
+        assertNotNull(registry.getByConnectionId("conn_web"));
         assertNotNull(registry.getByConnectionId("conn_web_2"));
         assertNotNull(registry.getByConnectionId("conn_phone"));
-        verify(web.getSocket()).close((short) 4000, "replaced");
+        verify(web.getSocket(), never()).close(anyShort(), anyString());
+
+        registry.unregister("conn_web_2");
+        assertEquals("conn_web", registry.findByDevice("usr_1", "web-1").getConnectionId());
     }
 
     @Test
@@ -222,12 +226,15 @@ class LocalSessionRegistryTest {
         WebSocketSession webAgain = session("conn_web_2", "usr_1", "web-1");
         registry.register(web);
         registry.register(session("conn_phone", "usr_1", "phone-1"));
-        // 同设备替换后只剩最新的网页连接；这里再挂一条同设备连接前，旧的已经被替换。
+        // 同一设备的两个标签页
         registry.register(webAgain);
 
         assertTrue(registry.kickDevice("usr_1", "web-1", "{\"type\":\"SESSION_KICKED\"}"));
 
+        assertNull(registry.getByConnectionId("conn_web"));
         assertNull(registry.getByConnectionId("conn_web_2"));
+        assertTrue(removed.contains("usr_1:conn_web"));
+        verify(web.getSocket()).writeTextMessage(eq("{\"type\":\"SESSION_KICKED\"}"), any());
         assertNotNull(registry.getByConnectionId("conn_phone"));
         assertTrue(registry.hasUserOnline(List.of("usr_1")));
         assertTrue(removed.contains("usr_1:conn_web_2"));

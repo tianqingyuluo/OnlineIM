@@ -171,7 +171,7 @@ public class VertxWebSocketServer {
                 .socket(ws)
                 .build();
 
-        // 先登记在线，再替换同设备旧连接。这样旧连接被摘掉时，新连接已经计入，用户不会闪成离线。
+        // 先登记在线，再注册连接
         presenceService.onConnected(authResult.getUserId(), connectionId);
         sessionRegistry.register(session);
 

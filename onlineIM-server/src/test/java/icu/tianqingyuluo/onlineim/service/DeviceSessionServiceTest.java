@@ -7,6 +7,7 @@ import icu.tianqingyuluo.onlineim.pojo.entity.RedisConnectionMeta;
 import icu.tianqingyuluo.onlineim.util.DeviceTypes;
 import icu.tianqingyuluo.onlineim.websocket.registry.LocalSessionRegistry;
 import icu.tianqingyuluo.onlineim.websocket.session.SessionKickBus;
+import icu.tianqingyuluo.onlineim.websocket.session.WebSocketSession;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -37,6 +38,7 @@ class DeviceSessionServiceTest {
     private final Map<String, Map<Object, Object>> hashes = new HashMap<>();
     private JwtService jwtService;
     private SessionKickBus kickBus;
+    private LocalSessionRegistry registry;
     private DeviceSessionService service;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -75,7 +77,8 @@ class DeviceSessionServiceTest {
 
         jwtService = mock(JwtService.class);
         kickBus = mock(SessionKickBus.class);
-        service = new DeviceSessionService(redis, jwtService, kickBus, mock(LocalSessionRegistry.class),
+        registry = mock(LocalSessionRegistry.class);
+        service = new DeviceSessionService(redis, jwtService, kickBus, registry,
                 objectMapper, "127.0.0.1:8081");
     }
 
@@ -136,5 +139,21 @@ class DeviceSessionServiceTest {
         assertFalse(device.isOnline());
         assertEquals(DeviceTypes.WEB, device.getDeviceType());
         verify(jwtService, never()).invalidateJWT(anyString());
+    }
+
+    @Test
+    void closingOneTabKeepsTheDeviceOnlineWhileAnotherTabIsConnected() {
+        service.onLogin("usr_1", "web-1", DeviceTypes.WEB, "Bearer web");
+        service.onWebSocketConnected("usr_1", "web-1", DeviceTypes.WEB, "Bearer web", "conn_tab1");
+        service.onWebSocketConnected("usr_1", "web-1", DeviceTypes.WEB, "Bearer web", "conn_tab2");
+        WebSocketSession tab1 = WebSocketSession.builder().connectionId("conn_tab1").userId("usr_1").deviceId("web-1").build();
+        when(registry.findByDevice("usr_1", "web-1")).thenReturn(tab1);
+
+        service.onWebSocketClosed("usr_1", "web-1", "conn_tab2");
+
+        assertTrue(service.list("usr_1", "web-1").get(0).isOnline());
+        when(registry.findByDevice("usr_1", "web-1")).thenReturn(null);
+        service.onWebSocketClosed("usr_1", "web-1", "conn_tab1");
+        assertFalse(service.list("usr_1", "web-1").get(0).isOnline());
     }
 }

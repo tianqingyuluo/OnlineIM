@@ -17,7 +17,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * 本地 WebSocket 会话注册表。
- * 一个用户可以同时有多条连接。同一 deviceId 的新连接会替换旧连接（关闭码 4000），其他设备不受影响。
+ * 一个用户可以同时有多条连接，同一 deviceId 也可以有多条（多个标签页）。挤下线按设备关闭它的全部连接。
  * 每摘掉一条连接都会通知监听器，在线状态只在该用户再没有连接时才变为离线。
  */
 @Slf4j
@@ -80,7 +80,7 @@ public class LocalSessionRegistry {
     }
 
     /**
-     * 注册 WebSocket 会话。同一 deviceId 的旧连接会被替换并关闭（关闭码 4000），不注销账号。
+     * 注册 WebSocket 会话。同一 deviceId 的已有连接（其他标签页）保持不动。
      */
     public void register(WebSocketSession session) {
         if (session == null || session.getConnectionId() == null) {
@@ -101,35 +101,16 @@ public class LocalSessionRegistry {
         if (userId != null) {
             userConnections.computeIfAbsent(userId, key -> ConcurrentHashMap.newKeySet()).add(connectionId);
             userIdToConnectionId.put(userId, connectionId);
-            String deviceKey = deviceKey(session);
-            Set<String> deviceConnections = userDevices
+            // 同一台设备可以有多条连接（同一浏览器的多个标签页共用 device_id 和 token），都保留。
+            // 会话作废靠登录时挤下线（4001），不在这里按 device_id 顶掉旧连接。
+            userDevices
                     .computeIfAbsent(userId, key -> new ConcurrentHashMap<>())
-                    .computeIfAbsent(deviceKey, key -> ConcurrentHashMap.newKeySet());
-            List<String> replaced = new ArrayList<>();
-            for (String existing : deviceConnections) {
-                if (!existing.equals(connectionId)) {
-                    replaced.add(existing);
-                }
-            }
-            deviceConnections.add(connectionId);
-            for (String previous : replaced) {
-                deviceConnections.remove(previous);
-                replacePreviousConnection(previous);
-            }
+                    .computeIfAbsent(deviceKey(session), key -> ConcurrentHashMap.newKeySet())
+                    .add(connectionId);
         }
 
         log.info("WebSocket会话已注册: connectionId={}, userId={}, deviceId={}",
                 connectionId, userId, session.getDeviceId());
-    }
-
-    private void replacePreviousConnection(String previousConnectionId) {
-        WebSocketSession previous = sessionMap.remove(previousConnectionId);
-        if (previous == null) {
-            return;
-        }
-        previous.close((short) 4000, "replaced");
-        detach(previous, true);
-        log.info("同设备旧连接已替换: connectionId={}, userId={}", previousConnectionId, previous.getUserId());
     }
 
     public void addRemovalListener(SessionRemovalListener listener) {

@@ -5,6 +5,7 @@ import icu.tianqingyuluo.onlineim.pojo.dto.response.DeviceSessionResponse;
 import icu.tianqingyuluo.onlineim.pojo.entity.RedisConnectionMeta;
 import icu.tianqingyuluo.onlineim.util.DeviceTypes;
 import icu.tianqingyuluo.onlineim.websocket.registry.LocalSessionRegistry;
+import icu.tianqingyuluo.onlineim.websocket.session.WebSocketSession;
 import icu.tianqingyuluo.onlineim.websocket.session.SessionKickBus;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -142,7 +143,9 @@ public class DeviceSessionService {
         if (connectionId != null && meta.getConnectionID() != null && !connectionId.equals(meta.getConnectionID())) {
             return;
         }
-        meta.setConnectionID(null);
+        // 同一设备的其他标签页还连着时，设备仍算在线
+        WebSocketSession remaining = sessionRegistry.findByDevice(userId, deviceId);
+        meta.setConnectionID(remaining == null ? null : remaining.getConnectionId());
         meta.setActiveTime(System.currentTimeMillis());
         write(userId, deviceId, meta);
     }
