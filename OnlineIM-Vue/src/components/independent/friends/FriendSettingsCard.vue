@@ -37,7 +37,7 @@ watch(() => [props.conversation, props.userId], ([newConversation, newUserId]) =
 const handlePinnedChange = async (isPinned: boolean) => {
   try {
     if (isPinned) {
-      await conversationService.topConversation([props.conversation.conversation_id]);
+      await conversationService.topConversation(props.conversation.conversation_id);
     } else {
       await conversationService.unTopConversation(props.conversation.conversation_id);
     }

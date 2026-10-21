@@ -6,6 +6,15 @@ import type {
   ReadStateResponse,
 } from '@/type/Conversation';
 
+// 置顶/免打扰只作用于当前用户自己的会话记录；成功后同步本地列表，侧栏的置顶分组/免打扰样式随之更新
+function patchLocalConversation(conversationId: string, patch: Partial<Conversation>) {
+  const listStore = useListStore();
+  const conversation = listStore.conversations?.find((c) => c.conversation_id === conversationId);
+  if (conversation) {
+    Object.assign(conversation, patch);
+  }
+}
+
 export const conversationService = {
   async getConversations(
     params?: {
@@ -14,9 +23,14 @@ export const conversationService = {
     },
   ): Promise<Conversation[]> {
     const response = await api.get<Conversation[]>('/conversations', { params });
+    // 服务端 unread_count 是当前用户自己的未读数，用它初始化侧栏未读角标
+    const conversations = (response.data ?? []).map((c) => ({
+      ...c,
+      notreadednumber: c.unread_count ?? 0,
+    }));
     const listStore = useListStore();
-    listStore.conversations = response.data;
-    return response.data;
+    listStore.conversations = conversations;
+    return conversations;
   },
 
   async getConversationById(conversationId: string): Promise<Conversation> {
@@ -48,23 +62,27 @@ export const conversationService = {
     return response.data;
   },
 
-  async topConversation(conversationId: string[]) {
-    const response = await api.put(`/conversations/${conversationId}/top`);
+  async topConversation(conversationId: string) {
+    const response = await api.post(`/conversations/${conversationId}/top`);
+    patchLocalConversation(conversationId, { is_pinned: true });
     return response.data;
   },
 
   async unTopConversation(conversationId: string) {
     const response = await api.delete(`/conversations/${conversationId}/top`);
+    patchLocalConversation(conversationId, { is_pinned: false });
     return response.data;
   },
 
   async muteConversation(conversationId: string) {
-    const response = await api.put(`/conversations/${conversationId}/mute`);
+    const response = await api.post(`/conversations/${conversationId}/mute`);
+    patchLocalConversation(conversationId, { is_muted: true });
     return response.data;
   },
 
   async unmuteConversation(conversationId: string) {
     const response = await api.delete(`/conversations/${conversationId}/mute`);
+    patchLocalConversation(conversationId, { is_muted: false });
     return response.data;
   },
 
