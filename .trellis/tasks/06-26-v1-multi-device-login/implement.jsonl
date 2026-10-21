@@ -1,1 +1,5 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file":".trellis/spec/backend/index.md","reason":"多端会话键、挤下线通道和按用户全部连接投递是后端架构约定。"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"登录策略、token 黑名单和默认 mvn test 需要符合后端质量门槛。"}
+{"file":".trellis/spec/frontend/index.md","reason":"设备类型、稳定 device id 和被挤下线后的本地登出是前端架构约定。"}
+{"file":".trellis/spec/frontend/state-management.md","reason":"其他设备的消息和已读要落到会话列表与历史 store。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"登录字段、SESSION_KICKED 帧和设备列表 API 要前后端一致。"}

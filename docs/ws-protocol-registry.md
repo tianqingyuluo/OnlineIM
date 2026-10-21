@@ -31,6 +31,7 @@
 | `HEARTBEAT` | C→S | 控制·心跳 | v1 | ws-heartbeat-reconnect |
 | `HEARTBEAT_ACK` | S→C | 控制·心跳 | v1 | ws-heartbeat-reconnect |
 | `PRESENCE_UPDATE` | S→C | 业务·在线状态 | v1 | user-presence |
+| `SESSION_KICKED` | S→C | 控制·会话 | v1 | multi-device-login |
 | `ERROR` | S→C | 控制·错误 | v1 | — |
 | `DRAFT_UPDATED` | S→C | 业务·草稿 | v1 | draft-sync |
 
@@ -868,6 +869,78 @@ WebSocket **每次**连接成功（含第一次连接和断线重连）后，客
 不使用 `user_timelines` 另存一份漏收记录：消息本来就在私聊 / 群聊集合里，按 seq 读取即可，因此也没有额外的清理任务。
 
 `conversations` 里的 `draft_preview` 与会话列表接口相同。客户端应用快照时采用这份草稿摘要，即使因为本地有更新的消息而保留了原来的预览和未读。在线状态不放进本帧：连接成功后仍由客户端查询 presence，变更继续用 `PRESENCE_UPDATE` 扇出到该用户的每条连接。用户有多条连接时，`OFFLINE_SYNC` 只发给发出 `SYNC_REQUEST` 的那一条。
+
+## 多端登录
+
+同一账号按设备类型同时只保留一个会话。类型只有三种：`web`（网页）、`desktop`（桌面）、`phone`（手机）。网页和手机可以同时在线；再用另一台网页登录时，旧的网页会话被挤下线。未识别的类型按 `web` 处理。
+
+登录请求在原有 `device_id` 之外增加 `device_type`。服务端把类型写入 JWT 的 `devicetype` claim。响应增加：
+
+| 字段 | 说明 |
+|------|------|
+| `device_id` | 实际采用的设备标识。客户端没传或格式不合法时由服务端生成 |
+| `device_type` | `web` / `desktop` / `phone` |
+
+### SESSION_KICKED（服务端 → 被挤下线的客户端）
+
+旧连接先收到这一帧，随后服务端以关闭码 `4001` 断开。该会话的 token 已进入黑名单，HTTP 与再次连接 WebSocket 都会得到 401。客户端必须停止重连、清除本地登录态，并用 `message` 提示用户。
+
+```json
+{
+  "type": "SESSION_KICKED",
+  "message": {
+    "reason": "SAME_DEVICE_TYPE_LOGIN",
+    "message": "您的账号已在其他网页端登录，当前设备已下线",
+    "device_type": "web",
+    "device_id": "web-old"
+  }
+}
+```
+
+| `reason` | 含义 | `message` |
+|----------|------|-----------|
+| `SAME_DEVICE_TYPE_LOGIN` | 同类型的另一台设备刚刚登录 | 您的账号已在其他{网页端/桌面端/手机端}登录，当前设备已下线 |
+| `SESSION_REPLACED` | 同一台设备重新登录，旧页面作废 | 您已在此设备重新登录，当前页面已下线 |
+| `REMOTE_LOGOUT` | 用户在设备列表里远程登出 | 该设备已被远程登出 |
+
+同一 `device_id` 的新 WebSocket 替换旧连接时不发送本帧，只以关闭码 `4000` 断开旧连接，账号仍然有效。
+
+消息、撤回、编辑、送达回执和已读回执投递到该用户在本节点的全部在线设备。私聊和群聊也会推给发送者的其他设备，发送端按 `client_message_id` 合并。已读回执的接收者包含阅读者本人，其他设备据此清未读，不把“我发出的消息”标成对方已读。
+
+挤下线只关闭这一台设备上的连接。在线状态按连接计数：还有其他设备或标签页的连接时保持在线，最后一条连接断开才变为离线。
+
+被挤下线的客户端停止重连，也不再发送 `SYNC_REQUEST`。其他仍在线的设备各自在自己的连接上发送 `SYNC_REQUEST`，`OFFLINE_SYNC` 只回给发出请求的那一条。`DRAFT_UPDATED`、消息和已读回执则发到该用户每一条仍在线的连接。
+
+### 设备列表
+
+需要登录。`Authorization` 对应当前设备。
+
+```http
+GET /api/v1/devices
+```
+
+```json
+{
+  "devices": [
+    {
+      "device_id": "web-1",
+      "device_type": "web",
+      "online": true,
+      "current": true,
+      "login_at": 1710000000000,
+      "active_at": 1710000001000
+    }
+  ]
+}
+```
+
+`online` 表示 WebSocket 还连着。主动断开连接后设备仍算已登录，直到登出或被挤下线。
+
+```http
+POST /api/v1/devices/{deviceId}/logout
+```
+
+成功 `204`。设备不存在 `404`，标识不合法 `400`。被登出的那一台收到 `SESSION_KICKED`（`reason=REMOTE_LOGOUT`）。
 
 ## 控制帧详情
 

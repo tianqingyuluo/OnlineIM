@@ -40,6 +40,7 @@
 3. **Singleton services** — `websocketService` and `TokenService` are singletons exported from their modules. Pinia stores wrap them for reactivity.
 4. **shadcn-vue UI library** — `components/ui/` contains headless primitives built on `reka-ui`, each with a barrel `index.ts`. Import via `@/components/ui/<name>`.
 5. **Snake_case API fields** — TypeScript interfaces use `snake_case` field names to match backend JSON, avoiding transform layers.
+6. **Stable device identity** — device type comes from the UA (`phone` for mobile/tablet/wearable, otherwise `web`) unless `localStorage` `onlineim.device_type` is set. The id lives at `onlineim.device_id.{type}`. `SESSION_KICKED` or close code `4001` clears the local session, does not call the logout API, and does not reconnect or send another `SYNC_REQUEST`. Close code `4000` means this device's newer page took the socket. Own messages, read cursors, `DRAFT_UPDATED` and `OFFLINE_SYNC` are applied together: a snapshot does not mark the user's own sends as unread, and another device's read cursor clears unread without marking outbound messages read by the peer.
 
 ---
 

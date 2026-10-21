@@ -36,6 +36,7 @@
 2. **Separate WebSocket server**: Vert.x runs on port 8081 independent of the Spring HTTP server (8080), connected via Spring's event bus and Redis Stream for cross-node delivery.
 3. **OSS adapter pattern**: Static factory (`OSSAdapterFactory`) creates one of four adapters based on `oss.type` config, wired into Spring via `OSSConfig.ossAdapter()` `@Bean`.
 4. **MyBatis dual mapper**: Entity mappers (operate on POJOs) + response mappers (return DTOs from complex joins).
+5. **One login per device type**: `web` / `desktop` / `phone` may be online together. Redis keeps `user:sessions:{userId}:{deviceId}` and the type index `user:device-type:{userId}`. A new login of the same type blacklists the old JWT and publishes `SESSION_KICKED` on `im:session:kick`, which closes only that device's sockets. Presence goes offline only when the user has no connection left. Messages, read receipts and `DRAFT_UPDATED` fan out to every remaining local connection; `OFFLINE_SYNC` answers only the connection that sent `SYNC_REQUEST`.
 
 ---
 
