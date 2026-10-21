@@ -71,7 +71,7 @@ public interface PrivateMessageRepository extends MongoRepository<PrivateMessage
     @Query(value = "{ 'conversationId': ?0, '$expr': { '$gt': [ { '$toDecimal': '$seqId' }, { '$toDecimal': ?1 } ] } }", count = true)
     long countByConversationIdAndSeqIdGreaterThan(String conversationId, String seqId);
 
-    @Query(value = "{ 'conversationId': ?0, 'receiverId': ?1, '$expr': { '$gt': [ { '$toDecimal': '$seqId' }, { '$toDecimal': ?2 } ] } }", count = true)
+    @Query(value = "{ 'conversationId': ?0, 'receiverId': ?1, 'status': { '$ne': 3 }, '$expr': { '$gt': [ { '$toDecimal': '$seqId' }, { '$toDecimal': ?2 } ] } }", count = true)
     long countUnreadByConversationIdAndReceiverIdAndSeqIdGreaterThan(String conversationId, String receiverId, String seqId);
 
     @Aggregation(pipeline = {

@@ -226,11 +226,15 @@ public class ConversationServiceImpl implements ConversationService {
         // 创建最后一条消息的预览
         MessagePreviewResponse lastMessage = null;
         if (conversation.getLastMessage() != null && conversation.getLastMessage().getMessageId() != null) {
+            String senderId = conversation.getLastMessage().getSenderId();
             lastMessage = MessagePreviewResponse.builder()
                     .messageId(conversation.getLastMessage().getMessageId())
+                    .senderId(senderId)
+                    .senderNickname(previewSenderName(senderId, id, name))
                     .contentPreview(conversation.getLastMessage().getContent())
                     .messageType(conversation.getLastMessage().getMessageType())
                     .timestamp(dateFormat.format(conversation.getLastMessage().getTimestamp()))
+                    .isRecalled("recalled".equals(conversation.getLastMessage().getMessageType()))
                     .build();
         }
         
@@ -268,5 +272,27 @@ public class ConversationServiceImpl implements ConversationService {
                 .isPinned(Boolean.TRUE.equals(conversation.getTop()))
                 .lastActivityTime(conversation.getUpdatedAt() == null ? null : dateFormat.format(conversation.getUpdatedAt()))
                 .build();
+    }
+
+    /**
+     * 预览里的发送者名字：私聊对方用会话显示名（备注优先），其他情况用昵称（没有昵称用用户名）；
+     * 旧会话记录没有 senderId 时返回 null。
+     */
+    private String previewSenderName(String senderId, String targetId, String conversationName) {
+        if (senderId == null || senderId.isBlank()) {
+            return null;
+        }
+        if (senderId.equals(targetId)) {
+            return conversationName;
+        }
+        try {
+            UserResponse sender = userService.getUserInfoByUserID(senderId);
+            if (sender == null) {
+                return null;
+            }
+            return sender.getNickname() != null && !sender.getNickname().isBlank() ? sender.getNickname() : sender.getUsername();
+        } catch (RuntimeException ex) {
+            return null;
+        }
     }
 }

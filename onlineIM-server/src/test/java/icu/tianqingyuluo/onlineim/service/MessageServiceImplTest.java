@@ -508,6 +508,31 @@ class MessageServiceImplTest {
     }
 
     @Test
+    void recallUpdatesConversationRecordsWithSeqAndSender() {
+        PrivateMessage message = privateMessage("msg_target", "100");
+        message.setSenderId("usr_me");
+        message.setReceiverId("usr_peer");
+        when(privateMessageRepository.findById("msg_target")).thenReturn(Optional.of(message));
+
+        service.recallMessage("msg_target", "usr_me");
+
+        verify(conversationRecords).onMessageRecalled("conv_1", "msg_target", "100", "usr_me");
+    }
+
+    @Test
+    void recalledMessagesNeverExposeTheOriginalContent() {
+        PrivateMessage message = privateMessage("msg_gone", "100");
+        message.setStatus(3);
+        MessageResponse response = service.convertPrivateMessageToResponse(message);
+        assertEquals("", response.getContent());
+        assertEquals(Boolean.TRUE, response.getIsRecalled());
+        assertEquals(null, response.getReplyTo());
+
+        PrivateMessage alive = privateMessage("msg_alive", "101");
+        assertEquals("内容", service.convertPrivateMessageToResponse(alive).getContent());
+    }
+
+    @Test
     void privateMessageResponseUsesRealSenderProfile() {
         PrivateMessage message = privateMessage("msg_1", "100");
         when(userService.getUserBriefInfoByID("usr_peer")).thenReturn(UserBriefResponse.builder()

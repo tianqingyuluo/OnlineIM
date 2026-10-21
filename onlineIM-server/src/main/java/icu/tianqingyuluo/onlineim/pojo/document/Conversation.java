@@ -61,5 +61,6 @@ public class Conversation {
         private String content;     // 消息内容或摘要
         private String messageType; // 消息类型
         private Date timestamp;     // 时间戳
+        private String senderId;    // 发送者ID（用于预览“某某: ”与“你/某某 撤回了一条消息”，旧记录为空）
     }
 } 

@@ -147,13 +147,19 @@ public class FriendController {
      */
     @PutMapping("/{friendId}/group")
     public ResponseEntity<Map<String, String>> updateFriendGroup(@RequestHeader("Authorization") String token, @PathVariable String friendId, @RequestBody Map<String, String> request) {
-        // TODO: 实现更新好友分组逻辑
         String userid = jwtUtil.getUserIDFromToken(token);
-        if (!friendService.existFriendByID(friendId, userid)) {
+        // friendId 可以是自己的好友关系ID（rel_）或好友的用户ID（usr_）
+        String friendshipId = friendService.resolveOwnedFriendshipId(userid, friendId);
+        if (friendshipId == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ErrorCodeUtil.getErrorOutput("404", "未找到该好友"));
         }
+        String groupId = request == null ? null : request.get("friend_group_id");
+        if (!friendGroupService.isOwnGroup(userid, groupId)) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ErrorCodeUtil.getErrorOutput("404", "好友分组不存在"));
+        }
+        friendId = friendshipId;
         try {
-            friendService.updateGroupByID(friendId, request.get("friend_group_id"));
+            friendService.updateGroupByID(friendId, groupId);
         }
         catch (PersistenceException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "啊哦，发生了些小错误"));

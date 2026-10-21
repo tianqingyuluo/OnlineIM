@@ -268,7 +268,8 @@ public class MessageServiceImpl implements MessageService {
             privateMessage.setUpdatedAt(new Date());
             privateMessageRepository.save(privateMessage);
             messageReplyService.markTargetRecalled(privateMessage.getConversationId(), messageId);
-            conversationRecords.onMessageRecalled(privateMessage.getConversationId(), messageId);
+            conversationRecords.onMessageRecalled(privateMessage.getConversationId(), messageId,
+                    privateMessage.getSeqId(), privateMessage.getSenderId());
             saveRecallAndNotify(privateMessage.getConversationId(), privateMessage.getSeqId(), messageId, userId,
                     List.of(privateMessage.getSenderId(), privateMessage.getReceiverId()));
             return true;
@@ -283,7 +284,8 @@ public class MessageServiceImpl implements MessageService {
             groupMessage.setUpdatedAt(new Date());
             groupMessageRepository.save(groupMessage);
             messageReplyService.markTargetRecalled(groupMessage.getGroupId(), messageId);
-            conversationRecords.onMessageRecalled(groupMessage.getGroupId(), messageId);
+            conversationRecords.onMessageRecalled(groupMessage.getGroupId(), messageId,
+                    groupMessage.getSeqId(), groupMessage.getSenderId());
             saveRecallAndNotify(groupMessage.getGroupId(), groupMessage.getSeqId(), messageId, userId,
                     groupReceiverIds(groupMessage.getGroupId()));
             return true;
@@ -582,9 +584,9 @@ public class MessageServiceImpl implements MessageService {
                 .conversationId(message.getConversationId())
                 .senderInfo(senderInfo)
                 .messageType(message.getMessageType())
-                .content(message.getContent())
-                .replyTo(replyReference)
-                .forwardedFrom(forwardedFrom(message.getForwardFrom()))
+                .content(recalled(message.getStatus()) ? "" : message.getContent())
+                .replyTo(recalled(message.getStatus()) ? null : replyReference)
+                .forwardedFrom(recalled(message.getStatus()) ? null : forwardedFrom(message.getForwardFrom()))
                 .edited(message.getEditedAt() != null)
                 .editedAt(formatTimestamp(message.getEditedAt()))
                 .contentRevision(message.getContentRevision() == null ? 1 : message.getContentRevision())
@@ -625,13 +627,13 @@ public class MessageServiceImpl implements MessageService {
                 .conversationId(message.getGroupId()) // 群聊中使用groupId作为conversationId
                 .senderInfo(senderInfo)
                 .messageType(message.getMessageType())
-                .content(message.getContent())
-                .replyTo(replyReference)
-                .forwardedFrom(forwardedFrom(message.getForwardFrom()))
+                .content(recalled(message.getStatus()) ? "" : message.getContent())
+                .replyTo(recalled(message.getStatus()) ? null : replyReference)
+                .forwardedFrom(recalled(message.getStatus()) ? null : forwardedFrom(message.getForwardFrom()))
                 .edited(message.getEditedAt() != null)
                 .editedAt(formatTimestamp(message.getEditedAt()))
                 .contentRevision(message.getContentRevision() == null ? 1 : message.getContentRevision())
-                .mentionedUserIds(message.getAtUsers())
+                .mentionedUserIds(recalled(message.getStatus()) ? null : message.getAtUsers())
                 .status(status)
                 .deliveryState("sent")
                 .seqId(message.getSeqId())
@@ -639,6 +641,11 @@ public class MessageServiceImpl implements MessageService {
                 .isRecalled(message.getStatus() == 3)
                 .timestamp(formatTimestamp(message.getTimestamp()))
                 .build();
+    }
+
+    /** 已撤回的消息对任何人（包括发送者）都不再返回原文、@ 列表、引用与转发来源，只保留撤回占位 */
+    private static boolean recalled(Integer status) {
+        return status != null && status == 3;
     }
 
     static MessageResponse.ForwardedFrom forwardedFrom(

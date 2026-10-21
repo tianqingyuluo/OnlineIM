@@ -72,7 +72,7 @@ public interface GroupMessageRepository extends MongoRepository<GroupMessage, St
     @Query(value = "{ 'groupId': ?0, '$expr': { '$gt': [ { '$toDecimal': '$seqId' }, { '$toDecimal': ?1 } ] } }", count = true)
     long countByGroupIdAndSeqIdGreaterThan(String groupId, String seqId);
 
-    @Query(value = "{ 'groupId': ?0, 'senderId': { '$ne': ?1 }, '$expr': { '$gt': [ { '$toDecimal': '$seqId' }, { '$toDecimal': ?2 } ] } }", count = true)
+    @Query(value = "{ 'groupId': ?0, 'senderId': { '$ne': ?1 }, 'status': { '$ne': 3 }, '$expr': { '$gt': [ { '$toDecimal': '$seqId' }, { '$toDecimal': ?2 } ] } }", count = true)
     long countUnreadByGroupIdAndUserIdAndSeqIdGreaterThan(String groupId, String userId, String seqId);
 
     @Aggregation(pipeline = {

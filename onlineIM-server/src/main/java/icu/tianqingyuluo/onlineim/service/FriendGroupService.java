@@ -54,4 +54,9 @@ public interface FriendGroupService {
      * @throws Exception 数据库操作异常
      */
     boolean sortFriendGroups(String userId, List<Map<String, Object>> request) throws Exception;
+
+    /**
+     * 分组是否属于该用户
+     */
+    boolean isOwnGroup(String userId, String groupId);
 }

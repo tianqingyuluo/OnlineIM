@@ -1,6 +1,7 @@
 package icu.tianqingyuluo.onlineim.service;
 
 import icu.tianqingyuluo.onlineim.pojo.document.Conversation;
+import icu.tianqingyuluo.onlineim.pojo.document.ConversationReadState;
 import icu.tianqingyuluo.onlineim.pojo.document.GroupMessage;
 import icu.tianqingyuluo.onlineim.pojo.document.PrivateMessage;
 import lombok.extern.slf4j.Slf4j;
@@ -125,7 +126,7 @@ public class ConversationRecordService {
         }
         try {
             Conversation.LastMessage last = lastMessage(message.getId(), message.getMessageType(),
-                    message.getContent(), message.getTimestamp());
+                    message.getContent(), message.getTimestamp(), message.getSenderId());
             BulkOperations bulk = mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, Conversation.class);
             bulk.upsert(byRecordId(message.getConversationId(), message.getSenderId()),
                     newMessageUpdate(message.getConversationId(), TYPE_PRIVATE, message.getSenderId(),
@@ -152,7 +153,7 @@ public class ConversationRecordService {
         }
         try {
             Conversation.LastMessage last = lastMessage(message.getId(), message.getMessageType(),
-                    message.getContent(), message.getTimestamp());
+                    message.getContent(), message.getTimestamp(), message.getSenderId());
             BulkOperations bulk = mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, Conversation.class);
             Set<String> mentioned = distinct(message.getAtUsers());
             for (String userId : members) {
@@ -222,6 +223,46 @@ public class ConversationRecordService {
             }
         }
         return result;
+    }
+
+    /**
+     * 消息被撤回：除 {@link #onMessageRecalled(String, String)} 外，还把这条消息从还没读到它的接收者的未读缓存里减掉
+     * （读游标 &lt; 该消息 seq 的成员，发送者本人除外）。权威未读数由读游标实时计算，并已排除撤回的消息。
+     */
+    public void onMessageRecalled(String conversationId, String messageId, String seqId, String senderId) {
+        onMessageRecalled(conversationId, messageId);
+        if (conversationId == null || seqId == null || seqId.isBlank()) {
+            return;
+        }
+        try {
+            Query unread = Query.query(Criteria.where("conversationId").is(conversationId)
+                    .and("userId").ne(senderId)
+                    .and("unreadCount").gt(0));
+            unread.fields().include("_id").include("userId");
+            for (Conversation record : mongoTemplate.find(unread, Conversation.class)) {
+                if (record.getUserId() == null || !notYetRead(conversationId, record.getUserId(), seqId)) {
+                    continue;
+                }
+                mongoTemplate.updateFirst(Query.query(Criteria.where("_id").is(record.getId()).and("unreadCount").gt(0)),
+                        new Update().inc("unreadCount", -1), Conversation.class);
+            }
+        } catch (RuntimeException ex) {
+            log.warn("撤回后扣减未读缓存失败: conversationId={}, error={}", conversationId, ex.getMessage());
+        }
+    }
+
+    /** 该成员的读游标是否还没到 seqId（没有读状态视为未读） */
+    private boolean notYetRead(String conversationId, String userId, String seqId) {
+        ConversationReadState state = mongoTemplate.findById(recordId(conversationId, userId), ConversationReadState.class);
+        String readSeq = state == null ? null : state.getReadSeq();
+        if (readSeq == null || readSeq.isBlank()) {
+            return true;
+        }
+        try {
+            return SeqIdComparator.compare(seqId, readSeq) > 0;
+        } catch (RuntimeException ex) {
+            return true;
+        }
     }
 
     /**
@@ -352,9 +393,11 @@ public class ConversationRecordService {
         return update;
     }
 
-    private Conversation.LastMessage lastMessage(String messageId, String messageType, String content, Date timestamp) {
+    private Conversation.LastMessage lastMessage(String messageId, String messageType, String content, Date timestamp,
+                                                 String senderId) {
         return Conversation.LastMessage.builder()
                 .messageId(messageId)
+                .senderId(senderId)
                 .messageType(messageType)
                 .content(preview(messageType, content))
                 .timestamp(timestamp == null ? new Date() : timestamp)

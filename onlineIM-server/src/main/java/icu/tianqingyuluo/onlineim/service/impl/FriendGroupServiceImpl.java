@@ -80,4 +80,9 @@ public class FriendGroupServiceImpl implements FriendGroupService {
     public boolean sortFriendGroups(String userId, List<Map<String, Object>> request) throws Exception {
         return false;
     }
+
+    @Override
+    public boolean isOwnGroup(String userId, String groupId) {
+        return userId != null && groupId != null && !groupId.isBlank() && friendGroupMapper.isYourGroup(userId, groupId);
+    }
 }

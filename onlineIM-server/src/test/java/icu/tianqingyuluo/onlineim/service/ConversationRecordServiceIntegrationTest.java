@@ -5,6 +5,7 @@ import com.mongodb.client.MongoClients;
 import icu.tianqingyuluo.onlineim.config.ConversationRecordMigration;
 import icu.tianqingyuluo.onlineim.mapper.GroupMemberMapper;
 import icu.tianqingyuluo.onlineim.pojo.document.Conversation;
+import icu.tianqingyuluo.onlineim.pojo.document.ConversationReadState;
 import icu.tianqingyuluo.onlineim.pojo.document.GroupMessage;
 import icu.tianqingyuluo.onlineim.pojo.document.PrivateMessage;
 import org.bson.Document;
@@ -228,6 +229,41 @@ class ConversationRecordServiceIntegrationTest {
         records.onMessageRecalled(PRIV, "msg_secret");
         assertEquals("[消息已撤回]", record(PRIV, A).getLastMessage().getContent());
         assertEquals("[消息已撤回]", record(PRIV, B).getLastMessage().getContent());
+    }
+
+    @Test
+    void lastMessageRemembersTheSender() {
+        records.onPrivateMessage(privateMessage("msg_s", A, B, "hello"));
+        assertEquals(A, record(PRIV, A).getLastMessage().getSenderId());
+        assertEquals(A, record(PRIV, B).getLastMessage().getSenderId());
+        records.onGroupMessage(groupText("msg_gs", "1000000000000000201", null), List.of(A, B, C));
+        assertEquals(A, record(GRP, C).getLastMessage().getSenderId());
+    }
+
+    @Test
+    void recallLowersUnreadOnlyForMembersWhoHaveNotReadIt() {
+        records.ensureGroupMembers(GRP, List.of(A, B, C));
+        records.onGroupMessage(groupText("msg_u1", "1000000000000000301", null), List.of(A, B, C));
+        records.onGroupMessage(groupText("msg_u2", "1000000000000000302", null), List.of(A, B, C));
+        // B 已经读到 msg_u2（但未读缓存还没同步），C 一条都没读
+        template.save(ConversationReadState.builder().id(GRP + ":" + B).conversationId(GRP).userId(B)
+                .conversationType("group").deliveredSeq("1000000000000000302").readSeq("1000000000000000302")
+                .updatedAt(new Date()).build());
+        assertEquals(2, record(GRP, B).getUnreadCount());
+        assertEquals(2, record(GRP, C).getUnreadCount());
+
+        records.onMessageRecalled(GRP, "msg_u2", "1000000000000000302", A);
+
+        assertEquals(0, record(GRP, A).getUnreadCount());
+        assertEquals(2, record(GRP, B).getUnreadCount());
+        assertEquals(1, record(GRP, C).getUnreadCount());
+        assertEquals("[消息已撤回]", record(GRP, C).getLastMessage().getContent());
+        assertEquals("recalled", record(GRP, C).getLastMessage().getMessageType());
+
+        // 未读已经是 0 时不会变成负数
+        records.updateOwn(GRP, C, new Update().set("unreadCount", 0));
+        records.onMessageRecalled(GRP, "msg_u1", "1000000000000000301", A);
+        assertEquals(0, record(GRP, C).getUnreadCount());
     }
 
     @Test

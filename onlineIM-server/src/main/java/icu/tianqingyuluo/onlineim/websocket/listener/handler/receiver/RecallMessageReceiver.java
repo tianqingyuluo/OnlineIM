@@ -51,6 +51,8 @@ public class RecallMessageReceiver implements MessageReceiverHandler {
             }
             String recallUserId = text(node, "recall_user_id") != null ? text(node, "recall_user_id") : event.getSenderID();
             long timestamp = node.hasNonNull("timestamp") ? node.get("timestamp").asLong() : System.currentTimeMillis();
+            // 客户端用 seq_id 判断撤回的消息自己是否已读（未读数是否要减一）
+            String seqId = text(node, "seq_id");
 
             List<String> receivers = event.getReceiverIDs() == null ? List.of() : event.getReceiverIDs();
             for (String userId : receivers) {
@@ -67,6 +69,9 @@ public class RecallMessageReceiver implements MessageReceiverHandler {
                 frame.put("message_id", messageId);
                 frame.put("conversation_id", conversationId);
                 frame.put("recall_user_id", recallUserId);
+                if (seqId != null) {
+                    frame.put("seq_id", seqId);
+                }
                 frame.put("timestamp", timestamp);
                 session.sendMessage(objectMapper.writeValueAsString(frame));
             }

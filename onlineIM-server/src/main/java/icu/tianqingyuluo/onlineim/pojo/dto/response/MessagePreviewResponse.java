@@ -22,7 +22,13 @@ public class MessagePreviewResponse {
     private String messageId;
     
     /**
-     * 发送者昵称
+     * 发送者ID（旧会话记录可能为空）
+     */
+    @JsonProperty("sender_id")
+    private String senderId;
+
+    /**
+     * 发送者显示名：私聊对方为备注/昵称，其他为昵称（无昵称时为用户名）
      */
     @JsonProperty("sender_nickname")
     private String senderNickname;
