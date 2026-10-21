@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.websocket.listener.handler.sender;
 
+import icu.tianqingyuluo.onlineim.service.ChatMediaService;
 import icu.tianqingyuluo.onlineim.service.ConversationRecordService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import icu.tianqingyuluo.onlineim.pojo.document.Conversation;
@@ -29,6 +30,7 @@ import static org.mockito.Mockito.*;
 class PrivateMessageSenderTest {
     private static final String CONV = "conv_usr_receiverusr_sender";
     private ConversationRecordService conversationRecords;
+    private ChatMediaService chatMediaService;
 
     private PrivateMessageRepository messageRepository;
     private ConversationRepository conversationRepository;
@@ -51,7 +53,8 @@ class PrivateMessageSenderTest {
         when(friendService.areFriends(any(), any())).thenReturn(true);
         sender = new PrivateMessageSender(
                 new ObjectMapper(), messageRepository, conversationRepository, redisStreamService,
-                frameSender, messageReplyService, friendService, conversationRecords);
+                frameSender, messageReplyService, friendService, conversationRecords,
+                chatMediaService = mock(ChatMediaService.class));
 
         ServerWebSocket socket = mock(ServerWebSocket.class);
         when(socket.isClosed()).thenReturn(false);
@@ -204,5 +207,31 @@ class PrivateMessageSenderTest {
 
         verify(messageRepository, never()).save(any());
         verifyNoInteractions(conversationRecords);
+    }
+
+    @Test
+    void imageMessageContentIsReplacedByServerSideMediaMetadata() {
+        when(chatMediaService.resolveForMessage("usr_sender", "image", "upl_00000000000000000000000000000001"))
+                .thenReturn(new ChatMediaService.ResolvedMedia("{\"file_id\":\"upl_00000000000000000000000000000001\",\"url\":\"/onlineim/chats/images/x.png\"}",
+                        java.util.Map.of("file_name", "x.png")));
+
+        assertTrue(sender.publishMessage(session,
+                "{\"conversation_id\":\"conv_usr_receiverusr_sender\",\"receiver_id\":\"usr_receiver\","
+                        + "\"message_type\":\"image\",\"content\":\"upl_00000000000000000000000000000001\",\"client_message_id\":\"client_img\"}"));
+
+        verify(messageRepository).save(argThat(message -> message.getContent().contains("/onlineim/chats/images/x.png")
+                && "x.png".equals(message.getExt().get("file_name"))));
+    }
+
+    @Test
+    void mediaRejectionIsPropagatedAsErrorAndNothingIsSaved() {
+        when(chatMediaService.resolveForMessage(any(), any(), any()))
+                .thenThrow(icu.tianqingyuluo.onlineim.exception.ChatMediaException.badRequest("文件不存在或不属于当前用户"));
+
+        assertThrows(icu.tianqingyuluo.onlineim.exception.ChatMediaException.class, () -> sender.publishMessage(session,
+                "{\"conversation_id\":\"conv_usr_receiverusr_sender\",\"receiver_id\":\"usr_receiver\","
+                        + "\"message_type\":\"file\",\"content\":\"upl_x\",\"client_message_id\":\"client_f\"}"));
+        verify(messageRepository, never()).save(any());
+        verifyNoInteractions(redisStreamService);
     }
 }

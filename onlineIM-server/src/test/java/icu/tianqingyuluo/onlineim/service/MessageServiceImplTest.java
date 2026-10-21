@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.service;
 
+import icu.tianqingyuluo.onlineim.service.ChatMediaService;
 import icu.tianqingyuluo.onlineim.service.ConversationRecordService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import icu.tianqingyuluo.onlineim.exception.ForbiddenException;
@@ -32,6 +33,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -43,6 +45,7 @@ import static org.mockito.Mockito.when;
 
 class MessageServiceImplTest {
     private ConversationRecordService conversationRecords;
+    private ChatMediaService chatMediaService;
 
     private PrivateMessageRepository privateMessageRepository;
     private GroupMessageRepository groupMessageRepository;
@@ -78,7 +81,8 @@ class MessageServiceImplTest {
                 redisStreamService,
                 new ObjectMapper(),
                 friendService,
-                conversationRecords = mock(ConversationRecordService.class));
+                conversationRecords = mock(ConversationRecordService.class),
+                chatMediaService = mock(ChatMediaService.class));
     }
 
     @Test
@@ -517,5 +521,25 @@ class MessageServiceImplTest {
                 .createdAt(new Date())
                 .updatedAt(new Date())
                 .build();
+    }
+
+    @Test
+    void httpGroupImageMessageUsesServerSideMediaMetadata() {
+        when(groupMemberService.isGroupMember("grp_1", "usr_me")).thenReturn(true);
+        when(chatMediaService.resolveForMessage("usr_me", "image", "{\"file_id\":\"upl_1\",\"url\":\"https://evil.example/x.png\"}"))
+                .thenReturn(new ChatMediaService.ResolvedMedia("{\"file_id\":\"upl_1\",\"url\":\"/onlineim/chats/images/a.jpg\"}",
+                        java.util.Map.of("file_name", "a.jpg")));
+
+        service.sendMessage(MessageSendRequest.builder()
+                .targetId("grp_1")
+                .messageType("image")
+                .content("{\"file_id\":\"upl_1\",\"url\":\"https://evil.example/x.png\"}")
+                .clientMsgId("client_img")
+                .build(), "usr_me");
+
+        ArgumentCaptor<GroupMessage> captor = ArgumentCaptor.forClass(GroupMessage.class);
+        verify(groupMessageRepository).save(captor.capture());
+        assertFalse(captor.getValue().getContent().contains("evil.example"));
+        assertEquals("a.jpg", captor.getValue().getExt().get("file_name"));
     }
 }

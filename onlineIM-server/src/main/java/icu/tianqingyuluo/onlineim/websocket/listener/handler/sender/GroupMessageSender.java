@@ -10,6 +10,8 @@ import icu.tianqingyuluo.onlineim.pojo.dto.response.GroupMemberResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageAckPayload;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
 import icu.tianqingyuluo.onlineim.repository.GroupMessageRepository;
+import icu.tianqingyuluo.onlineim.exception.ChatMediaException;
+import icu.tianqingyuluo.onlineim.service.ChatMediaService;
 import icu.tianqingyuluo.onlineim.service.ConversationRecordService;
 import icu.tianqingyuluo.onlineim.service.GroupMemberService;
 import icu.tianqingyuluo.onlineim.service.MessageReplyService;
@@ -31,6 +33,7 @@ public class GroupMessageSender implements MessageSenderHandler {
     private final WebSocketFrameSender frameSender;
     private final MessageReplyService messageReplyService;
     private final ConversationRecordService conversationRecords;
+    private final ChatMediaService chatMediaService;
 
     public GroupMessageSender(ObjectMapper objectMapper,
                               GroupMessageRepository groupMessageRepository,
@@ -38,7 +41,8 @@ public class GroupMessageSender implements MessageSenderHandler {
                               GroupMemberService groupMemberService,
                               WebSocketFrameSender frameSender,
                               MessageReplyService messageReplyService,
-                              ConversationRecordService conversationRecords) {
+                              ConversationRecordService conversationRecords,
+                              ChatMediaService chatMediaService) {
         this.objectMapper = objectMapper;
         this.groupMessageRepository = groupMessageRepository;
         this.redisStreamService = redisStreamService;
@@ -46,6 +50,7 @@ public class GroupMessageSender implements MessageSenderHandler {
         this.frameSender = frameSender;
         this.messageReplyService = messageReplyService;
         this.conversationRecords = conversationRecords;
+        this.chatMediaService = chatMediaService;
     }
 
     @Override
@@ -84,7 +89,15 @@ public class GroupMessageSender implements MessageSenderHandler {
             groupMessage.setGroupId(request.getGroupId());
             groupMessage.setSenderId(senderId);
             groupMessage.setMessageType(request.getMessageType());
-            groupMessage.setContent(request.getContent());
+            if (ChatMediaService.isMediaMessage(request.getMessageType())) {
+                // 图片/文件消息：content 只携带 file_id，URL、大小、尺寸等由服务端按上传记录补全
+                ChatMediaService.ResolvedMedia media = chatMediaService.resolveForMessage(
+                        senderId, request.getMessageType(), request.getContent());
+                groupMessage.setContent(media.content());
+                groupMessage.setExt(media.ext());
+            } else {
+                groupMessage.setContent(request.getContent());
+            }
             groupMessage.setReplyTo(replyTo);
             groupMessage.setContentRevision(1);
             groupMessage.setStatus(0);
@@ -112,7 +125,7 @@ public class GroupMessageSender implements MessageSenderHandler {
 
             sendAck(session, groupMessage);
             return true;
-        } catch (ReplyTargetUnavailableException ex) {
+        } catch (ReplyTargetUnavailableException | ChatMediaException ex) {
             throw ex;
         } catch (Exception ex) {
             log.warn("处理群聊消息失败: userId={}, error={}", session.getUserId(), ex.getMessage());

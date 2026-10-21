@@ -11,6 +11,8 @@ import icu.tianqingyuluo.onlineim.pojo.dto.request.websocket.PrivateMessageReque
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageAckPayload;
 import icu.tianqingyuluo.onlineim.repository.ConversationRepository;
 import icu.tianqingyuluo.onlineim.repository.PrivateMessageRepository;
+import icu.tianqingyuluo.onlineim.exception.ChatMediaException;
+import icu.tianqingyuluo.onlineim.service.ChatMediaService;
 import icu.tianqingyuluo.onlineim.service.ConversationRecordService;
 import icu.tianqingyuluo.onlineim.service.FriendService;
 import icu.tianqingyuluo.onlineim.service.MessageReplyService;
@@ -34,6 +36,7 @@ public class PrivateMessageSender implements MessageSenderHandler {
     private final MessageReplyService messageReplyService;
     private final FriendService friendService;
     private final ConversationRecordService conversationRecords;
+    private final ChatMediaService chatMediaService;
 
     public PrivateMessageSender(ObjectMapper objectMapper,
                                 PrivateMessageRepository privateMessageRepository,
@@ -42,7 +45,8 @@ public class PrivateMessageSender implements MessageSenderHandler {
                                 WebSocketFrameSender frameSender,
                                 MessageReplyService messageReplyService,
                                 FriendService friendService,
-                                ConversationRecordService conversationRecords) {
+                                ConversationRecordService conversationRecords,
+                                ChatMediaService chatMediaService) {
         this.objectMapper = objectMapper;
         this.privateMessageRepository = privateMessageRepository;
         this.conversationRepository = conversationRepository;
@@ -51,6 +55,7 @@ public class PrivateMessageSender implements MessageSenderHandler {
         this.messageReplyService = messageReplyService;
         this.friendService = friendService;
         this.conversationRecords = conversationRecords;
+        this.chatMediaService = chatMediaService;
     }
 
     @Override
@@ -96,7 +101,15 @@ public class PrivateMessageSender implements MessageSenderHandler {
             privateMessage.setSenderId(senderId);
             privateMessage.setReceiverId(request.getReceiverId());
             privateMessage.setMessageType(request.getMessageType());
-            privateMessage.setContent(request.getContent());
+            if (ChatMediaService.isMediaMessage(request.getMessageType())) {
+                // 图片/文件消息：content 只携带 file_id，URL、大小、尺寸等由服务端按上传记录补全
+                ChatMediaService.ResolvedMedia media = chatMediaService.resolveForMessage(
+                        senderId, request.getMessageType(), request.getContent());
+                privateMessage.setContent(media.content());
+                privateMessage.setExt(media.ext());
+            } else {
+                privateMessage.setContent(request.getContent());
+            }
             privateMessage.setReplyTo(replyTo);
             privateMessage.setContentRevision(1);
             privateMessage.setStatus(0);
@@ -116,7 +129,7 @@ public class PrivateMessageSender implements MessageSenderHandler {
 
             sendAck(session, privateMessage);
             return true;
-        } catch (ReplyTargetUnavailableException | ForbiddenException ex) {
+        } catch (ReplyTargetUnavailableException | ForbiddenException | ChatMediaException ex) {
             throw ex;
         } catch (Exception ex) {
             log.warn("处理私聊消息失败: userId={}, error={}", session.getUserId(), ex.getMessage());

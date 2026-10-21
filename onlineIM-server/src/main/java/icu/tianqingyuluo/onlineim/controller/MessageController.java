@@ -4,6 +4,8 @@ import icu.tianqingyuluo.onlineim.pojo.dto.request.MessageSendRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageContextResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageResponse;
 import icu.tianqingyuluo.onlineim.pojo.entity.UserIDProvider;
+import icu.tianqingyuluo.onlineim.pojo.document.ChatUpload;
+import icu.tianqingyuluo.onlineim.service.ChatMediaService;
 import icu.tianqingyuluo.onlineim.service.MessageService;
 import icu.tianqingyuluo.onlineim.util.ErrorCodeUtil;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
@@ -16,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -28,10 +31,12 @@ public class MessageController {
 
     private final MessageService messageService;
     private final JwtUtil jwtUtil;
+    private final ChatMediaService chatMediaService;
 
-    public MessageController(MessageService messageService, JwtUtil jwtUtil) {
+    public MessageController(MessageService messageService, JwtUtil jwtUtil, ChatMediaService chatMediaService) {
         this.messageService = messageService;
         this.jwtUtil = jwtUtil;
+        this.chatMediaService = chatMediaService;
     }
 
     /**
@@ -124,30 +129,26 @@ public class MessageController {
     }
     
     /**
-     * 上传文件（图片、语音、视频、文档等）
-     * @param type 文件类型：image, voice, video, file
-     * @param file 文件内容
-     * @return 上传结果，包含文件URL等信息
+     * 上传聊天图片/文件（multipart：type=image|file，file=文件）。
+     * 图片按内容识别格式并生成缩略图；返回 file_id 和 url、thumbnail_url、name、size、mime、width、height。
+     * 发送图片/文件消息时 content 填 file_id（或含 file_id 的 JSON），服务端据此补全元数据。
      */
     @PostMapping("/upload")
-    public ResponseEntity<Map<String, String>> uploadFile(
+    public ResponseEntity<Map<String, Object>> uploadFile(
             @RequestHeader("Authorization") String token,
             @RequestParam String type,
             @RequestParam("file") MultipartFile file) {
-        
         String userId = jwtUtil.getUserIDFromToken(token);
         if (userId == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ErrorCodeUtil.getErrorOutput("401", "权限不足"));
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        
-        Map<String, String> result = messageService.uploadFile(userId, type, file);
-        if ("error".equals(result.get("status"))) {
-            return ResponseEntity.badRequest().body(result);
-        }
-        
+        ChatUpload upload = chatMediaService.upload(userId, type, file);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("status", "success");
+        result.putAll(chatMediaService.toMediaMap(upload));
         return ResponseEntity.ok(result);
     }
-    
+
     /**
      * 增量同步消息
      * @param seqId 客户端当前序列号

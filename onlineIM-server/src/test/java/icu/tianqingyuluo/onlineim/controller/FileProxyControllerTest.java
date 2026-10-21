@@ -16,4 +16,11 @@ class FileProxyControllerTest {
         assertFalse(FileProxyController.isPublicObject("other/file.txt"));
         assertFalse(FileProxyController.isPublicObject(""));
     }
+
+    @Test
+    void chatFilesAreDownloadOnly() {
+        assertTrue(FileProxyController.isDownloadOnly("chats/files/202610/abc.pdf"));
+        assertFalse(FileProxyController.isDownloadOnly("chats/images/202610/abc.png"));
+        assertFalse(FileProxyController.isDownloadOnly("avatars/usr_1/a.png"));
+    }
 }

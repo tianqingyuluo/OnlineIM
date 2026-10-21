@@ -6,7 +6,6 @@ import icu.tianqingyuluo.onlineim.pojo.document.RecallLog;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.MessageSendRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageContextResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageResponse;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
@@ -59,14 +58,7 @@ public interface MessageService {
 
     // 已删除标记消息已读功能
 
-    /**
-     * 上传文件
-     * @param userId 用户ID
-     * @param type 文件类型
-     * @param file 文件内容
-     * @return 上传结果
-     */
-    Map<String, String> uploadFile(String userId, String type, MultipartFile file);
+    // 聊天文件/图片上传见 ChatMediaService
 
     /**
      * 增量同步消息

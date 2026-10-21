@@ -92,6 +92,13 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse("403", e.getMessage()));
     }
 
+    @ExceptionHandler(ChatMediaException.class)
+    public ResponseEntity<ErrorResponse> handleChatMedia(ChatMediaException e) {
+        log.warn("聊天文件被拒绝: {}", e.getMessage());
+        return ResponseEntity.status(e.getStatus())
+                .body(new ErrorResponse(String.valueOf(e.getStatus().value()), e.getMessage()));
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException e) {
         log.warn("非法参数: {}", e.getMessage());

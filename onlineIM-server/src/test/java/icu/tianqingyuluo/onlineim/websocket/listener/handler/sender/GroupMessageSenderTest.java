@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.websocket.listener.handler.sender;
 
+import icu.tianqingyuluo.onlineim.service.ChatMediaService;
 import icu.tianqingyuluo.onlineim.service.ConversationRecordService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import icu.tianqingyuluo.onlineim.exception.ReplyTargetUnavailableException;
@@ -47,7 +48,8 @@ class GroupMessageSenderTest {
         messageReplyService = mock(MessageReplyService.class);
         sender = new GroupMessageSender(
                 new ObjectMapper(), messageRepository, redisStreamService, groupMemberService, frameSender, messageReplyService,
-                conversationRecords = mock(ConversationRecordService.class));
+                conversationRecords = mock(ConversationRecordService.class),
+                mock(ChatMediaService.class));
 
         ServerWebSocket socket = mock(ServerWebSocket.class);
         when(socket.isClosed()).thenReturn(false);

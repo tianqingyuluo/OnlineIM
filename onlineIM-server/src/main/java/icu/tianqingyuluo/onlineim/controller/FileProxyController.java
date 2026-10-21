@@ -51,10 +51,15 @@ public class FileProxyController {
             byte[] bytes = inputStream.readAllBytes();
             MediaType contentType = MediaTypeFactory.getMediaType(objectName)
                     .orElse(MediaType.APPLICATION_OCTET_STREAM);
-            return ResponseEntity.ok()
+            ResponseEntity.BodyBuilder response = ResponseEntity.ok()
                     .contentType(contentType)
                     .cacheControl(CacheControl.maxAge(Duration.ofDays(7)).cachePublic())
-                    .body(bytes);
+                    .header("X-Content-Type-Options", "nosniff");
+            if (isDownloadOnly(objectName)) {
+                // 聊天文件一律作为附件下载，避免同源下 HTML/SVG 等被浏览器直接渲染执行
+                response.header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().build().toString());
+            }
+            return response.body(bytes);
         } catch (Exception e) {
             if (isNotFound(e)) {
                 log.warn("File not found: {}", objectName);
@@ -70,6 +75,10 @@ public class FileProxyController {
             return false;
         }
         return PUBLIC_PREFIXES.stream().anyMatch(objectName::startsWith);
+    }
+
+    static boolean isDownloadOnly(String objectName) {
+        return objectName.startsWith("chats/files/");
     }
 
     private static boolean isNotFound(Throwable e) {

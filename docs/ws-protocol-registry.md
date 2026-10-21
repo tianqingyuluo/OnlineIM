@@ -263,6 +263,43 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 
 会话响应同时返回 `delivered_seq`、`read_seq`、`latest_seq` 和权威 `unread_count`。readers 接口仅允许会话成员访问；群聊按成员 `read_seq >= message.seq_id` 推导阅读成员。同时返回可选的 `delivered_readers`，按成员 `delivered_seq >= message.seq_id` 推导，用于发送者离线重连后的送达状态恢复。
 
+## 图片 / 文件消息
+
+两步发送：先 HTTP 上传，再用 WS（或 `POST /api/v1/messages`）发送 `message_type` 为 `image` / `file` 的消息。
+
+### 上传 `POST /api/v1/messages/upload`
+
+- 需要 `Authorization`（无/无效令牌 `401`）；multipart 字段 `type`=`image`|`file`，`file`=文件内容。
+- `image`：按文件内容识别格式（默认允许 jpeg/png/gif/bmp，`im.upload.image-formats`），上限 `im.upload.image-max-size`（默认 10MB），像素上限 `im.upload.image-max-pixels`（默认 4000 万）；服务端生成长边不超过 `im.upload.thumbnail-max-edge`（默认 320）的缩略图（JPEG，含透明通道时 PNG；GIF 取第一帧）。
+- `file`：按扩展名白名单 `im.upload.file-extensions`，上限 `im.upload.file-max-size`（默认 20MB）。
+- 错误：类型/参数错误或图片损坏 `400`，超过大小 `413`，格式不允许 `415`，均为 `{code, message}`。
+- 对象键：`chats/images/yyyyMM/<128 位随机十六进制>.<ext>`（缩略图追加 `_thumb`）、`chats/files/yyyyMM/<随机>.<ext>`；不含用户、会话或原文件名，经 `/onlineim/**` 代理读取。`chats/` 下响应带 `X-Content-Type-Options: nosniff`，`chats/files/` 强制 `Content-Disposition: attachment`。
+
+响应（snake_case，空字段省略）：
+
+```json
+{
+  "status": "success",
+  "file_id": "upl_0123456789abcdef0123456789abcdef",
+  "type": "image",
+  "url": "/onlineim/chats/images/202610/<hex>.png",
+  "thumbnail_url": "/onlineim/chats/images/202610/<hex>_thumb.jpg",
+  "name": "原始文件名.png",
+  "size": 123456,
+  "mime": "image/png",
+  "width": 1200,
+  "height": 800,
+  "thumbnail_width": 320,
+  "thumbnail_height": 213
+}
+```
+
+### 发送
+
+`PRIVATE_MESSAGE_REQUEST` / `GROUP_MESSAGE_REQUEST` 的 `message_type` 为 `image` 或 `file`，`content` 为 `file_id` 字符串或包含 `file_id` 的 JSON（例如上传响应原样序列化）。服务端只认 `file_id`：上传记录必须属于发送者，`image` 消息必须引用图片上传（`file` 消息可引用任意上传），否则 WS 返回 `ERROR`（`code=400`）、HTTP 返回 `400`，消息不落库。服务端把 `content` 替换为上述媒体字段（不含 `status`）的 JSON 字符串，并写入 `ext`（同样字段 + `file_name`）；实时投递、历史、同步、上下文接口返回同一 `content`。客户端提交的 `url` 等字段一律忽略。
+
+会话预览显示 `[图片]` / `[文件]`，引用预览显示 `[图片]` / `[文件] 文件名`。
+
 ## 撤回事件与引用联动
 
 当前撤回发送方确认 `RECALL_MESSAGE_RESPONSE` 与接收方通知 `MESSAGE_RECALLED` 沿用既有顶层字段格式，而不是标准 `message` 信封；Web 客户端兼容两种解析方式。

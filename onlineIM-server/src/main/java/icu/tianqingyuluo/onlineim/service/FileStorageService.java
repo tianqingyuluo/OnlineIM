@@ -64,6 +64,13 @@ public class FileStorageService {
     }
     
     /**
+     * 按指定对象名上传到默认存储桶（对象名由调用方生成），返回访问 URL
+     */
+    public String uploadObject(String objectName, InputStream inputStream, String contentType, long size) throws Exception {
+        return ossAdapter.uploadFile(defaultBucket, objectName, inputStream, contentType, size);
+    }
+
+    /**
      * 上传头像
      * 
      * @param file 头像文件

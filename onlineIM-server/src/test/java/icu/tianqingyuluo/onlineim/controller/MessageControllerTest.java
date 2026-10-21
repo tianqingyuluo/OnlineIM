@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.controller;
 
+import icu.tianqingyuluo.onlineim.service.ChatMediaService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.MessageSendRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageContextResponse;
@@ -63,7 +64,7 @@ class MessageControllerTest {
     @Test
     void contextEndpointUsesAuthenticatedPrincipalAndForwardsWindow() throws Exception {
         MessageService messageService = mock(MessageService.class);
-        MessageController controller = new MessageController(messageService, mock(JwtUtil.class));
+        MessageController controller = new MessageController(messageService, mock(JwtUtil.class), mock(ChatMediaService.class));
         UserIDProvider principal = () -> "usr_me";
         MessageContextResponse expected = MessageContextResponse.builder()
                 .targetMessageId("msg_100")
@@ -91,7 +92,7 @@ class MessageControllerTest {
     @Test
     void sendEndpointUsesAuthenticatedPrincipal() {
         MessageService messageService = mock(MessageService.class);
-        MessageController controller = new MessageController(messageService, mock(JwtUtil.class));
+        MessageController controller = new MessageController(messageService, mock(JwtUtil.class), mock(ChatMediaService.class));
         UserIDProvider principal = () -> "usr_me";
         MessageSendRequest request = MessageSendRequest.builder()
                 .targetId("usr_peer")

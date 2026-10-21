@@ -21,6 +21,7 @@ import icu.tianqingyuluo.onlineim.repository.ConversationRepository;
 import icu.tianqingyuluo.onlineim.repository.GroupMessageRepository;
 import icu.tianqingyuluo.onlineim.repository.PrivateMessageRepository;
 import icu.tianqingyuluo.onlineim.repository.RecallLogRepository;
+import icu.tianqingyuluo.onlineim.service.ChatMediaService;
 import icu.tianqingyuluo.onlineim.service.ConversationRecordService;
 import icu.tianqingyuluo.onlineim.service.FriendService;
 import icu.tianqingyuluo.onlineim.service.GroupMemberService;
@@ -36,7 +37,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -62,6 +62,7 @@ public class MessageServiceImpl implements MessageService {
     private final ObjectMapper objectMapper;
     private final FriendService friendService;
     private final ConversationRecordService conversationRecords;
+    private final ChatMediaService chatMediaService;
     private long recallWindowSeconds = 120;
 
     @Autowired
@@ -73,7 +74,8 @@ public class MessageServiceImpl implements MessageService {
                               RedisStreamService redisStreamService,
                               ObjectMapper objectMapper,
                               FriendService friendService,
-                              ConversationRecordService conversationRecords) {
+                              ConversationRecordService conversationRecords,
+                              ChatMediaService chatMediaService) {
         this.privateMessageRepository = privateMessageRepository;
         this.groupMessageRepository = groupMessageRepository;
         this.recallLogRepository = recallLogRepository;
@@ -85,6 +87,7 @@ public class MessageServiceImpl implements MessageService {
         this.objectMapper = objectMapper;
         this.friendService = friendService;
         this.conversationRecords = conversationRecords;
+        this.chatMediaService = chatMediaService;
     }
 
     @Override
@@ -344,31 +347,6 @@ public class MessageServiceImpl implements MessageService {
     }
 
     @Override
-    public Map<String, String> uploadFile(String userId, String type, MultipartFile file) {
-        // 验证文件类型
-        if (!Arrays.asList("image", "voice", "video", "file").contains(type)) {
-            Map<String, String> error = new HashMap<>();
-            error.put("status", "error");
-            error.put("message", "不支持的文件类型");
-            return error;
-        }
-        
-        // TODO: 使用FileStorageService调用对象存储
-        // 这里模拟上传成功，返回一个假的URL
-        String fileUrl = "https://example.com/files/" + UUID.randomUUID().toString() + 
-                         "_" + file.getOriginalFilename();
-        
-        Map<String, String> result = new HashMap<>();
-        result.put("status", "success");
-        result.put("url", fileUrl);
-        result.put("type", type);
-        result.put("name", file.getOriginalFilename());
-        result.put("size", String.valueOf(file.getSize()));
-        
-        return result;
-    }
-
-    @Override
     public List<MessageResponse> syncMessages(String conversationId, String seqId, String userId) {
         assertReadable(conversationId, userId);
         // 根据会话ID的前缀判断是群聊还是单聊
@@ -435,7 +413,6 @@ public class MessageServiceImpl implements MessageService {
             message.setReceiverId(targetId);
             message.setConversationId(conversationId);
             message.setMessageType(request.getMessageType());
-            message.setContent(request.getContent());
             message.setReplyTo(createReplySnapshot(conversationId, request.getReplyToMessageId(), userId));
             message.setContentRevision(1);
             message.setClientMessageId(request.getClientMsgId());
@@ -444,7 +421,7 @@ public class MessageServiceImpl implements MessageService {
             message.setTimestamp(new Date());
             message.setCreatedAt(new Date());
             message.setUpdatedAt(new Date());
-            message.setExt(request.getExt());
+            applyContent(message::setContent, message::setExt, request, userId);
 
             privateMessageRepository.save(message);
             conversationRecords.onPrivateMessage(message);
@@ -471,7 +448,6 @@ public class MessageServiceImpl implements MessageService {
             message.setGroupId(targetId);
             message.setSenderId(userId);
             message.setMessageType(request.getMessageType());
-            message.setContent(request.getContent());
             message.setReplyTo(createReplySnapshot(targetId, request.getReplyToMessageId(), userId));
             message.setContentRevision(1);
             message.setClientMessageId(request.getClientMsgId());
@@ -485,7 +461,7 @@ public class MessageServiceImpl implements MessageService {
             message.setTimestamp(new Date());
             message.setCreatedAt(new Date());
             message.setUpdatedAt(new Date());
-            message.setExt(request.getExt());
+            applyContent(message::setContent, message::setExt, request, userId);
 
             groupMessageRepository.save(message);
             List<String> memberIds = groupReceiverIds(targetId);
@@ -500,6 +476,23 @@ public class MessageServiceImpl implements MessageService {
         }
 
         throw new IllegalArgumentException("不支持的接收方ID");
+    }
+
+    /**
+     * 文本等消息原样保存 content/ext；图片/文件消息的 content 只携带 file_id，由服务端按上传记录补全元数据。
+     */
+    private void applyContent(java.util.function.Consumer<String> setContent,
+                              java.util.function.Consumer<Map<String, Object>> setExt,
+                              MessageSendRequest request, String userId) {
+        if (ChatMediaService.isMediaMessage(request.getMessageType())) {
+            ChatMediaService.ResolvedMedia media = chatMediaService.resolveForMessage(
+                    userId, request.getMessageType(), request.getContent());
+            setContent.accept(media.content());
+            setExt.accept(media.ext());
+            return;
+        }
+        setContent.accept(request.getContent());
+        setExt.accept(request.getExt());
     }
 
     private void validateSendRequest(MessageSendRequest request, String userId) {
