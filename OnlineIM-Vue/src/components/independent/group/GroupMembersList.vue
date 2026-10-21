@@ -69,9 +69,14 @@ async function handleRemoveAdmin(member: GroupMemberAll) {
   }
 }
 
-async function handleMute(member: GroupMemberAll, time:number) {
+// minutes: 禁言时长（分钟）
+async function handleMute(member: GroupMemberAll, minutes: number) {
   try {
-    await groupMembersService.muteMember(props.groupId, member.group_member_id ,time)
+    await groupMembersService.muteMember(props.groupId, member.group_member_id, minutes)
+    const index = members.value.findIndex(m => m.group_member_id === member.group_member_id)
+    if (index !== -1) {
+      members.value[index].is_muted = true
+    }
   } catch (error) {
     console.error('禁言失败:', error)
   }
@@ -97,7 +102,8 @@ async function handleTransferOwner(member: GroupMemberAll) {
       members.value[index].role = '群主'
       const myIndex = members.value.findIndex(m => m.user_info.user_id === userStore.loggedInUser.user_id)
       if (myIndex !== -1) {
-        members.value[myIndex].role = '管理员'
+        // 后端转让后原群主降为普通成员
+        members.value[myIndex].role = '成员'
       }
     }
   } catch (error) {
@@ -222,9 +228,9 @@ onUnmounted(() => {
                   禁言
                 </ContextMenuSubTrigger>
                 <ContextMenuSubContent class="origin-left left-full ml-1">
-                  <ContextMenuItem @click="handleMute(member, 600)">禁言10分钟</ContextMenuItem>
-                  <ContextMenuItem @click="handleMute(member, 1800)">禁言半小时</ContextMenuItem>
-                  <ContextMenuItem @click="handleMute(member, 3600)">禁言一小时</ContextMenuItem>
+                  <ContextMenuItem @click="handleMute(member, 10)">禁言10分钟</ContextMenuItem>
+                  <ContextMenuItem @click="handleMute(member, 30)">禁言半小时</ContextMenuItem>
+                  <ContextMenuItem @click="handleMute(member, 60)">禁言一小时</ContextMenuItem>
                 </ContextMenuSubContent>
               </ContextMenuSub>
               <ContextMenuItem @click="handleUnmute(member)" v-if="member.is_muted">
@@ -246,9 +252,9 @@ onUnmounted(() => {
                   禁言
                 </ContextMenuSubTrigger>
                 <ContextMenuSubContent class="origin-left left-full ml-1">
-                  <ContextMenuItem @click="handleMute(member, 600)">禁言10分钟</ContextMenuItem>
-                  <ContextMenuItem @click="handleMute(member, 1800)">禁言半小时</ContextMenuItem>
-                  <ContextMenuItem @click="handleMute(member, 3600)">禁言一小时</ContextMenuItem>
+                  <ContextMenuItem @click="handleMute(member, 10)">禁言10分钟</ContextMenuItem>
+                  <ContextMenuItem @click="handleMute(member, 30)">禁言半小时</ContextMenuItem>
+                  <ContextMenuItem @click="handleMute(member, 60)">禁言一小时</ContextMenuItem>
                 </ContextMenuSubContent>
               </ContextMenuSub>
               <ContextMenuItem @click="handleUnmute(member)" v-if="member.is_muted">

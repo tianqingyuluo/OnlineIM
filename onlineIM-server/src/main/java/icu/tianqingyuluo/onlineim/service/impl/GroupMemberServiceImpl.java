@@ -10,10 +10,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 @Service
 public class GroupMemberServiceImpl implements GroupMemberService {
+    private static final int ROLE_MEMBER = 0;
+    private static final int ROLE_ADMIN = 1;
+    private static final int ROLE_OWNER = 2;
+    private static final DateTimeFormatter UPDATED_AT_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
     private final GroupMapper groupMapper;
     private final GroupMemberMapper groupMemberMapper;
     private final GroupSettingMapper groupSettingMapper;
@@ -48,22 +54,26 @@ public class GroupMemberServiceImpl implements GroupMemberService {
 
     @Override
     public boolean setAdmin(String groupId, String memberId, String operatorId) {
-        if(groupMapper.isGroupOwner(groupId,operatorId)){
-            int role = 1;
-            return groupMemberMapper.updateRole(memberId, groupId, role) == 1;
-        }
-        else
-            return false;
+        return changeAdminRole(groupId, memberId, operatorId, ROLE_ADMIN);
     }
 
     @Override
     public boolean cancelAdmin(String groupId, String memberId, String operatorId) {
-        if(groupMapper.isGroupOwner(groupId,operatorId)){
-            int role=0;
-            return groupMemberMapper.updateRole(memberId, groupId, role)==1;
+        return changeAdminRole(groupId, memberId, operatorId, ROLE_MEMBER);
+    }
+
+    private boolean changeAdminRole(String groupId, String memberId, String operatorId, int role) {
+        if (!groupMapper.isGroupOwner(groupId, operatorId)) {
+            throw new ForbiddenException("只有群主可以设置或取消管理员");
         }
-        else
-            return false;
+        Integer targetRole = groupMemberMapper.getRoleByMemberId(memberId, groupId);
+        if (targetRole == null) {
+            throw new IllegalArgumentException("群成员不存在");
+        }
+        if (targetRole == ROLE_OWNER) {
+            throw new IllegalArgumentException("不能修改群主的角色");
+        }
+        return groupMemberMapper.updateRole(memberId, groupId, role) == 1;
     }
 
     @Override
@@ -80,34 +90,54 @@ public class GroupMemberServiceImpl implements GroupMemberService {
 
     @Override
     public boolean muteMember(String groupId, String memberId, Integer duration, String operatorId) {
-        if(groupMapper.isAdmin(groupId,operatorId)){
-            LocalDateTime now = LocalDateTime.now();
-            LocalDateTime future = now.plusMinutes(duration);
-            return groupMemberMapper.updateMuteTime(memberId, groupId, future)==1;
-        }
-        else
-            return false;
+        assertCanMute(groupId, memberId, operatorId);
+        LocalDateTime future = LocalDateTime.now().plusMinutes(duration);
+        return groupMemberMapper.updateMuteTime(memberId, groupId, future) == 1;
     }
 
     @Override
     public boolean unmuteMember(String groupId, String memberId, String operatorId) {
-        if(groupMapper.isAdmin(groupId,operatorId)){
-            return groupMemberMapper.updateMuteTime(memberId, groupId, null)==1;
+        assertCanMute(groupId, memberId, operatorId);
+        return groupMemberMapper.updateMuteTime(memberId, groupId, null) == 1;
+    }
+
+    /**
+     * 禁言/解除禁言权限：操作者必须是管理员或群主，且只能操作角色比自己低的成员。
+     */
+    private void assertCanMute(String groupId, String memberId, String operatorId) {
+        Integer operatorRole = groupMemberMapper.getRoleByUserId(groupId, operatorId);
+        if (operatorRole == null || operatorRole < ROLE_ADMIN) {
+            throw new ForbiddenException("只有群主或管理员可以禁言成员");
         }
-        else
-            return false;
+        Integer targetRole = groupMemberMapper.getRoleByMemberId(memberId, groupId);
+        if (targetRole == null) {
+            throw new IllegalArgumentException("群成员不存在");
+        }
+        if (targetRole >= operatorRole) {
+            throw new ForbiddenException("不能禁言同级或更高角色的成员");
+        }
     }
 
     @Override
     @Transactional
     public boolean transferOwnership(String groupId, String memberId, String operatorId) {
-        if(groupMapper.isGroupOwner(groupId,operatorId)){
-            int memberRole = 0;
-            int ownerRole = 2;
-            return groupMemberMapper.updateRole(memberId, groupId, ownerRole)==1&&groupMemberMapper.updateOwnerRole(groupId,operatorId,memberRole)==1;
+        if (!groupMapper.isGroupOwner(groupId, operatorId)) {
+            throw new ForbiddenException("只有群主可以转让群主身份");
         }
-        else
-            return false;
+        String newOwnerId = groupMemberMapper.getUserIdByMemberId(memberId, groupId);
+        if (newOwnerId == null) {
+            throw new IllegalArgumentException("群成员不存在");
+        }
+        if (newOwnerId.equals(operatorId)) {
+            throw new IllegalArgumentException("不能转让给自己");
+        }
+        String updatedAt = LocalDateTime.now().format(UPDATED_AT_FORMATTER);
+        if (groupMemberMapper.updateRole(memberId, groupId, ROLE_OWNER) != 1
+                || groupMemberMapper.updateOwnerRole(groupId, operatorId, ROLE_MEMBER) != 1
+                || groupMapper.updateOwner(groupId, newOwnerId, updatedAt) != 1) {
+            throw new IllegalStateException("转让群主失败");
+        }
+        return true;
     }
 
     @Override

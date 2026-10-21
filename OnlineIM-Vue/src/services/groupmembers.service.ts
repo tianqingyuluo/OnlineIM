@@ -29,7 +29,7 @@ export const groupMembersService = {
   // 取消管理员
   async removeAdmin(groupId: string, memberId: string): Promise<void> {
     try {
-      await api.delete(`/groups/${groupId}/admins/${memberId}`);
+      await api.post(`/groups/${groupId}/members/${memberId}/cancel-admin`);
       toast.success('取消管理员成功');
     } catch (error) {
       console.error('取消管理员失败:', error);
@@ -50,10 +50,10 @@ export const groupMembersService = {
     }
   },
 
-  // 禁言成员
-  async muteMember(groupId: string, memberId: string, duration: number): Promise<void> {
+  // 禁言成员，durationMinutes 单位为分钟（与后端 POST /members/{memberId}/mute 的 duration 一致）
+  async muteMember(groupId: string, memberId: string, durationMinutes: number): Promise<void> {
     try {
-      await api.put(`/groups/${groupId}/members/${memberId}/mute`, { duration });
+      await api.post(`/groups/${groupId}/members/${memberId}/mute`, { duration: durationMinutes });
       toast.success('禁言设置成功');
     } catch (error) {
       console.error('禁言设置失败:', error);
@@ -65,7 +65,7 @@ export const groupMembersService = {
   // 取消禁言
   async unmuteMember(groupId: string, memberId: string): Promise<void> {
     try {
-      await api.delete(`/groups/${groupId}/members/${memberId}/mute`);
+      await api.post(`/groups/${groupId}/members/${memberId}/unmute`);
       toast.success('取消禁言成功');
     } catch (error) {
       console.error('取消禁言失败:', error);
@@ -74,10 +74,10 @@ export const groupMembersService = {
     }
   },
 
-  // 转让群主
-  async transferOwnership(groupId: string, newOwnerId: string): Promise<void> {
+  // 转让群主，memberId 为目标成员的 group_member_id
+  async transferOwnership(groupId: string, memberId: string): Promise<void> {
     try {
-      await api.put(`/groups/${groupId}/owner`, { new_owner_id: newOwnerId });
+      await api.post(`/groups/${groupId}/members/${memberId}/transfer-ownership`);
       toast.success('群主转让成功');
     } catch (error) {
       console.error('群主转让失败:', error);

@@ -87,6 +87,15 @@ public interface GroupMemberMapper {
     @Update("UPDATE group_members SET role = #{role} WHERE group_id = #{groupId} AND user_id=#{userid}")
     int updateOwnerRole(@Param("groupId") String groupId,@Param("userid") String userid, @Param("role") int role);
 
+    @Select("SELECT role FROM group_members WHERE id = #{id} AND group_id = #{groupId}")
+    Integer getRoleByMemberId(@Param("id") String id, @Param("groupId") String groupId);
+
+    @Select("SELECT role FROM group_members WHERE group_id = #{groupId} AND user_id = #{userid}")
+    Integer getRoleByUserId(@Param("groupId") String groupId, @Param("userid") String userid);
+
+    @Select("SELECT user_id FROM group_members WHERE id = #{id} AND group_id = #{groupId}")
+    String getUserIdByMemberId(@Param("id") String id, @Param("groupId") String groupId);
+
     @Update("UPDATE group_members SET role = 2 WHERE group_id = #{groupId} AND user_id=#{userid}")
     void initGroupOwner(@Param("groupId") String groupId, @Param("userid") String userid);
     /**
