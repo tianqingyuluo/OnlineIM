@@ -5,6 +5,7 @@ import icu.tianqingyuluo.onlineim.pojo.dto.request.ConversationCreateRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.ConversationResponse;
 import icu.tianqingyuluo.onlineim.service.ConversationReadStateService;
 import icu.tianqingyuluo.onlineim.service.ConversationService;
+import icu.tianqingyuluo.onlineim.service.DraftService;
 import icu.tianqingyuluo.onlineim.service.FriendService;
 import icu.tianqingyuluo.onlineim.service.GroupMemberService;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
@@ -40,7 +41,8 @@ class ConversationControllerCreateTest {
                 jwtUtil,
                 groupMemberService,
                 mock(ConversationReadStateService.class),
-                friendService);
+                friendService,
+                mock(DraftService.class));
     }
 
     @Test

@@ -2,12 +2,15 @@ package icu.tianqingyuluo.onlineim.controller;
 
 import icu.tianqingyuluo.onlineim.exception.ForbiddenException;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.ConversationCreateRequest;
+import icu.tianqingyuluo.onlineim.pojo.dto.request.DraftSaveRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.ConversationResponse;
+import icu.tianqingyuluo.onlineim.pojo.dto.response.DraftResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageReadersResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.ReadStateResponse;
 import icu.tianqingyuluo.onlineim.service.ConversationReadStateService;
 import icu.tianqingyuluo.onlineim.service.ConversationRecordService;
 import icu.tianqingyuluo.onlineim.service.ConversationService;
+import icu.tianqingyuluo.onlineim.service.DraftService;
 import icu.tianqingyuluo.onlineim.service.GroupMemberService;
 import icu.tianqingyuluo.onlineim.service.FriendService;
 import icu.tianqingyuluo.onlineim.util.ConversationIdUtil;
@@ -32,18 +35,21 @@ public class ConversationController {
     private final GroupMemberService groupMemberService;
     private final ConversationReadStateService readStateService;
     private final FriendService friendService;
+    private final DraftService draftService;
 
     @Autowired
     public ConversationController(ConversationService conversationService,
                                   JwtUtil jwtUtil,
                                   GroupMemberService groupMemberService,
                                   ConversationReadStateService readStateService,
-                                  FriendService friendService) {
+                                  FriendService friendService,
+                                  DraftService draftService) {
         this.conversationService = conversationService;
         this.jwtUtil = jwtUtil;
         this.groupMemberService = groupMemberService;
         this.readStateService = readStateService;
         this.friendService = friendService;
+        this.draftService = draftService;
     }
 
     /**
@@ -263,6 +269,58 @@ public class ConversationController {
         return ResponseEntity.ok(result);
     }
     
+    /**
+     * 读取当前用户在该会话的草稿。没有草稿时 204。
+     */
+    @GetMapping("/{conversationId}/draft")
+    public ResponseEntity<DraftResponse> getDraft(
+            @PathVariable String conversationId,
+            @RequestHeader("Authorization") String token) {
+        String userId = jwtUtil.getUserIDFromToken(token);
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        DraftResponse draft = draftService.get(conversationId, userId);
+        if (draft == null) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.ok(draft);
+    }
+
+    /**
+     * 保存草稿（后写覆盖）。content 为空白时删除草稿并返回 204。
+     */
+    @PutMapping("/{conversationId}/draft")
+    public ResponseEntity<DraftResponse> saveDraft(
+            @PathVariable String conversationId,
+            @RequestHeader("Authorization") String token,
+            @RequestBody(required = false) DraftSaveRequest request) {
+        String userId = jwtUtil.getUserIDFromToken(token);
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        DraftResponse draft = draftService.save(conversationId, userId, request);
+        if (draft == null) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.ok(draft);
+    }
+
+    /**
+     * 删除当前用户在该会话的草稿。
+     */
+    @DeleteMapping("/{conversationId}/draft")
+    public ResponseEntity<Void> clearDraft(
+            @PathVariable String conversationId,
+            @RequestHeader("Authorization") String token) {
+        String userId = jwtUtil.getUserIDFromToken(token);
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        draftService.clear(conversationId, userId);
+        return ResponseEntity.noContent().build();
+    }
+
     /**
      * 获取未读消息数
      * @return 未读消息数信息

@@ -97,4 +97,11 @@ public class ConversationResponse {
      */
     @JsonProperty("last_activity_time")
     private String lastActivityTime;
+
+    /**
+     * 当前用户在该会话的未发送草稿摘要（折叠空白、最多 40 个字符）。没有草稿时为 null。
+     * 客户端在会话列表显示“[草稿] ”加这段文字。
+     */
+    @JsonProperty("draft_preview")
+    private String draftPreview;
 }

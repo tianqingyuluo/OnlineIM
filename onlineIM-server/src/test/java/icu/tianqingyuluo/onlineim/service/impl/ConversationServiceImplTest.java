@@ -15,6 +15,7 @@ import org.springframework.data.mongodb.core.query.Update;
 
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -30,6 +31,7 @@ class ConversationServiceImplTest {
     private GroupService groupService;
     private UserService userService;
     private ConversationReadStateService readStateService;
+    private DraftService draftService;
     private ConversationServiceImpl service;
 
     @BeforeEach
@@ -44,8 +46,10 @@ class ConversationServiceImplTest {
         when(readStateService.getReadState(any(), any(), any())).thenReturn(ReadStateResponse.builder()
                 .deliveredSeq("0").readSeq("0").latestSeq("0").unreadCount(4L).build());
         when(userService.getUserInfoByUserID(any())).thenReturn(new UserResponse());
+        draftService = mock(DraftService.class);
+        when(draftService.previewsOf(any())).thenReturn(Map.of());
         service = new ConversationServiceImpl(repository, groupService, userService, mock(FriendService.class),
-                mock(UserFriendMapper.class), readStateService, groupMemberService, records);
+                mock(UserFriendMapper.class), readStateService, groupMemberService, records, draftService);
     }
 
     private Conversation own(String conversationId, String owner, String target, String type) {
@@ -122,6 +126,16 @@ class ConversationServiceImplTest {
         assertEquals("usr_b", list.get(0).getTargetInfo().getId());
         assertEquals(4, list.get(0).getUnreadCount());
         assertEquals("grp_1", list.get(1).getConversationID());
+        assertNull(list.get(0).getDraftPreview());
+    }
+
+    @Test
+    void listShowsTheOwnersDraftPreview() {
+        when(repository.findByUserIdAndStatus(eq("usr_a"), eq(1), any(Sort.class)))
+                .thenReturn(List.of(own(PRIV, "usr_a", "usr_b", "private")));
+        when(draftService.previewsOf("usr_a")).thenReturn(Map.of(PRIV, "写了一半"));
+
+        assertEquals("写了一半", service.getUserConversations("usr_a").getFirst().getDraftPreview());
     }
 
     @Test

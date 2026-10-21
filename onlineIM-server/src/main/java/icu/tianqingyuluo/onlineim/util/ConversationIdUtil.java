@@ -20,4 +20,27 @@ public final class ConversationIdUtil {
                 ? firstUserId + secondUserId
                 : secondUserId + firstUserId);
     }
+
+    /**
+     * 从私聊会话 ID 里取出对方的用户 ID。ID 不是 {@code conv_} 加两个 {@code usr_} 用户、
+     * 或不包含 {@code userId} 时返回 null。
+     */
+    public static String otherParticipant(String conversationId, String userId) {
+        if (conversationId == null || userId == null || !conversationId.startsWith("conv_")) {
+            return null;
+        }
+        String[] parts = conversationId.substring("conv_".length()).split("usr_", -1);
+        if (parts.length != 3 || parts[1].isEmpty() || parts[2].isEmpty()) {
+            return null;
+        }
+        String first = "usr_" + parts[1];
+        String second = "usr_" + parts[2];
+        if (userId.equals(first)) {
+            return second;
+        }
+        if (userId.equals(second)) {
+            return first;
+        }
+        return null;
+    }
 }

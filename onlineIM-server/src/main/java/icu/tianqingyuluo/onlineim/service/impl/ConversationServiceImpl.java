@@ -7,6 +7,7 @@ import icu.tianqingyuluo.onlineim.pojo.entity.Group;
 import icu.tianqingyuluo.onlineim.pojo.entity.User;
 import icu.tianqingyuluo.onlineim.repository.ConversationRepository;
 import icu.tianqingyuluo.onlineim.service.ConversationService;
+import icu.tianqingyuluo.onlineim.service.DraftService;
 import icu.tianqingyuluo.onlineim.service.FriendService;
 import icu.tianqingyuluo.onlineim.service.GroupService;
 import icu.tianqingyuluo.onlineim.service.ConversationReadStateService;
@@ -40,6 +41,7 @@ public class ConversationServiceImpl implements ConversationService {
     private final ConversationReadStateService readStateService;
     private final GroupMemberService groupMemberService;
     private final ConversationRecordService conversationRecords;
+    private final DraftService draftService;
 
     @Autowired
     public ConversationServiceImpl(ConversationRepository conversationRepository,
@@ -49,7 +51,8 @@ public class ConversationServiceImpl implements ConversationService {
                                    UserFriendMapper userFriendMapper,
                                    ConversationReadStateService readStateService,
                                    GroupMemberService groupMemberService,
-                                   ConversationRecordService conversationRecords) {
+                                   ConversationRecordService conversationRecords,
+                                   DraftService draftService) {
         this.conversationRepository = conversationRepository;
         this.groupService = groupService;
         this.userService = userService;
@@ -58,6 +61,7 @@ public class ConversationServiceImpl implements ConversationService {
         this.readStateService = readStateService;
         this.groupMemberService = groupMemberService;
         this.conversationRecords = conversationRecords;
+        this.draftService = draftService;
     }
 
     @Override
@@ -65,10 +69,13 @@ public class ConversationServiceImpl implements ConversationService {
         // 只取当前用户自己的记录：置顶在前，再按最近活跃时间倒序
         Sort sort = Sort.by(Sort.Direction.DESC, "top", "updatedAt");
         List<Conversation> conversations = conversationRepository.findByUserIdAndStatus(userId, 1, sort);
+        Map<String, String> draftPreviews = draftPreviews(userId);
         List<ConversationResponse> conversationResponses = new ArrayList<>();
         for (Conversation conversation : conversations) {
             try {
-                conversationResponses.add(convertToConversationResponse(conversation, userId));
+                ConversationResponse response = convertToConversationResponse(conversation, userId);
+                response.setDraftPreview(draftPreviews.get(conversation.getConversationId()));
+                conversationResponses.add(response);
             } catch (RuntimeException ex) {
                 // 群已解散等导致目标信息缺失的记录不影响整个列表
                 log.warn("跳过无法展示的会话记录: id={}, error={}", conversation.getId(), ex.getMessage());
@@ -83,7 +90,9 @@ public class ConversationServiceImpl implements ConversationService {
         if (conversation == null) {
             return null;
         }
-        return convertToConversationResponse(conversation, userId);
+        ConversationResponse response = convertToConversationResponse(conversation, userId);
+        response.setDraftPreview(draftService.previewOf(userId, conversationId));
+        return response;
     }
 
     @Override
@@ -94,7 +103,9 @@ public class ConversationServiceImpl implements ConversationService {
             // 对方也要有自己的记录（会话成员关系依据），但只在缺失时以隐藏状态创建，不改动对方已有状态
             conversationRecords.ensureRecord(conversationId, conversationType, targetId, userId, false);
         }
-        return convertToConversationResponse(own, userId);
+        ConversationResponse response = convertToConversationResponse(own, userId);
+        response.setDraftPreview(draftService.previewOf(userId, conversationId));
+        return response;
     }
 
     @Override
@@ -149,6 +160,16 @@ public class ConversationServiceImpl implements ConversationService {
         result.put("total_unread", total == null ? 0 : total);
         result.put("conversation_unread", conversationUnread);
         return result;
+    }
+
+    private Map<String, String> draftPreviews(String userId) {
+        try {
+            Map<String, String> previews = draftService.previewsOf(userId);
+            return previews == null ? Map.of() : previews;
+        } catch (RuntimeException ex) {
+            log.warn("读取草稿摘要失败，会话列表不显示草稿: {}", ex.getMessage());
+            return Map.of();
+        }
     }
 
     private boolean updateOwnField(String conversationId, String userId, String field, Object value) {
