@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.controller;
 
+import icu.tianqingyuluo.onlineim.exception.TypedExceptions;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.GroupMemberResponse;
 import icu.tianqingyuluo.onlineim.service.GroupMemberService;
 import icu.tianqingyuluo.onlineim.service.UserService;
@@ -105,6 +106,7 @@ public class GroupMemberController {
             }
             return ResponseEntity.ok(response);
         } catch (Exception e) {
+            TypedExceptions.rethrowIfTyped(e);
             log.error("获取群成员详情失败: group={}, member={}", groupId, memberId, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ErrorCodeUtil.getErrorOutput("500", "服务器内部错误"));
@@ -144,6 +146,7 @@ public class GroupMemberController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(ErrorCodeUtil.getErrorOutput("400", e.getMessage()));
         } catch (Exception e) {
+            TypedExceptions.rethrowIfTyped(e);
             log.error("移除群成员失败: group={}, member={}", groupId, memberId, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ErrorCodeUtil.getErrorOutput("500", "服务器内部错误"));
@@ -183,6 +186,7 @@ public class GroupMemberController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(ErrorCodeUtil.getErrorOutput("400", e.getMessage()));
         } catch (Exception e) {
+            TypedExceptions.rethrowIfTyped(e);
             log.error("设置群管理员失败: group={}, member={}", groupId, memberId, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ErrorCodeUtil.getErrorOutput("500", "服务器内部错误"));
@@ -222,6 +226,7 @@ public class GroupMemberController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(ErrorCodeUtil.getErrorOutput("400", e.getMessage()));
         } catch (Exception e) {
+            TypedExceptions.rethrowIfTyped(e);
             log.error("取消群管理员失败: group={}, member={}", groupId, memberId, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ErrorCodeUtil.getErrorOutput("500", "服务器内部错误"));
@@ -270,6 +275,7 @@ public class GroupMemberController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(ErrorCodeUtil.getErrorOutput("400", e.getMessage()));
         } catch (Exception e) {
+            TypedExceptions.rethrowIfTyped(e);
             log.error("更新群成员昵称失败: group={}, member={}", groupId, memberId, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ErrorCodeUtil.getErrorOutput("500", "服务器内部错误"));
@@ -326,6 +332,7 @@ public class GroupMemberController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(ErrorCodeUtil.getErrorOutput("400", e.getMessage()));
         } catch (Exception e) {
+            TypedExceptions.rethrowIfTyped(e);
             log.error("禁言群成员失败: group={}, member={}", groupId, memberId, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ErrorCodeUtil.getErrorOutput("500", "服务器内部错误"));
@@ -365,6 +372,7 @@ public class GroupMemberController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(ErrorCodeUtil.getErrorOutput("400", e.getMessage()));
         } catch (Exception e) {
+            TypedExceptions.rethrowIfTyped(e);
             log.error("取消群成员禁言失败: group={}, member={}", groupId, memberId, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ErrorCodeUtil.getErrorOutput("500", "服务器内部错误"));
@@ -404,6 +412,7 @@ public class GroupMemberController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(ErrorCodeUtil.getErrorOutput("400", e.getMessage()));
         } catch (Exception e) {
+            TypedExceptions.rethrowIfTyped(e);
             log.error("转让群主失败: group={}, newOwner={}", groupId, memberId, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ErrorCodeUtil.getErrorOutput("500", "服务器内部错误"));

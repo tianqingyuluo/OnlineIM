@@ -31,8 +31,11 @@ public interface GroupJoinRequestMapper {
     @Select("SELECT * FROM group_join_requests WHERE group_id = #{groupId} AND user_id = #{userId} AND status = 0")
     GroupJoinRequest getPendingRequestByGroupIdAndUserId(@Param("groupId") String groupId, @Param("userId") String userId);
 
-    @Select("SELECT EXISTS(SELECT 1 FROM group_join_requests WHERE user_id = #{userid} AND status=0)")
-    boolean existsByUserid(String userid);
+    /**
+     * 用户在指定群是否已有待审批（status=0）的加群申请/邀请
+     */
+    @Select("SELECT EXISTS(SELECT 1 FROM group_join_requests WHERE group_id = #{groupId} AND user_id = #{userid} AND status = 0)")
+    boolean existsPendingByGroupIdAndUserid(@Param("groupId") String groupId, @Param("userid") String userid);
 
     @Select("SELECT EXISTS(SELECT 1 FROM group_join_requests WHERE id = #{id} AND group_id = #{groupId} AND status=0)")
     boolean isPendingByRequestId(@Param("id") String id, @Param("groupId") String groupId);

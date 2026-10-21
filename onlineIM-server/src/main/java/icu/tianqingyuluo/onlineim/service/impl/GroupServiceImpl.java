@@ -116,7 +116,7 @@ public class GroupServiceImpl implements GroupService {
         if(!userMapper.existsByUserid(userIdsToInvite)
                 ||!groupMapper.existsByGroupId(groupId)
                 ||groupMapper.isUserMember(groupId,userIdsToInvite)
-                ||groupJoinRequestMapper.existsByUserid(userIdsToInvite)){
+                ||groupJoinRequestMapper.existsPendingByGroupIdAndUserid(groupId, userIdsToInvite)){
             return false;
         }
         else {
@@ -145,6 +145,7 @@ public class GroupServiceImpl implements GroupService {
                         .userId(userIdsToInvite)
                         .inviterId(inviterId)
                         .message(message)
+                        .status(0)
                         .build();
                 groupJoinRequestMapper.insert(groupJoinRequest);
             }
@@ -172,7 +173,7 @@ public class GroupServiceImpl implements GroupService {
             }
 
             // 检查是否已有待处理的加入请求
-            if (groupJoinRequestMapper.existsByUserid(applicantId)) {
+            if (groupJoinRequestMapper.existsPendingByGroupIdAndUserid(groupId, applicantId)) {
                 throw new IllegalArgumentException("已有待处理的加入请求");
             }
 
@@ -268,25 +269,26 @@ public class GroupServiceImpl implements GroupService {
     @Transactional
     public boolean handleJoinRequest(String groupId, String requestId, String action, String operatorId) {
         try {
-            if(groupMapper.isAdmin(groupId,operatorId) && groupJoinRequestMapper.isPendingByRequestId(requestId, groupId)){
-                if(action.equals("accept")){
-                    String mid="mem_"+ IdUtil.getSnowflakeNextIdStr();
-                    String userid=groupJoinRequestMapper.getUseridById(requestId);
-                    groupMemberMapper.insertById(mid,groupId,userid);
-                    groupMapper.updateMemberCount(groupId,1);
-                    groupJoinRequestMapper.updateStatus(requestId,1);
-                    return true;
-                }
-                else if(action.equals("reject")){
-                    groupJoinRequestMapper.updateStatus(requestId,2);
-                    return true;
-                }
-                else
-                    return false;
+            if (!groupMapper.isAdmin(groupId, operatorId)) {
+                throw new ForbiddenException("无权限处理加群请求");
             }
-            else{
-                throw new ForbiddenException("请求被拒绝");
+            if (!groupJoinRequestMapper.isPendingByRequestId(requestId, groupId)) {
+                throw new IllegalArgumentException("加群请求不存在、不属于该群或已被处理");
             }
+            if(action.equals("accept")){
+                String mid="mem_"+ IdUtil.getSnowflakeNextIdStr();
+                String userid=groupJoinRequestMapper.getUseridById(requestId);
+                groupMemberMapper.insertById(mid,groupId,userid);
+                groupMapper.updateMemberCount(groupId,1);
+                groupJoinRequestMapper.updateStatus(requestId,1);
+                return true;
+            }
+            else if(action.equals("reject")){
+                groupJoinRequestMapper.updateStatus(requestId,2);
+                return true;
+            }
+            else
+                return false;
         } catch (DataAccessException e) {
             throw new RuntimeException("数据库访问失败，请稍后再试", e);
         }
@@ -294,7 +296,8 @@ public class GroupServiceImpl implements GroupService {
 
     @Override
     public boolean canUserInvite(String groupId, String inviterId) {
-        if(groupMapper.isGroupOwner(groupId,inviterId) || groupSettingMapper.isAllowMemberInvite(groupId))
+        if(groupMapper.isGroupOwner(groupId,inviterId)
+                || (groupMapper.isUserMember(groupId,inviterId) && groupSettingMapper.isAllowMemberInvite(groupId)))
             return true;
         else
             return false;

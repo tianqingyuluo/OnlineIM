@@ -2,6 +2,7 @@ package icu.tianqingyuluo.onlineim.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import icu.tianqingyuluo.onlineim.exception.ForbiddenException;
+import icu.tianqingyuluo.onlineim.exception.TypedExceptions;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.GroupCreateRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.GroupJoinRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.GroupUpdateRequest;
@@ -187,6 +188,7 @@ public class GroupController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "上传群头像失败"));
         }
         catch (Exception e) {
+            TypedExceptions.rethrowIfTyped(e);
             log.error("上传群头像失败: {}", groupId, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ErrorCodeUtil.getErrorOutput("500", "服务器内部错误"));
         }
@@ -251,6 +253,7 @@ public class GroupController {
             }
         }
         catch (Exception e) {
+            TypedExceptions.rethrowIfTyped(e);
             log.error("邀请用户加入群组失败: group={}, inviter={}, users={}", groupId, inviterId, userIdsToInvite, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ErrorCodeUtil.getErrorOutput("500", "服务器内部错误"));
         }
@@ -289,6 +292,7 @@ public class GroupController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "申请失败，请再试一遍"));
         }
         catch (Exception e) {
+            TypedExceptions.rethrowIfTyped(e);
             log.error("申请加入群组失败: group={}, applicant={}", groupId, applicantId, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ErrorCodeUtil.getErrorOutput("500", "服务器内部错误"));
         }
@@ -305,7 +309,6 @@ public class GroupController {
         String userId = jwtUtil.getUserIDFromToken(token);
 
         try {
-            groupService.quitGroup(groupId,userId);
             // 该方法应负责处理用户退群：
             // 1. 校验用户是否是群成员。
             // 2. 如果是群主，需要先转让群主或解散群组（根据业务逻辑）。
@@ -322,6 +325,7 @@ public class GroupController {
              return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", e.getMessage()));
         }
         catch (Exception e) {
+            TypedExceptions.rethrowIfTyped(e);
             log.error("退出群组失败: group={}, user={}", groupId, userId, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ErrorCodeUtil.getErrorOutput("500", "服务器内部错误"));
         }
@@ -347,6 +351,7 @@ public class GroupController {
             return ResponseEntity.ok(response);
         }
         catch (Exception e) {
+            TypedExceptions.rethrowIfTyped(e);
             log.error("搜索群组失败: keyword={}", keyword, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ErrorCodeUtil.getErrorOutput("500", "服务器内部错误"));
         }
@@ -369,13 +374,13 @@ public class GroupController {
          }
 
         try {
-            groupService.getGroupJoinRequests(groupId,operatorId);
             // 该方法应负责查询指定群组的待处理加入请求列表，并返回 List<GroupJoinRequestResponse>。
             // operatorId 用于权限校验。
             List<GroupJoinRequestResponse> requests = groupService.getGroupJoinRequests(groupId, operatorId);
             return ResponseEntity.ok(requests);
         }
         catch (Exception e) {
+            TypedExceptions.rethrowIfTyped(e);
             log.error("获取群组加入请求失败: group={}", groupId, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ErrorCodeUtil.getErrorOutput("500", "服务器内部错误"));
         }
@@ -425,6 +430,7 @@ public class GroupController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", e.getMessage()));
         }
         catch (Exception e) {
+            TypedExceptions.rethrowIfTyped(e);
             log.error("处理群组加入请求失败: group={}, request={}, action={}", groupId, requestId, action, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ErrorCodeUtil.getErrorOutput("500", "服务器内部错误"));
         }

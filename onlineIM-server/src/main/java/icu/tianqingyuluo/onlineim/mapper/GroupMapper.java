@@ -79,7 +79,7 @@ public interface GroupMapper {
     /**
      * 判断是否有管理员权限
      */
-    @Select("SELECT IF( role!=0, true, false) FROM group_members WHERE group_id=#{groupId} AND user_id=#{userid}")
+    @Select("SELECT EXISTS(SELECT 1 FROM group_members WHERE group_id=#{groupId} AND user_id=#{userid} AND role != 0)")
     boolean isAdmin(@Param("groupId") String groupId,@Param("userid") String userid);
     /**
      * 更新群组基本信息

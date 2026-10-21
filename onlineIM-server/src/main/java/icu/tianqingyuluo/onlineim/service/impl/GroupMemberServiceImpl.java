@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.service.impl;
 
+import icu.tianqingyuluo.onlineim.exception.ForbiddenException;
 import icu.tianqingyuluo.onlineim.mapper.GroupMapper;
 import icu.tianqingyuluo.onlineim.mapper.GroupMemberMapper;
 import icu.tianqingyuluo.onlineim.mapper.GroupSettingMapper;
@@ -39,11 +40,10 @@ public class GroupMemberServiceImpl implements GroupMemberService {
 
     @Override
     public boolean removeMember(String groupId, String memberId, String operatorId) {
-        if(groupMapper.isAdmin(groupId,operatorId)){
-            return groupMemberMapper.delete(memberId, groupId)==1;
+        if(!groupMapper.isAdmin(groupId,operatorId)){
+            throw new ForbiddenException("无权限移除群成员");
         }
-        else
-            return false;
+        return groupMemberMapper.delete(memberId, groupId)==1;
     }
 
     @Override

@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.controller;
 
+import icu.tianqingyuluo.onlineim.exception.TypedExceptions;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.GroupSettingUpdateRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.GroupSettingResponse;
 import icu.tianqingyuluo.onlineim.service.GroupService;
@@ -55,6 +56,7 @@ public class GroupSettingController {
             }
             return ResponseEntity.ok(response);
         } catch (Exception e) {
+            TypedExceptions.rethrowIfTyped(e);
             log.error("获取群组设置失败: {}", groupId, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ErrorCodeUtil.getErrorOutput("500", "服务器内部错误"));
@@ -90,6 +92,7 @@ public class GroupSettingController {
             }
             return ResponseEntity.ok(response);
         } catch (Exception e) {
+            TypedExceptions.rethrowIfTyped(e);
             log.error("更新群组设置失败: {}", groupId, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ErrorCodeUtil.getErrorOutput("500", "服务器内部错误"));
@@ -123,6 +126,7 @@ public class GroupSettingController {
             }
             return ResponseEntity.ok(response);
         } catch (Exception e) {
+            TypedExceptions.rethrowIfTyped(e);
             log.error("启用全员禁言失败: {}", groupId, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ErrorCodeUtil.getErrorOutput("500", "服务器内部错误"));
@@ -156,6 +160,7 @@ public class GroupSettingController {
             }
             return ResponseEntity.ok(response);
         } catch (Exception e) {
+            TypedExceptions.rethrowIfTyped(e);
             log.error("取消全员禁言失败: {}", groupId, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ErrorCodeUtil.getErrorOutput("500", "服务器内部错误"));
