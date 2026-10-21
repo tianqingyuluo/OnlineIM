@@ -1,7 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Login from '@/views/Login.vue'
 import Register from '@/views/Register.vue'
-import Test from '@/components/independent/friends/SendFriendRequest.vue'
 import AppSidebarRightTalks from '@/components/AppSideBar/right/AppSidebarRightTalks.vue'
 import AppSidebarRightFriends from '@/components/AppSideBar/right/AppSidebarRightFriends.vue'
 import AppSidebarRightGroup from '@/components/AppSideBar/right/AppSidebarRightGroup.vue'
@@ -79,11 +78,6 @@ const router = createRouter({
       path: '/register',
       name: 'Register',
       component: Register
-    },
-    {
-      path:"/test",
-      name:'test',
-      component: Test
     }
   ]
 })
