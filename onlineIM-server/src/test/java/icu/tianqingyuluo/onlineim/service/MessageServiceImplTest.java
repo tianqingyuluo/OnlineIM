@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.service;
 
+import icu.tianqingyuluo.onlineim.service.ConversationRecordService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import icu.tianqingyuluo.onlineim.exception.ForbiddenException;
 import icu.tianqingyuluo.onlineim.exception.MessageContextUnavailableException;
@@ -41,6 +42,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class MessageServiceImplTest {
+    private ConversationRecordService conversationRecords;
 
     private PrivateMessageRepository privateMessageRepository;
     private GroupMessageRepository groupMessageRepository;
@@ -75,7 +77,8 @@ class MessageServiceImplTest {
                 conversationRepository,
                 redisStreamService,
                 new ObjectMapper(),
-                friendService);
+                friendService,
+                conversationRecords = mock(ConversationRecordService.class));
     }
 
     @Test
@@ -119,7 +122,7 @@ class MessageServiceImplTest {
                 .messageId("msg_target_2")
                 .state("active")
                 .build();
-        when(conversationRepository.findByIdAndUserIDOrTargetId("conv_1", "usr_me"))
+        when(conversationRepository.findByConversationIdAndUserId("conv_1", "usr_me"))
                 .thenReturn(Conversation.builder().id("conv_1").userId("usr_me").targetId("usr_peer").build());
         when(privateMessageRepository.findByConversationIdOrderByTimestampDesc(eq("conv_1"), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(first, second)));
@@ -139,7 +142,7 @@ class MessageServiceImplTest {
 
     @Test
     void historyRejectsUserWhoIsNotInTheConversation() {
-        when(conversationRepository.findByIdAndUserIDOrTargetId("conv_1", "usr_stranger")).thenReturn(null);
+        when(conversationRepository.findByConversationIdAndUserId("conv_1", "usr_stranger")).thenReturn(null);
 
         assertThrows(ForbiddenException.class,
                 () -> service.getPrivateHistory("conv_1", null, 20, "usr_stranger"));
@@ -161,7 +164,7 @@ class MessageServiceImplTest {
 
     @Test
     void returnsNumericOrderedContextWindowAndBoundsSizes() {
-        when(conversationRepository.findByIdAndUserIDOrTargetId("conv_1", "usr_me"))
+        when(conversationRepository.findByConversationIdAndUserId("conv_1", "usr_me"))
                 .thenReturn(Conversation.builder().id("conv_1").userId("usr_me").targetId("usr_peer").build());
         PrivateMessage target = privateMessage("msg_100", "100");
         when(privateMessageRepository.findByIdAndConversationId("msg_100", "conv_1")).thenReturn(target);
@@ -205,7 +208,7 @@ class MessageServiceImplTest {
                 .previewText("原消息")
                 .state("active")
                 .build();
-        when(conversationRepository.findByIdAndUserIDOrTargetId(conversationId, "usr_me"))
+        when(conversationRepository.findByConversationIdAndUserId(conversationId, "usr_me"))
                 .thenReturn(conversation);
         when(messageReplyService.createSnapshot(conversationId, "msg_target", "usr_me"))
                 .thenReturn(snapshot);
@@ -230,12 +233,13 @@ class MessageServiceImplTest {
         assertEquals(resolved, response.getReplyTo());
         verify(redisStreamService).publishPrivateMessage(
                 eq("PRIVATE_MESSAGE"), eq("usr_me"), any(String.class), eq("usr_peer"));
+        verify(conversationRecords).onPrivateMessage(saved);
     }
 
     @Test
     void httpPrivateDuplicateReturnsOriginalWithoutReplacingReplyOrPublishing() {
         String conversationId = "conv_usr_meusr_peer";
-        when(conversationRepository.findByIdAndUserIDOrTargetId(conversationId, "usr_me"))
+        when(conversationRepository.findByConversationIdAndUserId(conversationId, "usr_me"))
                 .thenReturn(Conversation.builder()
                         .id(conversationId)
                         .userId("usr_me")
@@ -267,7 +271,7 @@ class MessageServiceImplTest {
     @Test
     void httpPrivateSendRejectsConversationMismatchBeforePersistence() {
         String conversationId = "conv_usr_meusr_peer";
-        when(conversationRepository.findByIdAndUserIDOrTargetId(conversationId, "usr_me"))
+        when(conversationRepository.findByConversationIdAndUserId(conversationId, "usr_me"))
                 .thenReturn(Conversation.builder()
                         .id(conversationId)
                         .userId("usr_me")
@@ -299,14 +303,14 @@ class MessageServiceImplTest {
                 .build(), "usr_me"));
 
         verify(privateMessageRepository, never()).save(any());
-        verify(conversationRepository, never()).findByIdAndUserIDOrTargetId(any(), any());
+        verify(conversationRepository, never()).findByConversationIdAndUserId(any(), any());
         verifyNoInteractions(redisStreamService);
     }
 
     @Test
     void httpReplyRejectionDoesNotPersistOrPublish() {
         String conversationId = "conv_usr_meusr_peer";
-        when(conversationRepository.findByIdAndUserIDOrTargetId(conversationId, "usr_me"))
+        when(conversationRepository.findByConversationIdAndUserId(conversationId, "usr_me"))
                 .thenReturn(Conversation.builder()
                         .id(conversationId)
                         .userId("usr_me")

@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.service;
 
+import icu.tianqingyuluo.onlineim.service.ConversationRecordService;
 import icu.tianqingyuluo.onlineim.pojo.document.ConversationReadState;
 import icu.tianqingyuluo.onlineim.pojo.document.GroupMessage;
 import icu.tianqingyuluo.onlineim.pojo.document.PrivateMessage;
@@ -23,6 +24,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class ConversationReadStateServiceImplTest {
+    private ConversationRecordService conversationRecords;
 
     private ConversationReadStateRepository readStateRepository;
     private ConversationRepository conversationRepository;
@@ -40,13 +42,15 @@ class ConversationReadStateServiceImplTest {
         groupMessageRepository = mock(GroupMessageRepository.class);
         groupMemberService = mock(GroupMemberService.class);
         userService = mock(UserService.class);
+        conversationRecords = mock(ConversationRecordService.class);
         service = new ConversationReadStateServiceImpl(
                 readStateRepository,
                 conversationRepository,
                 privateMessageRepository,
                 groupMessageRepository,
                 groupMemberService,
-                userService
+                userService,
+                conversationRecords
         );
         when(readStateRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
@@ -64,6 +68,8 @@ class ConversationReadStateServiceImplTest {
         assertFalse(service.advanceRead("conv_1", "usr_1", "private", "19"));
         assertEquals("20", state.getReadSeq());
         assertEquals("20", state.getDeliveredSeq());
+        // 只有已读真正推进时才同步读者自己的未读缓存，且只同步一次
+        verify(conversationRecords, times(1)).syncUnread(eq("conv_1"), eq("usr_1"), anyLong());
     }
 
     @Test
@@ -71,7 +77,7 @@ class ConversationReadStateServiceImplTest {
         ConversationReadState state = state("conv_1", "usr_reader", "8", "8");
         when(readStateRepository.findByConversationIdAndUserId("conv_1", "usr_reader"))
                 .thenReturn(Optional.of(state));
-        when(conversationRepository.findByIdAndUserIDOrTargetId("conv_1", "usr_reader"))
+        when(conversationRepository.findByConversationIdAndUserId("conv_1", "usr_reader"))
                 .thenReturn(mock(icu.tianqingyuluo.onlineim.pojo.document.Conversation.class));
         when(privateMessageRepository.findTopByConversationIdOrderBySeqIdDesc("conv_1"))
                 .thenReturn(PrivateMessage.builder().seqId("12").build());

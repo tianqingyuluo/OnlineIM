@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.service.impl;
 
+import icu.tianqingyuluo.onlineim.service.ConversationRecordService;
 import icu.tianqingyuluo.onlineim.exception.ForbiddenException;
 import icu.tianqingyuluo.onlineim.mapper.GroupMapper;
 import icu.tianqingyuluo.onlineim.mapper.GroupMemberMapper;
@@ -19,6 +20,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class GroupMemberServiceImplTest {
+    private ConversationRecordService conversationRecords;
 
     private GroupMapper groupMapper;
     private GroupMemberMapper groupMemberMapper;
@@ -28,7 +30,19 @@ class GroupMemberServiceImplTest {
     void setUp() {
         groupMapper = mock(GroupMapper.class);
         groupMemberMapper = mock(GroupMemberMapper.class);
-        service = new GroupMemberServiceImpl(groupMapper, groupMemberMapper, null);
+        service = new GroupMemberServiceImpl(groupMapper, groupMemberMapper, null,
+                conversationRecords = mock(ConversationRecordService.class));
+    }
+
+    @Test
+    void removedMemberLosesOwnGroupConversationRecord() {
+        when(groupMapper.isAdmin("grp_1", "usr_owner")).thenReturn(true);
+        when(groupMemberMapper.getUserIdByMemberId("mem_b", "grp_1")).thenReturn("usr_b");
+        when(groupMemberMapper.delete("mem_b", "grp_1")).thenReturn(1);
+
+        assertTrue(service.removeMember("grp_1", "mem_b", "usr_owner"));
+
+        verify(conversationRecords).removeRecord("grp_1", "usr_b");
     }
 
     @Test

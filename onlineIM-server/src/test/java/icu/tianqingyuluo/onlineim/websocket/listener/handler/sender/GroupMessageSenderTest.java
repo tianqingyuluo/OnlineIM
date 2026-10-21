@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.websocket.listener.handler.sender;
 
+import icu.tianqingyuluo.onlineim.service.ConversationRecordService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import icu.tianqingyuluo.onlineim.exception.ReplyTargetUnavailableException;
 import icu.tianqingyuluo.onlineim.pojo.document.GroupMessage;
@@ -34,6 +35,7 @@ class GroupMessageSenderTest {
     private WebSocketFrameSender frameSender;
     private MessageReplyService messageReplyService;
     private GroupMessageSender sender;
+    private ConversationRecordService conversationRecords;
     private WebSocketSession session;
 
     @BeforeEach
@@ -44,7 +46,8 @@ class GroupMessageSenderTest {
         frameSender = mock(WebSocketFrameSender.class);
         messageReplyService = mock(MessageReplyService.class);
         sender = new GroupMessageSender(
-                new ObjectMapper(), messageRepository, redisStreamService, groupMemberService, frameSender, messageReplyService);
+                new ObjectMapper(), messageRepository, redisStreamService, groupMemberService, frameSender, messageReplyService,
+                conversationRecords = mock(ConversationRecordService.class));
 
         ServerWebSocket socket = mock(ServerWebSocket.class);
         when(socket.isClosed()).thenReturn(false);
@@ -71,6 +74,7 @@ class GroupMessageSenderTest {
                 "usr_sender".equals(message.getSenderId())
                         && "grp_1".equals(message.getGroupId())
                         && "client_1".equals(message.getClientMessageId())));
+        verify(conversationRecords).onGroupMessage(any(), any());
         verify(redisStreamService).publishGroupMessage(
                 eq("GROUP_MESSAGE"), eq("usr_sender"), any(String.class), any());
         verify(frameSender).send(eq(session), eq("MESSAGE_ACK"), any());

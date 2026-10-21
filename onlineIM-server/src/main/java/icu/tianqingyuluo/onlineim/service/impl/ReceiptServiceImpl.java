@@ -127,7 +127,7 @@ public class ReceiptServiceImpl implements ReceiptService {
                 if (!groupMemberService.isGroupMember(conversationId, readerId)) {
                     return false;
                 }
-            } else if (conversationRepository.findByIdAndUserIDOrTargetId(conversationId, readerId) == null) {
+            } else if (conversationRepository.findByConversationIdAndUserId(conversationId, readerId) == null) {
                 return false;
             }
             if (!isWithinLatestSeq(conversationId, readSeq)) {

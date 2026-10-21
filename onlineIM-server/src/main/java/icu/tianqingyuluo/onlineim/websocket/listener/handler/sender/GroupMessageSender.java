@@ -10,6 +10,7 @@ import icu.tianqingyuluo.onlineim.pojo.dto.response.GroupMemberResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageAckPayload;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
 import icu.tianqingyuluo.onlineim.repository.GroupMessageRepository;
+import icu.tianqingyuluo.onlineim.service.ConversationRecordService;
 import icu.tianqingyuluo.onlineim.service.GroupMemberService;
 import icu.tianqingyuluo.onlineim.service.MessageReplyService;
 import icu.tianqingyuluo.onlineim.service.RedisStreamService;
@@ -29,19 +30,22 @@ public class GroupMessageSender implements MessageSenderHandler {
     private final GroupMemberService groupMemberService;
     private final WebSocketFrameSender frameSender;
     private final MessageReplyService messageReplyService;
+    private final ConversationRecordService conversationRecords;
 
     public GroupMessageSender(ObjectMapper objectMapper,
                               GroupMessageRepository groupMessageRepository,
                               RedisStreamService redisStreamService,
                               GroupMemberService groupMemberService,
                               WebSocketFrameSender frameSender,
-                              MessageReplyService messageReplyService) {
+                              MessageReplyService messageReplyService,
+                              ConversationRecordService conversationRecords) {
         this.objectMapper = objectMapper;
         this.groupMessageRepository = groupMessageRepository;
         this.redisStreamService = redisStreamService;
         this.groupMemberService = groupMemberService;
         this.frameSender = frameSender;
         this.messageReplyService = messageReplyService;
+        this.conversationRecords = conversationRecords;
     }
 
     @Override
@@ -92,17 +96,19 @@ public class GroupMessageSender implements MessageSenderHandler {
             groupMessage.setUpdatedAt(new Date());
 
             groupMessageRepository.save(groupMessage);
+            java.util.List<String> memberIds = groupMemberService.getGroupMembers(groupMessage.getGroupId())
+                    .stream()
+                    .map(GroupMemberResponse::getUserInfo)
+                    .filter(java.util.Objects::nonNull)
+                    .map(UserBriefResponse::getUserId)
+                    .filter(java.util.Objects::nonNull)
+                    .toList();
+            conversationRecords.onGroupMessage(groupMessage, memberIds);
             redisStreamService.publishGroupMessage(
                     "GROUP_MESSAGE",
                     senderId,
                     objectMapper.writeValueAsString(groupMessage),
-                    groupMemberService.getGroupMembers(groupMessage.getGroupId())
-                            .stream()
-                            .map(GroupMemberResponse::getUserInfo)
-                            .filter(java.util.Objects::nonNull)
-                            .map(UserBriefResponse::getUserId)
-                            .filter(java.util.Objects::nonNull)
-                            .toList());
+                    memberIds);
 
             sendAck(session, groupMessage);
             return true;

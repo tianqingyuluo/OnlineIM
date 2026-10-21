@@ -5,7 +5,9 @@ import icu.tianqingyuluo.onlineim.mapper.GroupMapper;
 import icu.tianqingyuluo.onlineim.mapper.GroupMemberMapper;
 import icu.tianqingyuluo.onlineim.mapper.GroupSettingMapper;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.GroupMemberResponse;
+import icu.tianqingyuluo.onlineim.service.ConversationRecordService;
 import icu.tianqingyuluo.onlineim.service.GroupMemberService;
+import icu.tianqingyuluo.onlineim.util.AfterCommit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,11 +25,14 @@ public class GroupMemberServiceImpl implements GroupMemberService {
     private final GroupMapper groupMapper;
     private final GroupMemberMapper groupMemberMapper;
     private final GroupSettingMapper groupSettingMapper;
+    private final ConversationRecordService conversationRecords;
 
-    public GroupMemberServiceImpl(GroupMapper groupMapper, GroupMemberMapper groupMemberMapper, GroupSettingMapper groupSettingMapper) {
+    public GroupMemberServiceImpl(GroupMapper groupMapper, GroupMemberMapper groupMemberMapper,
+                                  GroupSettingMapper groupSettingMapper, ConversationRecordService conversationRecords) {
         this.groupMapper = groupMapper;
         this.groupMemberMapper = groupMemberMapper;
         this.groupSettingMapper = groupSettingMapper;
+        this.conversationRecords = conversationRecords;
     }
 
     @Override
@@ -49,7 +54,13 @@ public class GroupMemberServiceImpl implements GroupMemberService {
         if(!groupMapper.isAdmin(groupId,operatorId)){
             throw new ForbiddenException("无权限移除群成员");
         }
-        return groupMemberMapper.delete(memberId, groupId)==1;
+        String removedUserId = groupMemberMapper.getUserIdByMemberId(memberId, groupId);
+        boolean removed = groupMemberMapper.delete(memberId, groupId)==1;
+        if (removed && removedUserId != null && conversationRecords != null) {
+            // 被移出的成员不再拥有该群的会话记录
+            AfterCommit.run(() -> conversationRecords.removeRecord(groupId, removedUserId));
+        }
+        return removed;
     }
 
     @Override

@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.service.impl;
 
+import icu.tianqingyuluo.onlineim.service.ConversationRecordService;
 import icu.tianqingyuluo.onlineim.exception.ForbiddenException;
 import icu.tianqingyuluo.onlineim.mapper.GroupJoinRequestMapper;
 import icu.tianqingyuluo.onlineim.mapper.GroupMapper;
@@ -29,6 +30,7 @@ class GroupServiceImplTest {
     private UserMapper userMapper;
     private GroupJoinRequestMapper joinRequestMapper;
     private GroupServiceImpl groupService;
+    private ConversationRecordService conversationRecords;
 
     @BeforeEach
     void setUp() {
@@ -38,7 +40,7 @@ class GroupServiceImplTest {
         userMapper = mock(UserMapper.class);
         joinRequestMapper = mock(GroupJoinRequestMapper.class);
         groupService = new GroupServiceImpl(groupMapper, null, groupMemberMapper, groupSettingMapper,
-                userMapper, joinRequestMapper, null, null, null);
+                userMapper, joinRequestMapper, null, null, null, conversationRecords = mock(ConversationRecordService.class));
     }
 
     @Test
@@ -83,6 +85,30 @@ class GroupServiceImplTest {
         when(joinRequestMapper.getUseridById("jrq_1")).thenReturn("usr_c");
         assertTrue(groupService.handleJoinRequest("grp_1", "jrq_1", "accept", "usr_a"));
         verify(joinRequestMapper).updateStatus("jrq_1", 1);
+        // 审批通过后新成员获得自己的群会话记录
+        verify(conversationRecords).ensureGroupMembers("grp_1", java.util.List.of("usr_c"));
+    }
+
+    @Test
+    void createGroupGivesOwnerAndInitialMembersTheirOwnRecords() {
+        icu.tianqingyuluo.onlineim.pojo.dto.request.GroupCreateRequest request =
+                new icu.tianqingyuluo.onlineim.pojo.dto.request.GroupCreateRequest();
+        request.setName("g");
+        request.setMemberIDs(java.util.List.of("usr_b", "usr_c"));
+
+        String gid = groupService.createGroup(request, "usr_a");
+
+        verify(conversationRecords).ensureGroupMembers(gid, java.util.Set.of("usr_a", "usr_b", "usr_c"));
+    }
+
+    @Test
+    void disbandRemovesEveryMembersRecord() {
+        when(groupMapper.isGroupOwner("grp_1", "usr_a")).thenReturn(true);
+        assertTrue(groupService.disbandGroupByID("grp_1", "usr_a"));
+        verify(conversationRecords).removeConversation("grp_1");
+
+        assertFalse(groupService.disbandGroupByID("grp_1", "usr_b"));
+        verify(conversationRecords, org.mockito.Mockito.times(1)).removeConversation(anyString());
     }
 
     @Test
@@ -90,6 +116,7 @@ class GroupServiceImplTest {
         when(groupMapper.isUserMember("grp_1", "usr_b")).thenReturn(true);
         when(groupMemberMapper.deleteByGroupAndUser("grp_1", "usr_b")).thenReturn(1);
         assertTrue(groupService.quitGroup("grp_1", "usr_b"));
+        verify(conversationRecords).removeRecord("grp_1", "usr_b");
 
         when(groupMapper.isUserMember("grp_1", "usr_b")).thenReturn(false);
         assertThrows(IllegalArgumentException.class, () -> groupService.quitGroup("grp_1", "usr_b"));

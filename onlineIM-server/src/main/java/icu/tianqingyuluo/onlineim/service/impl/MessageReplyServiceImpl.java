@@ -206,7 +206,7 @@ public class MessageReplyServiceImpl implements MessageReplyService {
     private void assertConversationAccess(String conversationId, String userId) {
         boolean allowed = conversationId.startsWith("grp_")
                 ? groupMemberService.isGroupMember(conversationId, userId)
-                : conversationRepository.findByIdAndUserIDOrTargetId(conversationId, userId) != null;
+                : conversationRepository.findByConversationIdAndUserId(conversationId, userId) != null;
         if (!allowed) {
             throw new ReplyTargetUnavailableException();
         }

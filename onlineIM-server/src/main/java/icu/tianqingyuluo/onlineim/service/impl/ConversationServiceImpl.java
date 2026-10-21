@@ -10,10 +10,14 @@ import icu.tianqingyuluo.onlineim.service.ConversationService;
 import icu.tianqingyuluo.onlineim.service.FriendService;
 import icu.tianqingyuluo.onlineim.service.GroupService;
 import icu.tianqingyuluo.onlineim.service.ConversationReadStateService;
+import icu.tianqingyuluo.onlineim.service.ConversationRecordService;
+import icu.tianqingyuluo.onlineim.service.GroupMemberService;
 import icu.tianqingyuluo.onlineim.service.UserService;
 import icu.tianqingyuluo.onlineim.util.ConversationIdUtil;
 import org.springframework.beans.factory.annotation.Autowired;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 
 import java.text.SimpleDateFormat;
@@ -23,6 +27,7 @@ import java.util.stream.Collectors;
 /**
  * 会话服务实现类
  */
+@Slf4j
 @Service
 public class ConversationServiceImpl implements ConversationService {
 
@@ -33,6 +38,8 @@ public class ConversationServiceImpl implements ConversationService {
     private final FriendService friendService;
     private final UserFriendMapper userFriendMapper;
     private final ConversationReadStateService readStateService;
+    private final GroupMemberService groupMemberService;
+    private final ConversationRecordService conversationRecords;
 
     @Autowired
     public ConversationServiceImpl(ConversationRepository conversationRepository,
@@ -40,168 +47,141 @@ public class ConversationServiceImpl implements ConversationService {
                                    UserService userService,
                                    FriendService friendService,
                                    UserFriendMapper userFriendMapper,
-                                   ConversationReadStateService readStateService) {
+                                   ConversationReadStateService readStateService,
+                                   GroupMemberService groupMemberService,
+                                   ConversationRecordService conversationRecords) {
         this.conversationRepository = conversationRepository;
         this.groupService = groupService;
         this.userService = userService;
         this.friendService = friendService;
         this.userFriendMapper = userFriendMapper;
         this.readStateService = readStateService;
+        this.groupMemberService = groupMemberService;
+        this.conversationRecords = conversationRecords;
     }
 
     @Override
     public List<ConversationResponse> getUserConversations(String userId) {
-        // 按更新时间降序排序，置顶的会话排在前面
+        // 只取当前用户自己的记录：置顶在前，再按最近活跃时间倒序
         Sort sort = Sort.by(Sort.Direction.DESC, "top", "updatedAt");
-        List<Conversation> conversations = conversationRepository.findUserConversations(userId, sort);
+        List<Conversation> conversations = conversationRepository.findByUserIdAndStatus(userId, 1, sort);
         List<ConversationResponse> conversationResponses = new ArrayList<>();
         for (Conversation conversation : conversations) {
-            if (userId.equals(conversation.getUserId())) {
+            try {
                 conversationResponses.add(convertToConversationResponse(conversation, userId));
+            } catch (RuntimeException ex) {
+                // 群已解散等导致目标信息缺失的记录不影响整个列表
+                log.warn("跳过无法展示的会话记录: id={}, error={}", conversation.getId(), ex.getMessage());
             }
-            else {
-                conversationResponses.add(convertToConversationResponse(conversation, userId));
-            }
-
         }
-        
-//        return conversations.stream()
-//                .map(this::convertToConversationResponse)
-//                .collect(Collectors.toList());
         return conversationResponses;
     }
 
     @Override
     public ConversationResponse getConversation(String conversationId, String userId) {
-        Conversation conversation = conversationRepository.findByIdAndUserIDOrTargetId(conversationId, userId);
+        Conversation conversation = ownRecord(conversationId, userId);
         if (conversation == null) {
             return null;
         }
-        
         return convertToConversationResponse(conversation, userId);
     }
 
     @Override
-    public boolean deleteConversation(String conversationId, String userId) {
-        Conversation conversation = conversationRepository.findByIdAndUserId(conversationId, userId);
-        if (conversation == null) {
-            return false;
+    public ConversationResponse openConversation(String conversationId, String conversationType,
+                                                 String userId, String targetId) {
+        Conversation own = conversationRecords.ensureRecord(conversationId, conversationType, userId, targetId, true);
+        if (ConversationRecordService.TYPE_PRIVATE.equals(conversationType)) {
+            // 对方也要有自己的记录（会话成员关系依据），但只在缺失时以隐藏状态创建，不改动对方已有状态
+            conversationRecords.ensureRecord(conversationId, conversationType, targetId, userId, false);
         }
-        
-        // 逻辑删除，将状态设置为0
-        conversation.setStatus(0);
-        conversationRepository.save(conversation);
-        
-        return true;
+        return convertToConversationResponse(own, userId);
+    }
+
+    @Override
+    public boolean deleteConversation(String conversationId, String userId) {
+        // 逻辑删除，只隐藏自己的记录；对方/其他群成员不受影响
+        return ownRecord(conversationId, userId) != null
+                && conversationRecords.updateOwn(conversationId, userId, new Update().set("status", 0));
     }
 
     @Override
     public void hidePrivateConversation(String userId, String friendUserId) {
-        String conversationId = ConversationIdUtil.privateConversationId(userId, friendUserId);
-        conversationRepository.findById(conversationId).ifPresent(conversation -> {
-            conversation.setStatus(0);
-            conversation.setUpdatedAt(new Date());
-            conversationRepository.save(conversation);
-        });
+        conversationRecords.hideForAll(ConversationIdUtil.privateConversationId(userId, friendUserId));
     }
 
     @Override
     public boolean topConversation(String conversationId, String userId) {
-        Conversation conversation = conversationRepository.findByIdAndUserId(conversationId, userId);
-        if (conversation == null) {
-            return false;
-        }
-        
-        conversation.setTop(true);
-        conversation.setUpdatedAt(new Date());
-        conversationRepository.save(conversation);
-        
-        return true;
+        return updateOwnField(conversationId, userId, "top", true);
     }
 
     @Override
     public boolean untopConversation(String conversationId, String userId) {
-        Conversation conversation = conversationRepository.findByIdAndUserId(conversationId, userId);
-        if (conversation == null) {
-            return false;
-        }
-        
-        conversation.setTop(false);
-        conversation.setUpdatedAt(new Date());
-        conversationRepository.save(conversation);
-        
-        return true;
+        return updateOwnField(conversationId, userId, "top", false);
     }
 
     @Override
     public boolean muteConversation(String conversationId, String userId) {
-        Conversation conversation = conversationRepository.findByIdAndUserId(conversationId, userId);
-        if (conversation == null) {
-            return false;
-        }
-        
-        conversation.setMute(true);
-        conversation.setUpdatedAt(new Date());
-        conversationRepository.save(conversation);
-        
-        return true;
+        return updateOwnField(conversationId, userId, "mute", true);
     }
 
     @Override
     public boolean unmuteConversation(String conversationId, String userId) {
-        Conversation conversation = conversationRepository.findByIdAndUserId(conversationId, userId);
-        if (conversation == null) {
-            return false;
-        }
-        
-        conversation.setMute(false);
-        conversation.setUpdatedAt(new Date());
-        conversationRepository.save(conversation);
-        
-        return true;
+        return updateOwnField(conversationId, userId, "mute", false);
     }
 
     @Override
     public boolean clearMessages(String conversationId, String userId) {
-        Conversation conversation = conversationRepository.findByIdAndUserId(conversationId, userId);
-        if (conversation == null) {
-            return false;
-        }
-        
-        // 注意：这里只是清空未读计数，实际消息记录依然保留在数据库中
-        // 如果需要真正删除消息，需要在消息表中添加对应的删除标记
-        conversation.setUnreadCount(0);
-        conversation.setUpdatedAt(new Date());
-        conversationRepository.save(conversation);
-        
-        return true;
+        // 注意：这里只是清空自己的未读缓存，实际消息记录依然保留在数据库中
+        return updateOwnField(conversationId, userId, "unreadCount", 0);
     }
 
     @Override
     public Map<String, Object> getUnreadCount(String userId) {
-        // 使用聚合查询优化，直接从数据库获取总未读数
-        int totalUnread = conversationRepository.findTotalUnreadCount(userId);
-        
-        // 获取每个会话的未读数
+        Integer total = conversationRepository.findTotalUnreadCount(userId);
+
         Map<String, Integer> conversationUnread = new HashMap<>();
-        List<Conversation> conversations = conversationRepository.findAllUnreadCounts(userId);
-        
-        for (Conversation conversation : conversations) {
+        for (Conversation conversation : conversationRepository.findAllUnreadCounts(userId)) {
             int unreadCount = conversation.getUnreadCount() != null ? conversation.getUnreadCount() : 0;
-            conversationUnread.put(conversation.getId(), unreadCount);
+            conversationUnread.put(conversation.getConversationId(), unreadCount);
         }
-        
+
         Map<String, Object> result = new HashMap<>();
-        result.put("total_unread", totalUnread);
+        result.put("total_unread", total == null ? 0 : total);
         result.put("conversation_unread", conversationUnread);
-        
         return result;
+    }
+
+    private boolean updateOwnField(String conversationId, String userId, String field, Object value) {
+        return ownRecord(conversationId, userId) != null
+                && conversationRecords.updateOwn(conversationId, userId, new Update().set(field, value));
+    }
+
+    /**
+     * 当前用户自己的会话记录。群会话以群成员关系为准：已不是成员返回 null；
+     * 是成员但缺记录（例如历史数据）时补建。
+     */
+    private Conversation ownRecord(String conversationId, String userId) {
+        if (conversationId == null || userId == null) {
+            return null;
+        }
+        Conversation conversation = conversationRepository.findByConversationIdAndUserId(conversationId, userId);
+        if (conversationId.startsWith("grp_")) {
+            if (!groupMemberService.isGroupMember(conversationId, userId)) {
+                return null;
+            }
+            if (conversation == null) {
+                conversation = conversationRecords.ensureRecord(conversationId,
+                        ConversationRecordService.TYPE_GROUP, userId, conversationId, true);
+            }
+        }
+        return conversation;
     }
 
     @Override
     public ConversationResponse convertToConversationResponse(Conversation conversation, String userId) {
 
-        String id = conversation.getId();
+        String conversationId = conversation.getConversationId();
+        String id = conversationId;
         String name;
         // 没有头像时返回空串，由前端按会话类型显示默认头像
         String avatarUrl = "";
@@ -260,7 +240,7 @@ public class ConversationServiceImpl implements ConversationService {
         String latestSeq = "0";
         Integer unreadCount = conversation.getUnreadCount();
         try {
-            var readState = readStateService.getReadState(conversation.getId(), userId, null);
+            var readState = readStateService.getReadState(conversationId, userId, null);
             deliveredSeq = readState.getDeliveredSeq();
             readSeq = readState.getReadSeq();
             latestSeq = readState.getLatestSeq();
@@ -270,7 +250,7 @@ public class ConversationServiceImpl implements ConversationService {
         }
 
         return ConversationResponse.builder()
-                .conversationID(conversation.getId())
+                .conversationID(conversationId)
                 .type(conversation.getConversationType())
                 .targetInfo(targetInfo)
                 .lastMessage(lastMessage)
@@ -278,9 +258,9 @@ public class ConversationServiceImpl implements ConversationService {
                 .deliveredSeq(deliveredSeq)
                 .readSeq(readSeq)
                 .latestSeq(latestSeq)
-                .isMuted(conversation.getMute())
-                .isPinned(conversation.getTop())
-                .lastActivityTime(dateFormat.format(conversation.getUpdatedAt()))
+                .isMuted(Boolean.TRUE.equals(conversation.getMute()))
+                .isPinned(Boolean.TRUE.equals(conversation.getTop()))
+                .lastActivityTime(conversation.getUpdatedAt() == null ? null : dateFormat.format(conversation.getUpdatedAt()))
                 .build();
     }
 }

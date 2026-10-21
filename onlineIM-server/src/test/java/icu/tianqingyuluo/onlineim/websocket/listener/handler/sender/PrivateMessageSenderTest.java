@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.websocket.listener.handler.sender;
 
+import icu.tianqingyuluo.onlineim.service.ConversationRecordService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import icu.tianqingyuluo.onlineim.pojo.document.Conversation;
 import icu.tianqingyuluo.onlineim.exception.ForbiddenException;
@@ -26,6 +27,8 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class PrivateMessageSenderTest {
+    private static final String CONV = "conv_usr_receiverusr_sender";
+    private ConversationRecordService conversationRecords;
 
     private PrivateMessageRepository messageRepository;
     private ConversationRepository conversationRepository;
@@ -44,10 +47,11 @@ class PrivateMessageSenderTest {
         frameSender = mock(WebSocketFrameSender.class);
         messageReplyService = mock(MessageReplyService.class);
         friendService = mock(FriendService.class);
+        conversationRecords = mock(ConversationRecordService.class);
         when(friendService.areFriends(any(), any())).thenReturn(true);
         sender = new PrivateMessageSender(
                 new ObjectMapper(), messageRepository, conversationRepository, redisStreamService,
-                frameSender, messageReplyService, friendService);
+                frameSender, messageReplyService, friendService, conversationRecords);
 
         ServerWebSocket socket = mock(ServerWebSocket.class);
         when(socket.isClosed()).thenReturn(false);
@@ -56,9 +60,9 @@ class PrivateMessageSenderTest {
                 .userId("usr_sender")
                 .socket(socket)
                 .build();
-        when(conversationRepository.findByIdAndUserIDOrTargetId("conv_1", "usr_sender"))
+        when(conversationRepository.findByConversationIdAndUserId(CONV, "usr_sender"))
                 .thenReturn(Conversation.builder()
-                        .id("conv_1")
+                        .id(CONV)
                         .userId("usr_sender")
                         .targetId("usr_receiver")
                         .conversationType("private")
@@ -68,12 +72,13 @@ class PrivateMessageSenderTest {
     @Test
     void usesSessionIdentityAndReturnsAckAfterPersistence() {
         String payload = """
-                {"conversation_id":"conv_1","sender_id":"usr_attacker","receiver_id":"usr_receiver",
+                {"conversation_id":"conv_usr_receiverusr_sender","sender_id":"usr_attacker","receiver_id":"usr_receiver",
                  "message_type":"text","content":"hello","client_message_id":"client_1"}
                 """;
 
         assertTrue(sender.publishMessage(session, payload));
 
+        verify(conversationRecords).onPrivateMessage(argThat(message -> "usr_receiver".equals(message.getReceiverId())));
         verify(messageRepository).save(argThat(message ->
                 "usr_sender".equals(message.getSenderId())
                         && "usr_receiver".equals(message.getReceiverId())
@@ -95,11 +100,11 @@ class PrivateMessageSenderTest {
                 .contentRevision(1)
                 .state("active")
                 .build();
-        when(messageReplyService.createSnapshot("conv_1", "msg_target", "usr_sender"))
+        when(messageReplyService.createSnapshot(CONV, "msg_target", "usr_sender"))
                 .thenReturn(snapshot);
 
         assertTrue(sender.publishMessage(session,
-                "{\"conversation_id\":\"conv_1\",\"receiver_id\":\"usr_receiver\","
+                "{\"conversation_id\":\"conv_usr_receiverusr_sender\",\"receiver_id\":\"usr_receiver\","
                         + "\"message_type\":\"text\",\"content\":\"reply\","
                         + "\"client_message_id\":\"client_reply\",\"reply_to_message_id\":\"msg_target\"}"));
 
@@ -112,11 +117,11 @@ class PrivateMessageSenderTest {
 
     @Test
     void unavailableReplyTargetDoesNotPersistPublishOrAck() {
-        when(messageReplyService.createSnapshot("conv_1", "msg_target", "usr_sender"))
+        when(messageReplyService.createSnapshot(CONV, "msg_target", "usr_sender"))
                 .thenThrow(new ReplyTargetUnavailableException());
 
         assertThrows(ReplyTargetUnavailableException.class, () -> sender.publishMessage(session,
-                "{\"conversation_id\":\"conv_1\",\"receiver_id\":\"usr_receiver\","
+                "{\"conversation_id\":\"conv_usr_receiverusr_sender\",\"receiver_id\":\"usr_receiver\","
                         + "\"message_type\":\"text\",\"content\":\"reply\","
                         + "\"client_message_id\":\"client_reply\",\"reply_to_message_id\":\"msg_target\"}"));
 
@@ -128,7 +133,7 @@ class PrivateMessageSenderTest {
     void duplicateClientIdDoesNotPersistOrPublishAgain() {
         PrivateMessage existing = PrivateMessage.builder()
                 .id("msg_existing")
-                .conversationId("conv_1")
+                .conversationId(CONV)
                 .senderId("usr_sender")
                 .receiverId("usr_receiver")
                 .messageType("text")
@@ -140,7 +145,7 @@ class PrivateMessageSenderTest {
                 .thenReturn(existing);
 
         assertTrue(sender.publishMessage(session,
-                "{\"conversation_id\":\"conv_1\",\"receiver_id\":\"usr_receiver\","
+                "{\"conversation_id\":\"conv_usr_receiverusr_sender\",\"receiver_id\":\"usr_receiver\","
                         + "\"message_type\":\"text\",\"content\":\"hello\",\"client_message_id\":\"client_1\"}"));
 
         verify(messageRepository, never()).save(any());
@@ -154,7 +159,7 @@ class PrivateMessageSenderTest {
     @Test
     void rejectsConversationTargetMismatch() {
         assertFalse(sender.publishMessage(session,
-                "{\"conversation_id\":\"conv_1\",\"receiver_id\":\"usr_other\","
+                "{\"conversation_id\":\"conv_usr_receiverusr_sender\",\"receiver_id\":\"usr_other\","
                         + "\"message_type\":\"text\",\"content\":\"hello\",\"client_message_id\":\"client_1\"}"));
 
         verifyNoInteractions(messageRepository, redisStreamService, frameSender);
@@ -165,7 +170,7 @@ class PrivateMessageSenderTest {
         when(friendService.areFriends("usr_sender", "usr_receiver")).thenReturn(false);
 
         assertThrows(ForbiddenException.class, () -> sender.publishMessage(session,
-                "{\"conversation_id\":\"conv_1\",\"receiver_id\":\"usr_receiver\","
+                "{\"conversation_id\":\"conv_usr_receiverusr_sender\",\"receiver_id\":\"usr_receiver\","
                         + "\"message_type\":\"text\",\"content\":\"hello\",\"client_message_id\":\"client_1\"}"));
 
         verify(messageRepository, never()).save(any());
@@ -175,15 +180,29 @@ class PrivateMessageSenderTest {
     @Test
     void rejectsNonFriendWhenConversationDoesNotExist() {
         when(friendService.areFriends("usr_sender", "usr_stranger")).thenReturn(false);
-        when(conversationRepository.findByIdAndUserIDOrTargetId("conv_missing", "usr_sender"))
+        when(conversationRepository.findByConversationIdAndUserId("conv_missing", "usr_sender"))
                 .thenReturn(null);
 
         assertThrows(ForbiddenException.class, () -> sender.publishMessage(session,
                 "{\"conversation_id\":\"conv_missing\",\"receiver_id\":\"usr_stranger\","
                         + "\"message_type\":\"text\",\"content\":\"hello\",\"client_message_id\":\"client_1\"}"));
 
-        verify(conversationRepository, never()).findByIdAndUserIDOrTargetId(any(), any());
+        verify(conversationRepository, never()).findByConversationIdAndUserId(any(), any());
         verify(messageRepository, never()).save(any());
         verifyNoInteractions(redisStreamService, frameSender);
+    }
+
+    @Test
+    void rejectsConversationIdThatDoesNotBelongToSenderAndReceiver() {
+        when(conversationRepository.findByConversationIdAndUserId("conv_usr_otherusr_sender", "usr_sender"))
+                .thenReturn(Conversation.builder().conversationId("conv_usr_otherusr_sender")
+                        .userId("usr_sender").targetId("usr_other").conversationType("private").build());
+
+        assertFalse(sender.publishMessage(session,
+                "{\"conversation_id\":\"conv_usr_otherusr_sender\",\"receiver_id\":\"usr_receiver\","
+                        + "\"message_type\":\"text\",\"content\":\"hello\",\"client_message_id\":\"client_x\"}"));
+
+        verify(messageRepository, never()).save(any());
+        verifyNoInteractions(conversationRecords);
     }
 }

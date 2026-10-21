@@ -77,7 +77,7 @@ class ReceiptServiceImplTest {
 
     @Test
     void duplicateReadCursorDoesNotPublishAnotherEvent() {
-        when(conversationRepository.findByIdAndUserIDOrTargetId("conv_1", "usr_reader"))
+        when(conversationRepository.findByConversationIdAndUserId("conv_1", "usr_reader"))
                 .thenReturn(mock(icu.tianqingyuluo.onlineim.pojo.document.Conversation.class));
         when(privateMessageRepository.findTopByConversationIdOrderBySeqIdDesc("conv_1"))
                 .thenReturn(PrivateMessage.builder()

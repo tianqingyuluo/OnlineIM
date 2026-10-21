@@ -11,9 +11,11 @@ import icu.tianqingyuluo.onlineim.pojo.dto.request.websocket.PrivateMessageReque
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageAckPayload;
 import icu.tianqingyuluo.onlineim.repository.ConversationRepository;
 import icu.tianqingyuluo.onlineim.repository.PrivateMessageRepository;
+import icu.tianqingyuluo.onlineim.service.ConversationRecordService;
 import icu.tianqingyuluo.onlineim.service.FriendService;
 import icu.tianqingyuluo.onlineim.service.MessageReplyService;
 import icu.tianqingyuluo.onlineim.service.RedisStreamService;
+import icu.tianqingyuluo.onlineim.util.ConversationIdUtil;
 import icu.tianqingyuluo.onlineim.websocket.handler.WebSocketFrameSender;
 import icu.tianqingyuluo.onlineim.websocket.session.WebSocketSession;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +33,7 @@ public class PrivateMessageSender implements MessageSenderHandler {
     private final WebSocketFrameSender frameSender;
     private final MessageReplyService messageReplyService;
     private final FriendService friendService;
+    private final ConversationRecordService conversationRecords;
 
     public PrivateMessageSender(ObjectMapper objectMapper,
                                 PrivateMessageRepository privateMessageRepository,
@@ -38,7 +41,8 @@ public class PrivateMessageSender implements MessageSenderHandler {
                                 RedisStreamService redisStreamService,
                                 WebSocketFrameSender frameSender,
                                 MessageReplyService messageReplyService,
-                                FriendService friendService) {
+                                FriendService friendService,
+                                ConversationRecordService conversationRecords) {
         this.objectMapper = objectMapper;
         this.privateMessageRepository = privateMessageRepository;
         this.conversationRepository = conversationRepository;
@@ -46,6 +50,7 @@ public class PrivateMessageSender implements MessageSenderHandler {
         this.frameSender = frameSender;
         this.messageReplyService = messageReplyService;
         this.friendService = friendService;
+        this.conversationRecords = conversationRecords;
     }
 
     @Override
@@ -102,6 +107,7 @@ public class PrivateMessageSender implements MessageSenderHandler {
             privateMessage.setUpdatedAt(new Date());
 
             privateMessageRepository.save(privateMessage);
+            conversationRecords.onPrivateMessage(privateMessage);
             redisStreamService.publishPrivateMessage(
                     "PRIVATE_MESSAGE",
                     senderId,
@@ -131,12 +137,14 @@ public class PrivateMessageSender implements MessageSenderHandler {
 
 
     private boolean isConversationParticipant(String conversationId, String senderId, String receiverId) {
-        Conversation conversation = conversationRepository.findByIdAndUserIDOrTargetId(conversationId, senderId);
-        if (conversation == null || !"private".equals(conversation.getConversationType())) {
+        // 发送者自己的会话记录必须指向接收方，且会话 ID 与双方一致
+        if (!conversationId.equals(ConversationIdUtil.privateConversationId(senderId, receiverId))) {
             return false;
         }
-        return (senderId.equals(conversation.getUserId()) && receiverId.equals(conversation.getTargetId()))
-                || (senderId.equals(conversation.getTargetId()) && receiverId.equals(conversation.getUserId()));
+        Conversation conversation = conversationRepository.findByConversationIdAndUserId(conversationId, senderId);
+        return conversation != null
+                && "private".equals(conversation.getConversationType())
+                && receiverId.equals(conversation.getTargetId());
     }
 
     private boolean isBlank(String value) {

@@ -1,5 +1,7 @@
 package icu.tianqingyuluo.onlineim.service.impl;
 
+import icu.tianqingyuluo.onlineim.service.ConversationRecordService;
+import icu.tianqingyuluo.onlineim.util.AfterCommit;
 import cn.hutool.core.util.IdUtil;
 import icu.tianqingyuluo.onlineim.exception.ForbiddenException;
 import icu.tianqingyuluo.onlineim.mapper.*;
@@ -31,8 +33,9 @@ public class GroupServiceImpl implements GroupService {
     private final GroupBriefResponseMapper groupBriefResponseMapper;
     private final GroupJoinRequestResponseMapper groupJoinRequestResponseMapper;
     private final FileStorageService fileStorageService;
+    private final ConversationRecordService conversationRecords;
 
-    public GroupServiceImpl(GroupMapper groupMapper, GroupResponseMapper groupResponseMapper, GroupMemberMapper groupMemberMapper, GroupSettingMapper groupSettingMapper, UserMapper userMapper, GroupJoinRequestMapper groupJoinRequestMapper, GroupBriefResponseMapper groupBriefResponseMapper, GroupJoinRequestResponseMapper groupJoinRequestResponseMapper, FileStorageService fileStorageService) {
+    public GroupServiceImpl(GroupMapper groupMapper, GroupResponseMapper groupResponseMapper, GroupMemberMapper groupMemberMapper, GroupSettingMapper groupSettingMapper, UserMapper userMapper, GroupJoinRequestMapper groupJoinRequestMapper, GroupBriefResponseMapper groupBriefResponseMapper, GroupJoinRequestResponseMapper groupJoinRequestResponseMapper, FileStorageService fileStorageService, ConversationRecordService conversationRecords) {
         this.groupMapper = groupMapper;
         this.groupResponseMapper = groupResponseMapper;
         this.groupMemberMapper = groupMemberMapper;
@@ -42,6 +45,7 @@ public class GroupServiceImpl implements GroupService {
         this.groupBriefResponseMapper = groupBriefResponseMapper;
         this.groupJoinRequestResponseMapper = groupJoinRequestResponseMapper;
         this.fileStorageService = fileStorageService;
+        this.conversationRecords = conversationRecords;
     }
 
     @Override
@@ -54,6 +58,13 @@ public class GroupServiceImpl implements GroupService {
         groupMapper.insertGroupMember(gid,request.getMemberIDs());
         groupMemberMapper.initGroupOwner(gid, userID);
         groupSettingMapper.initSettings(sid,gid);
+        // 每个初始成员（含群主）都有自己的群会话记录
+        java.util.Set<String> memberIds = new java.util.LinkedHashSet<>();
+        memberIds.add(userID);
+        if (request.getMemberIDs() != null) {
+            memberIds.addAll(request.getMemberIDs());
+        }
+        AfterCommit.run(() -> conversationRecords.ensureGroupMembers(gid, memberIds));
         return gid;
     }
 
@@ -81,6 +92,7 @@ public class GroupServiceImpl implements GroupService {
             groupMapper.deleteGroup(groupId);
             groupMapper.deleteMembers(groupId);
             groupMapper.deleteAnnouncements(groupId);
+            AfterCommit.run(() -> conversationRecords.removeConversation(groupId));
             return true;
         }
         return false;
@@ -136,6 +148,7 @@ public class GroupServiceImpl implements GroupService {
                         .build();
                 groupMemberMapper.insertById(mid,groupId,userIdsToInvite);
                 groupMapper.updateMemberCount(groupId,1);
+                AfterCommit.run(() -> conversationRecords.ensureGroupMembers(groupId, java.util.List.of(userIdsToInvite)));
                 groupJoinRequestMapper.insert(groupJoinRequest);
             }
             else{
@@ -196,6 +209,7 @@ public class GroupServiceImpl implements GroupService {
                         .build();
                 groupMemberMapper.insertById(mid,groupId,applicantId);
                 groupMapper.updateMemberCount(groupId,1);
+                AfterCommit.run(() -> conversationRecords.ensureGroupMembers(groupId, java.util.List.of(applicantId)));
                 groupJoinRequestMapper.insert(groupJoinRequest);
                 return "申请已通过";
             }
@@ -239,6 +253,7 @@ public class GroupServiceImpl implements GroupService {
             if (affectedRows == 0) {
                 throw new RuntimeException("退出群组失败，可能数据已变更");
             }
+            AfterCommit.run(() -> conversationRecords.removeRecord(groupId, userId));
             return true;
         } catch (DataAccessException e) {
             throw new RuntimeException("数据库操作失败", e);
@@ -280,6 +295,7 @@ public class GroupServiceImpl implements GroupService {
                 String userid=groupJoinRequestMapper.getUseridById(requestId);
                 groupMemberMapper.insertById(mid,groupId,userid);
                 groupMapper.updateMemberCount(groupId,1);
+                AfterCommit.run(() -> conversationRecords.ensureGroupMembers(groupId, java.util.List.of(userid)));
                 groupJoinRequestMapper.updateStatus(requestId,1);
                 return true;
             }

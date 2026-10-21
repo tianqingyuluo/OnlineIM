@@ -27,6 +27,13 @@ public interface ConversationService {
     ConversationResponse getConversation(String conversationId, String userId);
 
     /**
+     * 打开（创建）会话：确保当前用户有自己的记录并恢复显示，已有的置顶/免打扰/未读保持不变；
+     * 私聊时对方缺记录则以隐藏状态补建。调用方负责好友/群成员校验。
+     */
+    ConversationResponse openConversation(String conversationId, String conversationType,
+                                          String userId, String targetId);
+
+    /**
      * 删除会话
      * @param conversationId 会话ID
      * @param userId 用户ID
@@ -35,7 +42,7 @@ public interface ConversationService {
     boolean deleteConversation(String conversationId, String userId);
 
     /**
-     * 删除好友后隐藏两人的私聊会话（逻辑删除，消息历史保留；重新加好友并创建会话后恢复）
+     * 删除好友后隐藏双方各自的私聊会话记录（逻辑删除，消息历史和置顶/免打扰保留；重新打开会话或收到新消息后恢复）
      */
     void hidePrivateConversation(String userId, String friendUserId);
 

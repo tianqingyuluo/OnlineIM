@@ -12,6 +12,7 @@ import icu.tianqingyuluo.onlineim.repository.ConversationRepository;
 import icu.tianqingyuluo.onlineim.repository.GroupMessageRepository;
 import icu.tianqingyuluo.onlineim.repository.PrivateMessageRepository;
 import icu.tianqingyuluo.onlineim.service.ConversationReadStateService;
+import icu.tianqingyuluo.onlineim.service.ConversationRecordService;
 import icu.tianqingyuluo.onlineim.service.GroupMemberService;
 import icu.tianqingyuluo.onlineim.service.UserService;
 import icu.tianqingyuluo.onlineim.util.SeqIdComparator;
@@ -34,19 +35,22 @@ public class ConversationReadStateServiceImpl implements ConversationReadStateSe
     private final GroupMessageRepository groupMessageRepository;
     private final GroupMemberService groupMemberService;
     private final UserService userService;
+    private final ConversationRecordService conversationRecords;
 
     public ConversationReadStateServiceImpl(ConversationReadStateRepository readStateRepository,
                                             ConversationRepository conversationRepository,
                                             PrivateMessageRepository privateMessageRepository,
                                             GroupMessageRepository groupMessageRepository,
                                             GroupMemberService groupMemberService,
-                                            UserService userService) {
+                                            UserService userService,
+                                            ConversationRecordService conversationRecords) {
         this.readStateRepository = readStateRepository;
         this.conversationRepository = conversationRepository;
         this.privateMessageRepository = privateMessageRepository;
         this.groupMessageRepository = groupMessageRepository;
         this.groupMemberService = groupMemberService;
         this.userService = userService;
+        this.conversationRecords = conversationRecords;
     }
 
     @Override
@@ -82,12 +86,19 @@ public class ConversationReadStateServiceImpl implements ConversationReadStateSe
     @Override
     public boolean advanceRead(String conversationId, String userId, String conversationType, String readSeq) {
         String normalized = SeqIdComparator.requireValid(readSeq);
-        return updateState(conversationId, userId, conversationType, state -> {
+        String[] readAfter = new String[1];
+        boolean changed = updateState(conversationId, userId, conversationType, state -> {
             String nextRead = SeqIdComparator.max(state.getReadSeq(), normalized);
             state.setReadSeq(nextRead);
             // 已读代表客户端已经拿到并处理了该消息；允许同一请求补齐 deliveredSeq。
             state.setDeliveredSeq(SeqIdComparator.max(state.getDeliveredSeq(), nextRead));
+            readAfter[0] = nextRead;
         });
+        if (changed && readAfter[0] != null) {
+            // 只同步读者自己会话记录上的未读缓存，其他参与者不受影响
+            conversationRecords.syncUnread(conversationId, userId, unreadCount(conversationId, readAfter[0], userId));
+        }
+        return changed;
     }
 
     @Override
@@ -207,7 +218,7 @@ public class ConversationReadStateServiceImpl implements ConversationReadStateSe
             }
             return;
         }
-        if (conversationRepository.findByIdAndUserIDOrTargetId(conversationId, userId) == null) {
+        if (conversationRepository.findByConversationIdAndUserId(conversationId, userId) == null) {
             throw new IllegalArgumentException("用户无权访问该会话");
         }
     }

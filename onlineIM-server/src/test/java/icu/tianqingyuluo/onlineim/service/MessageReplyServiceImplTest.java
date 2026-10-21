@@ -68,7 +68,7 @@ class MessageReplyServiceImplTest {
                 .seqId("100")
                 .contentRevision(2)
                 .build();
-        when(conversationRepository.findByIdAndUserIDOrTargetId("conv_1", "usr_me"))
+        when(conversationRepository.findByConversationIdAndUserId("conv_1", "usr_me"))
                 .thenReturn(Conversation.builder().id("conv_1").userId("usr_me").targetId("usr_peer").build());
         when(privateMessageRepository.findByIdAndConversationId("msg_target", "conv_1")).thenReturn(target);
         when(userService.getUserBriefInfoByID("usr_peer")).thenReturn(UserBriefResponse.builder()
@@ -114,7 +114,7 @@ class MessageReplyServiceImplTest {
 
     @Test
     void rejectsRecalledOrInaccessibleTargetsWithoutLeakingExistence() {
-        when(conversationRepository.findByIdAndUserIDOrTargetId("conv_1", "usr_me"))
+        when(conversationRepository.findByConversationIdAndUserId("conv_1", "usr_me"))
                 .thenReturn(Conversation.builder().id("conv_1").userId("usr_me").targetId("usr_peer").build());
         when(privateMessageRepository.findByIdAndConversationId("msg_target", "conv_1"))
                 .thenReturn(PrivateMessage.builder()

@@ -21,6 +21,7 @@ import icu.tianqingyuluo.onlineim.repository.ConversationRepository;
 import icu.tianqingyuluo.onlineim.repository.GroupMessageRepository;
 import icu.tianqingyuluo.onlineim.repository.PrivateMessageRepository;
 import icu.tianqingyuluo.onlineim.repository.RecallLogRepository;
+import icu.tianqingyuluo.onlineim.service.ConversationRecordService;
 import icu.tianqingyuluo.onlineim.service.FriendService;
 import icu.tianqingyuluo.onlineim.service.GroupMemberService;
 import icu.tianqingyuluo.onlineim.service.MessageReplyService;
@@ -60,6 +61,7 @@ public class MessageServiceImpl implements MessageService {
     private final RedisStreamService redisStreamService;
     private final ObjectMapper objectMapper;
     private final FriendService friendService;
+    private final ConversationRecordService conversationRecords;
     private long recallWindowSeconds = 120;
 
     @Autowired
@@ -70,7 +72,8 @@ public class MessageServiceImpl implements MessageService {
                               ConversationRepository conversationRepository,
                               RedisStreamService redisStreamService,
                               ObjectMapper objectMapper,
-                              FriendService friendService) {
+                              FriendService friendService,
+                              ConversationRecordService conversationRecords) {
         this.privateMessageRepository = privateMessageRepository;
         this.groupMessageRepository = groupMessageRepository;
         this.recallLogRepository = recallLogRepository;
@@ -81,6 +84,7 @@ public class MessageServiceImpl implements MessageService {
         this.redisStreamService = redisStreamService;
         this.objectMapper = objectMapper;
         this.friendService = friendService;
+        this.conversationRecords = conversationRecords;
     }
 
     @Override
@@ -240,7 +244,7 @@ public class MessageServiceImpl implements MessageService {
     private boolean canReadConversation(String conversationId, String userId) {
         return conversationId != null && userId != null && (conversationId.startsWith("grp_")
                 ? groupMemberService.isGroupMember(conversationId, userId)
-                : conversationRepository.findByIdAndUserIDOrTargetId(conversationId, userId) != null);
+                : conversationRepository.findByConversationIdAndUserId(conversationId, userId) != null);
     }
 
     private MessageReplySnapshot createReplySnapshot(String conversationId, String messageId, String userId) {
@@ -260,6 +264,7 @@ public class MessageServiceImpl implements MessageService {
             privateMessage.setUpdatedAt(new Date());
             privateMessageRepository.save(privateMessage);
             messageReplyService.markTargetRecalled(privateMessage.getConversationId(), messageId);
+            conversationRecords.onMessageRecalled(privateMessage.getConversationId(), messageId);
             saveRecallAndNotify(privateMessage.getConversationId(), privateMessage.getSeqId(), messageId, userId,
                     List.of(privateMessage.getSenderId(), privateMessage.getReceiverId()));
             return true;
@@ -274,6 +279,7 @@ public class MessageServiceImpl implements MessageService {
             groupMessage.setUpdatedAt(new Date());
             groupMessageRepository.save(groupMessage);
             messageReplyService.markTargetRecalled(groupMessage.getGroupId(), messageId);
+            conversationRecords.onMessageRecalled(groupMessage.getGroupId(), messageId);
             saveRecallAndNotify(groupMessage.getGroupId(), groupMessage.getSeqId(), messageId, userId,
                     groupReceiverIds(groupMessage.getGroupId()));
             return true;
@@ -441,6 +447,7 @@ public class MessageServiceImpl implements MessageService {
             message.setExt(request.getExt());
 
             privateMessageRepository.save(message);
+            conversationRecords.onPrivateMessage(message);
             redisStreamService.publishPrivateMessage(
                     "PRIVATE_MESSAGE",
                     userId,
@@ -481,11 +488,13 @@ public class MessageServiceImpl implements MessageService {
             message.setExt(request.getExt());
 
             groupMessageRepository.save(message);
+            List<String> memberIds = groupReceiverIds(targetId);
+            conversationRecords.onGroupMessage(message, memberIds);
             redisStreamService.publishGroupMessage(
                     "GROUP_MESSAGE",
                     userId,
                     serializeMessage(message),
-                    groupReceiverIds(targetId));
+                    memberIds);
 
             return convertGroupMessageToResponse(message);
         }
@@ -515,11 +524,12 @@ public class MessageServiceImpl implements MessageService {
     }
 
     private void assertPrivateConversationAccess(String conversationId, String senderId, String receiverId) {
-        Conversation conversation = conversationRepository.findByIdAndUserIDOrTargetId(conversationId, senderId);
+        // 发送者自己的会话记录必须指向接收方，且会话 ID 与双方一致
+        Conversation conversation = conversationRepository.findByConversationIdAndUserId(conversationId, senderId);
         boolean participantsMatch = conversation != null
                 && "private".equals(conversation.getConversationType())
-                && ((senderId.equals(conversation.getUserId()) && receiverId.equals(conversation.getTargetId()))
-                || (senderId.equals(conversation.getTargetId()) && receiverId.equals(conversation.getUserId())));
+                && receiverId.equals(conversation.getTargetId())
+                && conversationId.equals(ConversationIdUtil.privateConversationId(senderId, receiverId));
         if (!participantsMatch) {
             throw new ForbiddenException("无权访问该私聊会话");
         }

@@ -1,14 +1,14 @@
 package icu.tianqingyuluo.onlineim.controller;
 
 import icu.tianqingyuluo.onlineim.exception.ForbiddenException;
-import icu.tianqingyuluo.onlineim.pojo.document.Conversation;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.ConversationCreateRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.ConversationResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageReadersResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.ReadStateResponse;
-import icu.tianqingyuluo.onlineim.repository.ConversationRepository;
 import icu.tianqingyuluo.onlineim.service.ConversationReadStateService;
+import icu.tianqingyuluo.onlineim.service.ConversationRecordService;
 import icu.tianqingyuluo.onlineim.service.ConversationService;
+import icu.tianqingyuluo.onlineim.service.GroupMemberService;
 import icu.tianqingyuluo.onlineim.service.FriendService;
 import icu.tianqingyuluo.onlineim.util.ConversationIdUtil;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
@@ -29,19 +29,19 @@ public class ConversationController {
 
     private final ConversationService conversationService;
     private final JwtUtil jwtUtil;
-    private final ConversationRepository conversationRepository;
+    private final GroupMemberService groupMemberService;
     private final ConversationReadStateService readStateService;
     private final FriendService friendService;
 
     @Autowired
     public ConversationController(ConversationService conversationService,
                                   JwtUtil jwtUtil,
-                                  ConversationRepository conversationRepository,
+                                  GroupMemberService groupMemberService,
                                   ConversationReadStateService readStateService,
                                   FriendService friendService) {
         this.conversationService = conversationService;
         this.jwtUtil = jwtUtil;
-        this.conversationRepository = conversationRepository;
+        this.groupMemberService = groupMemberService;
         this.readStateService = readStateService;
         this.friendService = friendService;
     }
@@ -109,47 +109,33 @@ public class ConversationController {
         return ResponseEntity.ok(result);
     }
 
+    /**
+     * 打开/创建会话。幂等：只确保当前用户自己的记录存在并显示，不会重置自己或他人的置顶、免打扰、未读。
+     * 群会话要求调用者是群成员；私聊要求双方是好友。
+     */
     @PostMapping("/create")
     public ResponseEntity<?> createConversation(
             @RequestHeader("Authorization") String token,
             @Valid @RequestBody ConversationCreateRequest request
     ) {
         String userId = jwtUtil.getUserIDFromToken(token);
-        if (!"group".equals(request.getType()) && !friendService.areFriends(userId, request.getTargetId())) {
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        String targetId = request.getTargetId();
+        if ("group".equals(request.getType())) {
+            if (!targetId.startsWith("grp_") || !groupMemberService.isGroupMember(targetId, userId)) {
+                throw new ForbiddenException("只有群成员才能打开群会话");
+            }
+            return ResponseEntity.ok(conversationService.openConversation(
+                    targetId, ConversationRecordService.TYPE_GROUP, userId, targetId));
+        }
+        if (userId.equals(targetId) || !friendService.areFriends(userId, targetId)) {
             throw new ForbiddenException("只能和好友创建私聊会话");
         }
-
-        Conversation conversation = new Conversation();
-        Conversation.LastMessage lastMessage = new Conversation.LastMessage();
-        if (request.getType().equals("group")) {
-            conversation.setId(request.getTargetId());  // coversationId 此时就等于 群id
-            conversation.setUserId(userId);
-            conversation.setTargetId(request.getTargetId());
-            conversation.setConversationType(request.getType());
-            conversation.setUnreadCount(0);
-            conversation.setLastMessage(lastMessage);
-            conversation.setTop(false);
-            conversation.setMute(false);
-            conversation.setStatus(1);
-            conversation.setUpdatedAt(new Date());
-        }
-        else {
-            conversation.setId(ConversationIdUtil.privateConversationId(userId, request.getTargetId()));
-            conversation.setUserId(userId);
-            conversation.setTargetId(request.getTargetId());
-            conversation.setConversationType(request.getType());
-            conversation.setUnreadCount(0);
-            conversation.setLastMessage(lastMessage);
-            conversation.setTop(false);
-            conversation.setMute(false);
-            conversation.setStatus(1);
-            conversation.setUpdatedAt(new Date());
-        }
-        conversationRepository.save(conversation);
-
-        ConversationResponse conversationResponse = conversationService.convertToConversationResponse(conversation, userId);
-
-        return ResponseEntity.ok(conversationResponse);
+        return ResponseEntity.ok(conversationService.openConversation(
+                ConversationIdUtil.privateConversationId(userId, targetId),
+                ConversationRecordService.TYPE_PRIVATE, userId, targetId));
     }
 
     /**

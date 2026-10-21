@@ -10,7 +10,11 @@ import org.springframework.data.mongodb.core.mapping.Document;
 import java.util.Date;
 
 /**
- * 会话列表文档类 (MongoDB)
+ * 会话列表文档类 (MongoDB)。
+ *
+ * <p>每个参与者各有一条记录（见 docs/conversation-model.md）：
+ * {@code _id = conversationId + ":" + userId}，{@code (userId, conversationId)} 唯一。
+ * 置顶、免打扰、未读缓存、删除（隐藏）状态都只属于 {@link #userId} 这一位所有者。</p>
  */
 @Data
 @Builder
@@ -19,15 +23,16 @@ import java.util.Date;
 @Document(collection = "conversations")
 public class Conversation {
     @Id
-    private String id;             // 会话ID，格式为：conv_+UUID或grp_+UUID
-    private String userId;         // 用户ID，格式为：usr_+UUID
-    private String targetId;       // 目标ID，单聊为用户ID(usr_+UUID)，群聊为群组ID(grp_+UUID)
+    private String id;             // 记录ID：conversationId + ":" + userId
+    private String conversationId; // 对外的会话ID：私聊 conv_+两个用户ID，群聊即群ID grp_xxx
+    private String userId;         // 记录所有者（当前用户）ID
+    private String targetId;       // 对端：单聊为对方用户ID，群聊为群组ID
     private String conversationType; // 会话类型：private(单聊), group(群聊)
-    private Integer unreadCount;   // 未读消息数
+    private Integer unreadCount;   // 所有者的未读数缓存（权威值由 conversation_read_states 计算）
     private LastMessage lastMessage; // 最后一条消息的摘要信息
-    private Boolean top;           // 是否置顶
-    private Boolean mute;          // 是否免打扰
-    private Integer status;        // 会话状态：0-已删除，1-正常
+    private Boolean top;           // 所有者是否置顶
+    private Boolean mute;          // 所有者是否免打扰
+    private Integer status;        // 所有者视角的会话状态：0-已删除（隐藏），1-正常
     private Date updatedAt;        // 更新时间，用于会话排序
     
     /**

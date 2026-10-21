@@ -1,8 +1,6 @@
 package icu.tianqingyuluo.onlineim.repository;
 
 import icu.tianqingyuluo.onlineim.pojo.document.Conversation;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.repository.Aggregation;
 import org.springframework.data.mongodb.repository.MongoRepository;
@@ -12,41 +10,32 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 /**
- * 会话列表MongoDB仓库接口
- * 将page/list 优化为游标分页
+ * 会话列表 MongoDB 仓库接口。每个参与者一条记录，详见 docs/conversation-model.md。
  */
 @Repository
 public interface ConversationRepository extends MongoRepository<Conversation, String> {
 
     /**
-     * 查询用户的所有会话
+     * 查询用户自己的会话记录（按状态过滤）
      */
-    @Query("{ 'status': 1, '$or': [ { 'userId': ?0 }, { 'targetId': ?0 } ] }")
-    List<Conversation> findUserConversations(String userId, Sort sort);
-    
-    /**
-     * 查询用户的会话（分页）
-     */
-    Page<Conversation> findByUserIdAndStatusOrderByTopDescUpdatedAtDesc(String userId, Integer status, Pageable pageable);
-    
-    /**
-     * 查询指定的会话
-     */
-    Conversation findByIdAndUserId(String id, String userId);
+    List<Conversation> findByUserIdAndStatus(String userId, Integer status, Sort sort);
 
-    @Query("{ '_id': ?0, '$or': [ { 'userId': ?1 }, { 'targetId': ?1 } ] }")
-    Conversation findByIdAndUserIDOrTargetId(String id, String userId);
     /**
-     * 根据用户ID和目标ID查询会话（针对单聊）
+     * 查询某个用户在指定会话上的记录；不存在说明该用户不是（或已不是）这个会话的参与者
      */
-    Conversation findByUserIdAndTargetIdAndConversationType(String userId, String targetId, String conversationType);
-    
+    Conversation findByConversationIdAndUserId(String conversationId, String userId);
+
+    /**
+     * 查询会话所有参与者的记录
+     */
+    List<Conversation> findByConversationId(String conversationId);
+
     /**
      * 查询用户的所有未读消息数
      */
-    @Query(value = "{'userId': ?0, 'status': 1}", fields = "{'unreadCount': 1}")
+    @Query(value = "{'userId': ?0, 'status': 1}", fields = "{'conversationId': 1, 'unreadCount': 1}")
     List<Conversation> findAllUnreadCounts(String userId);
-    
+
     /**
      * 查询用户的总未读消息数（使用聚合查询优化性能）
      */
