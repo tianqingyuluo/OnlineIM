@@ -178,6 +178,28 @@ class ChatMediaServiceTest {
         assertStatus(HttpStatus.BAD_REQUEST, () -> service.resolveForMessage("usr_a", "file", "{broken"));
     }
 
+    @Test
+    void refreshForForwardReusesUploadWithoutOwnershipCheckAndFallsBack() throws Exception {
+        ChatUpload image = service.upload("usr_a", "image",
+                new MockMultipartFile("file", "a.png", "image/png", noisyImage(300, 200, "png", false)));
+
+        // 转发者 usr_b 不是上传者，也能按引用复用；元数据来自上传记录而非来源内容
+        ChatMediaService.ResolvedMedia forwarded = service.refreshForForward("image",
+                "{\"file_id\":\"" + image.getId() + "\",\"url\":\"https://evil.example/x.png\"}", Map.of());
+        Map<?, ?> content = new ObjectMapper().readValue(forwarded.content(), Map.class);
+        assertEquals(image.getUrl(), content.get("url"));
+        assertEquals(300, content.get("width"));
+        assertEquals("a.png", forwarded.ext().get("file_name"));
+
+        // 找不到上传记录 / 非媒体消息：原样沿用
+        Map<String, Object> ext = Map.of("file_name", "old.pdf");
+        ChatMediaService.ResolvedMedia legacy = service.refreshForForward("file", "{\"url\":\"/onlineim/old.pdf\"}", ext);
+        assertEquals("{\"url\":\"/onlineim/old.pdf\"}", legacy.content());
+        assertEquals("old.pdf", legacy.ext().get("file_name"));
+        assertEquals("hi", service.refreshForForward("text", "hi", null).content());
+        assertEquals("{\"emoji_id\":\"emj_1\"}", service.refreshForForward("emoji", "{\"emoji_id\":\"emj_1\"}", null).content());
+    }
+
     // ---------------- 语音 ----------------
 
     private static byte[] audio(String name) throws Exception {

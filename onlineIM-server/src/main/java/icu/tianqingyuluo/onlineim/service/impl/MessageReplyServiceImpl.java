@@ -220,6 +220,7 @@ public class MessageReplyServiceImpl implements MessageReplyService {
             case "voice", "audio" -> voicePreview(ext);
             case "video" -> "[视频]";
             case "emoji", "sticker" -> "[表情]";
+            case "chat_record" -> "[聊天记录]";
             case "file" -> filePreview(ext);
             default -> "[消息]";
         };

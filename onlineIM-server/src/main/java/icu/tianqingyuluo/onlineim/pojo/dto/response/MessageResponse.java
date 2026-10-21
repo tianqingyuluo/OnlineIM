@@ -51,6 +51,12 @@ public class MessageResponse {
     private ReplyReferenceResponse replyTo;
 
     /**
+     * 逐条转发的消息：原作者 {user_id, display_name}；普通消息为 null
+     */
+    @JsonProperty("forwarded_from")
+    private ForwardedFrom forwardedFrom;
+
+    /**
      * 群聊 @提及的用户ID列表（服务端清洗后，只含发送时的群成员）
      */
     @JsonProperty("at_users")
@@ -91,4 +97,15 @@ public class MessageResponse {
      */
     private String timestamp;
 
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ForwardedFrom {
+        @JsonProperty("user_id")
+        private String userId;
+        @JsonProperty("display_name")
+        private String displayName;
+    }
 }

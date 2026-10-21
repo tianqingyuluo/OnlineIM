@@ -6,6 +6,7 @@ import icu.tianqingyuluo.onlineim.pojo.dto.request.MessageSendRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageContextResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageResponse;
 import icu.tianqingyuluo.onlineim.pojo.entity.UserIDProvider;
+import icu.tianqingyuluo.onlineim.service.MessageForwardService;
 import icu.tianqingyuluo.onlineim.service.MessageService;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
 import org.junit.jupiter.api.Test;
@@ -64,7 +65,7 @@ class MessageControllerTest {
     @Test
     void contextEndpointUsesAuthenticatedPrincipalAndForwardsWindow() throws Exception {
         MessageService messageService = mock(MessageService.class);
-        MessageController controller = new MessageController(messageService, mock(JwtUtil.class), mock(ChatMediaService.class));
+        MessageController controller = new MessageController(messageService, mock(JwtUtil.class), mock(ChatMediaService.class), mock(MessageForwardService.class));
         UserIDProvider principal = () -> "usr_me";
         MessageContextResponse expected = MessageContextResponse.builder()
                 .targetMessageId("msg_100")
@@ -92,7 +93,7 @@ class MessageControllerTest {
     @Test
     void sendEndpointUsesAuthenticatedPrincipal() {
         MessageService messageService = mock(MessageService.class);
-        MessageController controller = new MessageController(messageService, mock(JwtUtil.class), mock(ChatMediaService.class));
+        MessageController controller = new MessageController(messageService, mock(JwtUtil.class), mock(ChatMediaService.class), mock(MessageForwardService.class));
         UserIDProvider principal = () -> "usr_me";
         MessageSendRequest request = MessageSendRequest.builder()
                 .targetId("usr_peer")
@@ -118,5 +119,33 @@ class MessageControllerTest {
         org.junit.jupiter.api.Assertions.assertEquals(800L, MessageController.parseClientDuration("9", "800"), "duration_ms 优先");
         org.junit.jupiter.api.Assertions.assertThrows(icu.tianqingyuluo.onlineim.exception.ChatMediaException.class,
                 () -> MessageController.parseClientDuration("abc", null));
+    }
+
+    @Test
+    void forwardRequestAcceptsSnakeCaseAndEndpointUsesPrincipal() throws Exception {
+        icu.tianqingyuluo.onlineim.pojo.dto.request.MessageForwardRequest request = new ObjectMapper().readValue("""
+                {
+                  "source_conversation_id": "conv_1",
+                  "message_ids": ["msg_1", "msg_2"],
+                  "targets": ["usr_2", "grp_1"],
+                  "mode": "merged",
+                  "client_request_id": "req_1"
+                }
+                """, icu.tianqingyuluo.onlineim.pojo.dto.request.MessageForwardRequest.class);
+        assertEquals("conv_1", request.getSourceConversationId());
+        assertEquals(List.of("msg_1", "msg_2"), request.getMessageIds());
+        assertEquals("merged", request.getMode());
+        assertEquals("req_1", request.getClientRequestId());
+
+        MessageForwardService forwardService = mock(MessageForwardService.class);
+        MessageController controller = new MessageController(mock(MessageService.class), mock(JwtUtil.class),
+                mock(ChatMediaService.class), forwardService);
+        icu.tianqingyuluo.onlineim.pojo.dto.response.MessageForwardResponse expected =
+                icu.tianqingyuluo.onlineim.pojo.dto.response.MessageForwardResponse.builder()
+                        .mode("merged").results(List.of()).build();
+        when(forwardService.forward(request, "usr_me")).thenReturn(expected);
+
+        assertEquals(expected, controller.forwardMessages(request, () -> "usr_me").getBody());
+        assertEquals(401, controller.forwardMessages(request, null).getStatusCode().value());
     }
 }

@@ -284,6 +284,33 @@ public class ChatMediaService {
         }
     }
 
+    /**
+     * 转发：媒体按引用复用（不复制对象）。content 里的 file_id 能找到上传记录时按上传记录重新生成权威元数据，
+     * 不要求转发者是上传者；找不到（历史数据）时原样沿用源消息里服务端生成的 content / ext。
+     */
+    public ResolvedMedia refreshForForward(String messageType, String content, Map<String, Object> ext) {
+        if (!EmojiService.isEmojiMessage(messageType) && isMediaMessage(messageType)) {
+            String fileId;
+            try {
+                fileId = extractFileId(content);
+            } catch (ChatMediaException e) {
+                fileId = null;
+            }
+            ChatUpload upload = fileId == null ? null : repository.findById(fileId).orElse(null);
+            if (upload != null) {
+                Map<String, Object> media = toMediaMap(upload);
+                Map<String, Object> refreshed = new LinkedHashMap<>(media);
+                refreshed.put("file_name", upload.getName());
+                try {
+                    return new ResolvedMedia(objectMapper.writeValueAsString(media), refreshed);
+                } catch (JsonProcessingException e) {
+                    throw new IllegalStateException("媒体信息序列化失败", e);
+                }
+            }
+        }
+        return new ResolvedMedia(content, ext == null ? null : new LinkedHashMap<>(ext));
+    }
+
     /** 上传接口与消息内容共用的字段（snake_case），值为空的字段省略 */
     public Map<String, Object> toMediaMap(ChatUpload upload) {
         Map<String, Object> media = new LinkedHashMap<>();

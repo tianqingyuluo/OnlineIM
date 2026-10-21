@@ -28,6 +28,7 @@ public class GroupMessage {
     private String messageType;  // 消息类型：text, image, voice, file, etc.
     private String content;
     private MessageReplySnapshot replyTo; // 直接引用快照，可空
+    private MessageForwardSnapshot forwardFrom; // 逐条转发的溯源（原作者），可空
     private Integer contentRevision; // 内容版本，历史消息缺失时按1处理      // 文本内容或媒体文件引用
     private Integer status;      // 消息状态：0-发送中，1-已送达，2-发送失败，3-已撤回
     private String seqId;          // 序列号，用于消息排序和增量同步

@@ -584,6 +584,7 @@ public class MessageServiceImpl implements MessageService {
                 .messageType(message.getMessageType())
                 .content(message.getContent())
                 .replyTo(replyReference)
+                .forwardedFrom(forwardedFrom(message.getForwardFrom()))
                 .status(status)
                 .deliveryState("sent")
                 .seqId(message.getSeqId())
@@ -623,6 +624,7 @@ public class MessageServiceImpl implements MessageService {
                 .messageType(message.getMessageType())
                 .content(message.getContent())
                 .replyTo(replyReference)
+                .forwardedFrom(forwardedFrom(message.getForwardFrom()))
                 .mentionedUserIds(message.getAtUsers())
                 .status(status)
                 .deliveryState("sent")
@@ -630,6 +632,17 @@ public class MessageServiceImpl implements MessageService {
                 .clientMessageId(message.getClientMessageId())
                 .isRecalled(message.getStatus() == 3)
                 .timestamp(formatTimestamp(message.getTimestamp()))
+                .build();
+    }
+
+    static MessageResponse.ForwardedFrom forwardedFrom(
+            icu.tianqingyuluo.onlineim.pojo.document.MessageForwardSnapshot snapshot) {
+        if (snapshot == null) {
+            return null;
+        }
+        return MessageResponse.ForwardedFrom.builder()
+                .userId(snapshot.getOriginalSenderId())
+                .displayName(snapshot.getOriginalSenderName())
                 .build();
     }
 

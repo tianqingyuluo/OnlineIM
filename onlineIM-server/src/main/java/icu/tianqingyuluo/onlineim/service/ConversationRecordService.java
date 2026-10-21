@@ -259,6 +259,7 @@ public class ConversationRecordService {
             case "voice", "audio" -> "[语音]";
             case "video" -> "[视频]";
             case "emoji", "sticker" -> "[表情]";
+            case "chat_record" -> "[聊天记录]";
             default -> "[消息]";
         };
     }

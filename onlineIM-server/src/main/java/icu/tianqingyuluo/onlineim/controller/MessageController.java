@@ -1,11 +1,14 @@
 package icu.tianqingyuluo.onlineim.controller;
 
+import icu.tianqingyuluo.onlineim.pojo.dto.request.MessageForwardRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.MessageSendRequest;
+import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageForwardResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageContextResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageResponse;
 import icu.tianqingyuluo.onlineim.pojo.entity.UserIDProvider;
 import icu.tianqingyuluo.onlineim.pojo.document.ChatUpload;
 import icu.tianqingyuluo.onlineim.service.ChatMediaService;
+import icu.tianqingyuluo.onlineim.service.MessageForwardService;
 import icu.tianqingyuluo.onlineim.service.MessageService;
 import icu.tianqingyuluo.onlineim.util.ErrorCodeUtil;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
@@ -32,11 +35,14 @@ public class MessageController {
     private final MessageService messageService;
     private final JwtUtil jwtUtil;
     private final ChatMediaService chatMediaService;
+    private final MessageForwardService messageForwardService;
 
-    public MessageController(MessageService messageService, JwtUtil jwtUtil, ChatMediaService chatMediaService) {
+    public MessageController(MessageService messageService, JwtUtil jwtUtil, ChatMediaService chatMediaService,
+                             MessageForwardService messageForwardService) {
         this.messageService = messageService;
         this.jwtUtil = jwtUtil;
         this.chatMediaService = chatMediaService;
+        this.messageForwardService = messageForwardService;
     }
 
     /**
@@ -200,5 +206,18 @@ public class MessageController {
         }
 
         return ResponseEntity.ok(messageService.sendMessage(request, principal.getID()));
+    }
+
+    /**
+     * 转发消息：逐条（separate）或合并为聊天记录（merged）发送到一个或多个好友 / 已加入的群
+     */
+    @PostMapping("/forward")
+    public ResponseEntity<MessageForwardResponse> forwardMessages(
+            @RequestBody MessageForwardRequest request,
+            @AuthenticationPrincipal UserIDProvider principal) {
+        if (principal == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        return ResponseEntity.ok(messageForwardService.forward(request, principal.getID()));
     }
 }
