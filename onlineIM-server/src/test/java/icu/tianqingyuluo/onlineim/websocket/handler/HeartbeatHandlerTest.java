@@ -1,6 +1,7 @@
 package icu.tianqingyuluo.onlineim.websocket.handler;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import icu.tianqingyuluo.onlineim.service.PresenceService;
 import icu.tianqingyuluo.onlineim.service.UserSessionService;
 import icu.tianqingyuluo.onlineim.websocket.session.WebSocketSession;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,7 +26,7 @@ class HeartbeatHandlerTest {
     void setUp() {
         objectMapper = new ObjectMapper();
         userSessionService = Mockito.mock(UserSessionService.class);
-        heartbeatHandler = new HeartbeatHandler(objectMapper, userSessionService);
+        heartbeatHandler = new HeartbeatHandler(objectMapper, userSessionService, mock(PresenceService.class));
 
         mockSocket = mock(ServerWebSocket.class);
         when(mockSocket.isClosed()).thenReturn(false);

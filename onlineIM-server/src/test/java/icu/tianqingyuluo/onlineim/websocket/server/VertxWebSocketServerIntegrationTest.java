@@ -3,6 +3,7 @@ package icu.tianqingyuluo.onlineim.websocket.server;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import icu.tianqingyuluo.onlineim.config.ServerIdentity;
+import icu.tianqingyuluo.onlineim.service.PresenceService;
 import icu.tianqingyuluo.onlineim.service.UserSessionService;
 import icu.tianqingyuluo.onlineim.websocket.handler.HeartbeatHandler;
 import icu.tianqingyuluo.onlineim.websocket.handler.WebSocketAuthenticator;
@@ -66,14 +67,15 @@ class VertxWebSocketServerIntegrationTest {
         );
 
         ObjectMapper objectMapper = new ObjectMapper();
-        HeartbeatHandler heartbeatHandler = new HeartbeatHandler(objectMapper, userSessionService);
+        HeartbeatHandler heartbeatHandler = new HeartbeatHandler(objectMapper, userSessionService, mock(PresenceService.class));
         WebSocketMessageRouter messageRouter = new WebSocketMessageRouter(
                 objectMapper,
                 new MessageTypeSenderRegistry(List.of()),
                 heartbeatHandler
         );
         server = new VertxWebSocketServer(
-                authenticator, messageRouter, sessionRegistry, userSessionService, redisTemplate, serverIdentity
+                authenticator, messageRouter, sessionRegistry, userSessionService, redisTemplate, serverIdentity,
+                mock(PresenceService.class)
         );
         ReflectionTestUtils.setField(server, "port", 0);
         ReflectionTestUtils.setField(server, "websocketPath", "/api/v1/chat");

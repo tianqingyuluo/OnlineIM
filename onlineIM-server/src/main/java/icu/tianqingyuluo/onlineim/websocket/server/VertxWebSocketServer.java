@@ -2,6 +2,7 @@ package icu.tianqingyuluo.onlineim.websocket.server;
 
 import cn.hutool.core.util.IdUtil;
 import icu.tianqingyuluo.onlineim.config.ServerIdentity;
+import icu.tianqingyuluo.onlineim.service.PresenceService;
 import icu.tianqingyuluo.onlineim.service.UserSessionService;
 import icu.tianqingyuluo.onlineim.util.RealIPUtil;
 import icu.tianqingyuluo.onlineim.websocket.handler.WebSocketAuthenticator;
@@ -47,19 +48,22 @@ public class VertxWebSocketServer {
     private final UserSessionService userSessionService;
     private final RedisTemplate<String, Object> redisTemplate;
     private final ServerIdentity serverIdentity;
+    private final PresenceService presenceService;
 
     public VertxWebSocketServer(WebSocketAuthenticator authenticator,
                                 WebSocketMessageRouter messageRouter,
                                 LocalSessionRegistry sessionRegistry,
                                 UserSessionService userSessionService,
                                 RedisTemplate<String, Object> redisTemplate,
-                                ServerIdentity serverIdentity) {
+                                ServerIdentity serverIdentity,
+                                PresenceService presenceService) {
         this.authenticator = authenticator;
         this.messageRouter = messageRouter;
         this.sessionRegistry = sessionRegistry;
         this.userSessionService = userSessionService;
         this.redisTemplate = redisTemplate;
         this.serverIdentity = serverIdentity;
+        this.presenceService = presenceService;
     }
 
     /**
@@ -168,8 +172,9 @@ public class VertxWebSocketServer {
                 .socket(ws)
                 .build();
 
-        // 注册到本地会话注册表
+        // 注册到本地会话注册表。下线由注册表移除回调通知 presence，避免关闭和超时清理各记一次。
         sessionRegistry.register(session);
+        presenceService.onConnected(authResult.getUserId(), connectionId);
 
         // 在Redis中存储路由信息（用于横向扩展）
         try {

@@ -8,8 +8,11 @@ import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ConcurrentMap;
 
 /**
@@ -35,9 +38,17 @@ public class LocalSessionRegistry {
 
     /**
      * userId -> connectionId 映射
-     * 用于通过用户ID快速查找连接
+     * 指向该用户最近登记的一条连接，供仍按“一个用户一条连接”投递消息的路径使用
      */
     private final ConcurrentMap<String, String> userIdToConnectionId = new ConcurrentHashMap<>();
+
+    /**
+     * userId -> 该用户在本节点上的全部 connectionId。
+     * 多个标签页 / 设备各占一条；关掉其中一条不能把整个用户拆掉。
+     */
+    private final ConcurrentMap<String, Set<String>> userConnections = new ConcurrentHashMap<>();
+
+    private final List<SessionRemovalListener> removalListeners = new CopyOnWriteArrayList<>();
 
     private final TaskScheduler taskScheduler;
 
@@ -90,10 +101,17 @@ public class LocalSessionRegistry {
         }
         
         if (userId != null) {
+            userConnections.computeIfAbsent(userId, key -> ConcurrentHashMap.newKeySet()).add(connectionId);
             userIdToConnectionId.put(userId, connectionId);
         }
 
         log.info("WebSocket会话已注册: connectionId={}, userId={}", connectionId, userId);
+    }
+
+    public void addRemovalListener(SessionRemovalListener listener) {
+        if (listener != null) {
+            removalListeners.add(listener);
+        }
     }
 
     /**
@@ -103,17 +121,8 @@ public class LocalSessionRegistry {
     public void unregister(String connectionId) {
         WebSocketSession session = sessionMap.remove(connectionId);
         if (session != null) {
-            String socketId = session.getSocketId();
-            String userId = session.getUserId();
-
-            if (socketId != null) {
-                socketIdToConnectionId.remove(socketId);
-            }
-            if (userId != null) {
-                userIdToConnectionId.remove(userId);
-            }
-
-            log.info("WebSocket会话已注销: connectionId={}, userId={}", connectionId, userId);
+            detach(session, true);
+            log.info("WebSocket会话已注销: connectionId={}, userId={}", connectionId, session.getUserId());
         }
     }
 
@@ -157,9 +166,33 @@ public class LocalSessionRegistry {
     public WebSocketSession getByUserId(String userId) {
         String connectionId = userIdToConnectionId.get(userId);
         if (connectionId != null) {
-            return getByConnectionId(connectionId);
+            WebSocketSession session = getByConnectionId(connectionId);
+            if (session != null) {
+                return session;
+            }
+        }
+        for (WebSocketSession session : getSessionsByUserId(userId)) {
+            return session;
         }
         return null;
+    }
+
+    /**
+     * 该用户在本节点上的全部活跃连接。presence 推送要扇出到每个标签页。
+     */
+    public List<WebSocketSession> getSessionsByUserId(String userId) {
+        Set<String> connectionIds = userId == null ? null : userConnections.get(userId);
+        if (connectionIds == null || connectionIds.isEmpty()) {
+            return List.of();
+        }
+        List<WebSocketSession> sessions = new ArrayList<>();
+        for (String connectionId : connectionIds) {
+            WebSocketSession session = getByConnectionId(connectionId);
+            if (session != null) {
+                sessions.add(session);
+            }
+        }
+        return sessions;
     }
 
     /**
@@ -180,15 +213,7 @@ public class LocalSessionRegistry {
         if (userIds == null || userIds.isEmpty()) {
             return false;
         }
-        return userIds.stream()
-                .anyMatch(userId -> {
-                    String connectionId = userIdToConnectionId.get(userId);
-                    if (connectionId != null) {
-                        WebSocketSession session = sessionMap.get(connectionId);
-                        return session != null && session.isActive();
-                    }
-                    return false;
-                });
+        return userIds.stream().anyMatch(userId -> getByUserId(userId) != null);
     }
 
     /**
@@ -225,20 +250,53 @@ public class LocalSessionRegistry {
                             entry.getKey(), session.getUserId(), session.getLastActiveAt());
                 }
 
-                String socketId = session.getSocketId();
-                String userId = session.getUserId();
-                
-                if (socketId != null) {
-                    socketIdToConnectionId.remove(socketId);
-                }
-                if (userId != null) {
-                    userIdToConnectionId.remove(userId);
-                }
-                
-                log.info("清理失效会话: connectionId={}, userId={}", entry.getKey(), userId);
+                detach(session, true);
+                log.info("清理失效会话: connectionId={}, userId={}", entry.getKey(), session.getUserId());
                 return true;
             }
             return false;
         });
+    }
+
+    /**
+     * 从用户索引里拿掉这一条连接。同一用户还有别的连接时，保留其中一条作为主连接。
+     */
+    private void detach(WebSocketSession session, boolean notify) {
+        String connectionId = session.getConnectionId();
+        String socketId = session.getSocketId();
+        String userId = session.getUserId();
+        if (socketId != null) {
+            socketIdToConnectionId.remove(socketId, connectionId);
+        }
+        if (userId != null) {
+            Set<String> connectionIds = userConnections.get(userId);
+            if (connectionIds != null) {
+                connectionIds.remove(connectionId);
+                if (connectionIds.isEmpty()) {
+                    userConnections.remove(userId, connectionIds);
+                    userIdToConnectionId.remove(userId);
+                } else if (connectionId.equals(userIdToConnectionId.get(userId))) {
+                    userIdToConnectionId.put(userId, connectionIdOf(connectionIds));
+                }
+            } else if (connectionId.equals(userIdToConnectionId.get(userId))) {
+                userIdToConnectionId.remove(userId);
+            }
+        }
+        if (notify && userId != null && connectionId != null) {
+            for (SessionRemovalListener listener : removalListeners) {
+                try {
+                    listener.onSessionRemoved(userId, connectionId);
+                } catch (Exception e) {
+                    log.warn("会话移除回调失败: userId={}, connectionId={}, error={}", userId, connectionId, e.getMessage());
+                }
+            }
+        }
+    }
+
+    private static String connectionIdOf(Set<String> connectionIds) {
+        for (String connectionId : connectionIds) {
+            return connectionId;
+        }
+        return null;
     }
 }

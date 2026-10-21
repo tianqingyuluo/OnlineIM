@@ -102,6 +102,19 @@ public interface GroupMemberMapper {
     @Select("SELECT DISTINCT group_id FROM group_members")
     List<String> listGroupIdsWithMembers();
 
+    /** 与该用户同在至少一个未解散、且双方都还在群里的群的其他成员。 */
+    @Select("""
+            SELECT DISTINCT other.user_id
+            FROM group_members me
+            JOIN `groups` g ON g.id = me.group_id AND g.status = 1
+            JOIN group_members other ON other.group_id = me.group_id
+            WHERE me.user_id = #{userId}
+              AND me.status = 1
+              AND other.status = 1
+              AND other.user_id <> #{userId}
+            """)
+    List<String> listCoMemberIds(@Param("userId") String userId);
+
     @Update("UPDATE group_members SET role = 2 WHERE group_id = #{groupId} AND user_id=#{userid}")
     void initGroupOwner(@Param("groupId") String groupId, @Param("userid") String userid);
     /**

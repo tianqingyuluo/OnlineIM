@@ -1,6 +1,7 @@
 package icu.tianqingyuluo.onlineim.websocket.server;
 
 import icu.tianqingyuluo.onlineim.config.ServerIdentity;
+import icu.tianqingyuluo.onlineim.service.PresenceService;
 import icu.tianqingyuluo.onlineim.service.UserSessionService;
 import icu.tianqingyuluo.onlineim.websocket.handler.WebSocketAuthenticator;
 import icu.tianqingyuluo.onlineim.websocket.handler.WebSocketMessageRouter;
@@ -43,7 +44,7 @@ class VertxWebSocketServerTest {
         when(serverIdentity.getServerId()).thenReturn(SERVER_ID);
 
         server = new VertxWebSocketServer(authenticator, messageRouter, sessionRegistry,
-                userSessionService, redisTemplate, serverIdentity);
+                userSessionService, redisTemplate, serverIdentity, mock(PresenceService.class));
     }
 
     @Test

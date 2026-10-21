@@ -48,4 +48,14 @@ public interface UserFriendMapper {
     
     @Select("SELECT remark FROM user_friends WHERE user_id = #{userId} AND friend_id = #{friendId} AND status = 1")
     String getRemarkByUserIdAndFriendId(@Param("userId") String userId, @Param("friendId") String friendId);
+
+    /** 双方都是正常好友（status=1）。单向关系、拉黑、已删除都不算。 */
+    @Select("""
+            SELECT a.friend_id
+            FROM user_friends a
+            JOIN user_friends b
+              ON b.user_id = a.friend_id AND b.friend_id = a.user_id AND b.status = 1
+            WHERE a.user_id = #{userId} AND a.status = 1
+            """)
+    List<String> listMutualFriendIds(@Param("userId") String userId);
 }

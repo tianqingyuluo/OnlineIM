@@ -3,6 +3,7 @@ package icu.tianqingyuluo.onlineim.websocket.handler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import icu.tianqingyuluo.onlineim.exception.ForbiddenException;
 import icu.tianqingyuluo.onlineim.exception.ReplyTargetUnavailableException;
+import icu.tianqingyuluo.onlineim.service.PresenceService;
 import icu.tianqingyuluo.onlineim.service.UserSessionService;
 import icu.tianqingyuluo.onlineim.websocket.listener.handler.MessageTypeSenderRegistry;
 import icu.tianqingyuluo.onlineim.websocket.listener.handler.sender.MessageSenderHandler;
@@ -30,7 +31,7 @@ class WebSocketMessageRouterTest {
         objectMapper = new ObjectMapper();
         senderRegistry = Mockito.mock(MessageTypeSenderRegistry.class);
         userSessionService = Mockito.mock(UserSessionService.class);
-        heartbeatHandler = new HeartbeatHandler(objectMapper, userSessionService);
+        heartbeatHandler = new HeartbeatHandler(objectMapper, userSessionService, mock(PresenceService.class));
         router = new WebSocketMessageRouter(objectMapper, senderRegistry, heartbeatHandler);
 
         mockSocket = mock(ServerWebSocket.class);

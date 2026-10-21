@@ -8,6 +8,7 @@ import org.springframework.scheduling.TaskScheduler;
 import io.vertx.core.http.ServerWebSocket;
 
 import java.time.Duration;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -143,6 +144,36 @@ class LocalSessionRegistryTest {
         registry.register(createSession("conn_1", "usr_1"));
 
         assertTrue(registry.hasUserOnline(java.util.List.of("usr_1")));
+    }
+
+    @Test
+    void secondConnectionSurvivesWhenTheFirstCloses() {
+        WebSocketSession first = createSession("conn_1", "usr_1");
+        WebSocketSession second = createSession("conn_2", "usr_1");
+        registry.register(first);
+        registry.register(second);
+
+        assertEquals(2, registry.getSessionsByUserId("usr_1").size());
+        registry.unregister("conn_1");
+
+        assertEquals(second, registry.getByUserId("usr_1"));
+        assertEquals(List.of(second), registry.getSessionsByUserId("usr_1"));
+        assertTrue(registry.hasUserOnline(List.of("usr_1")));
+        assertEquals(1, registry.getOnlineCount());
+    }
+
+    @Test
+    void removalListenerFiresOncePerClosedConnection() {
+        java.util.List<String> removed = new java.util.ArrayList<>();
+        registry.addRemovalListener((userId, connectionId) -> removed.add(connectionId));
+        registry.register(createSession("conn_1", "usr_1"));
+        registry.register(createSession("conn_2", "usr_1"));
+
+        registry.unregister("conn_1");
+        registry.unregister("conn_1");
+
+        assertEquals(List.of("conn_1"), removed);
+        assertNotNull(registry.getByUserId("usr_1"));
     }
 
     @Test

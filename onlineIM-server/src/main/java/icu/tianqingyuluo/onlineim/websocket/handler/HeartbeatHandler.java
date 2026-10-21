@@ -1,6 +1,7 @@
 package icu.tianqingyuluo.onlineim.websocket.handler;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import icu.tianqingyuluo.onlineim.service.PresenceService;
 import icu.tianqingyuluo.onlineim.service.UserSessionService;
 import icu.tianqingyuluo.onlineim.websocket.session.WebSocketSession;
 import lombok.extern.slf4j.Slf4j;
@@ -22,11 +23,14 @@ public class HeartbeatHandler {
 
     private final ObjectMapper objectMapper;
     private final UserSessionService userSessionService;
+    private final PresenceService presenceService;
 
     public HeartbeatHandler(ObjectMapper objectMapper,
-                            UserSessionService userSessionService) {
+                            UserSessionService userSessionService,
+                            PresenceService presenceService) {
         this.objectMapper = objectMapper;
         this.userSessionService = userSessionService;
+        this.presenceService = presenceService;
     }
 
     /**
@@ -41,13 +45,14 @@ public class HeartbeatHandler {
         // 刷新本地会话活跃时间
         session.refreshLastActiveAt();
 
-        // 刷新 Redis 中的 activeTime
+        // 刷新 Redis 中的 activeTime，并给在线状态的连接键续期
         try {
             userSessionService.refreshActiveTime(session.getUserId(), session.getDeviceId());
         } catch (Exception e) {
             log.warn("刷新Redis活跃时间失败: userId={}, deviceId={}, error={}",
                     session.getUserId(), session.getDeviceId(), e.getMessage());
         }
+        presenceService.onHeartbeat(session.getUserId(), session.getConnectionId());
 
         // 回复 HEARTBEAT_ACK
         try {
