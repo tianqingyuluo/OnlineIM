@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.pojo.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -14,7 +15,8 @@ import java.time.LocalDateTime;
 public class User {
     private String id;           // 用户ID，格式为：usr_+UUID
     private String username;     // 用户名
-    private String password;     // 密码哈希值
+    @JsonIgnore
+    private String password;     // 密码哈希值，任何 JSON 响应都不应带出明文或哈希
     private String nickname;     // 昵称
     private String avatar;       // 头像URL
     private Integer gender;      // 性别：0-未知，1-男，2-女

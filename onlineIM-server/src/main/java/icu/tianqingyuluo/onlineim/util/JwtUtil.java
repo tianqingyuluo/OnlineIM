@@ -3,12 +3,13 @@ package icu.tianqingyuluo.onlineim.util;
 import icu.tianqingyuluo.onlineim.pojo.entity.UserIDProvider;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.util.Date;
 import java.util.HashMap;
@@ -22,11 +23,32 @@ import java.util.function.Function;
 @Component
 public class JwtUtil {
 
-    // 默认密钥，建议在生产环境中使用更安全的方式存储
-    private static final Key SECRET_KEY = Keys.secretKeyFor(SignatureAlgorithm.HS256);
+    /** 与 application.properties 中的开发占位值保持一致，不能当作生产密钥。 */
+    static final String DEV_PLACEHOLDER_SECRET = "dev-only-change-me-jwt-secret-32b!!";
+
+    /** HS256 要求密钥至少 256 bit。 */
+    static final int MIN_SECRET_BYTES = 32;
+
+    private final Key secretKey;
     
     // 令牌有效期（毫秒）
     private static final long JWT_TOKEN_VALIDITY = 24 * 60 * 60 * 1000; // 24小时
+
+    public JwtUtil(@Value("${jwt.secret:}") String secret) {
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException(
+                    "jwt.secret 未配置。请设置 jwt.secret，或通过环境变量 JWT_SECRET 提供至少 32 字节的密钥。");
+        }
+        byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+        if (keyBytes.length < MIN_SECRET_BYTES) {
+            throw new IllegalStateException(
+                    "jwt.secret 过短（当前 " + keyBytes.length + " 字节）。HS256 至少需要 32 字节，请更换 JWT_SECRET。");
+        }
+        if (DEV_PLACEHOLDER_SECRET.equals(secret)) {
+            log.warn("正在使用开发占位 JWT 密钥。生产或多节点部署请设置环境变量 JWT_SECRET 覆盖 jwt.secret。");
+        }
+        this.secretKey = Keys.hmacShaKeyFor(keyBytes);
+    }
 
     public static String GET_EXPIRE_TIME() {
         return JWT_TOKEN_VALIDITY + "";
@@ -72,7 +94,7 @@ public class JwtUtil {
      */
     private Claims getAllClaimsFromToken(String token) {
         return Jwts.parserBuilder()
-                .setSigningKey(SECRET_KEY)
+                .setSigningKey(secretKey)
                 .build()
                 .parseClaimsJws(token.substring(7))
                 .getBody();
@@ -108,7 +130,7 @@ public class JwtUtil {
                 .setSubject(subject)
                 .setIssuedAt(new Date(System.currentTimeMillis()))
                 .setExpiration(new Date(System.currentTimeMillis() + JWT_TOKEN_VALIDITY))
-                .signWith(SECRET_KEY)
+                .signWith(secretKey)
                 .compact();
     }
 

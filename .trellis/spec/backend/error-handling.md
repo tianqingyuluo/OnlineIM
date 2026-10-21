@@ -128,6 +128,6 @@ Services throw a mix of standard and custom exceptions:
 
 4. **`AuthController.login` catches `Exception` but does not return** — execution continues to token generation after a login failure. Always `return` or `throw` inside catch blocks for authentication failures.
 
-5. **`AuthController.register` echoes `password` in the response body** — never include plaintext passwords in any response.
+5. **Never echo passwords** — register responses omit the plaintext password and its hash. Do not put `password` back into any response body.
 
 6. **Controllers manually parse JWT tokens** with `@RequestHeader("Authorization")` instead of using `SecurityContextHolder` / `@AuthenticationPrincipal`. The `JwtAuthenticationFilter` already authenticated the user and put `UserDetails` (specifically `UserDetail` which implements `UserIDProvider`) into the security context. New controllers should use `@AuthenticationPrincipal` to get the authenticated user.

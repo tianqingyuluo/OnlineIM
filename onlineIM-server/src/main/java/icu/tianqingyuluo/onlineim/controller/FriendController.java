@@ -17,6 +17,7 @@ import icu.tianqingyuluo.onlineim.util.enumeration.FriendshipStatusEnum;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ibatis.exceptions.PersistenceException;
 import org.springframework.dao.DataIntegrityViolationException;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -268,7 +269,7 @@ public class FriendController {
     }
 
     @PostMapping("/request/send")
-    public ResponseEntity<?> sendFriendRequest(@RequestHeader("Authorization") String token, @RequestBody FriendRequestRequest friendRequestRequest) {
+    public ResponseEntity<?> sendFriendRequest(@RequestHeader("Authorization") String token, @Valid @RequestBody FriendRequestRequest friendRequestRequest) {
         String userid = jwtUtil.getUserIDFromToken(token);
         try {
             friendService.sendFriendRequest(userid, friendRequestRequest);

@@ -12,6 +12,7 @@ import icu.tianqingyuluo.onlineim.service.GroupService;
 import icu.tianqingyuluo.onlineim.service.UserService;
 import icu.tianqingyuluo.onlineim.util.ErrorCodeUtil;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ibatis.exceptions.PersistenceException;
 import org.springframework.http.HttpStatus;
@@ -49,7 +50,7 @@ public class GroupController {
      * @return 创建结果
      */
     @PostMapping("")
-    public ResponseEntity<?> createGroup(@RequestBody GroupCreateRequest request, @RequestHeader("Authorization") String token) {
+    public ResponseEntity<?> createGroup(@Valid @RequestBody GroupCreateRequest request, @RequestHeader("Authorization") String token) {
         // TODO: 实现创建群组逻辑
         String username = jwtUtil.getUsernameFromToken(token);
         String userID = jwtUtil.getUserIDFromToken(token);
@@ -96,7 +97,7 @@ public class GroupController {
      * @return 更新结果
      */
     @PutMapping("/{groupId}")
-    public ResponseEntity<?> updateGroup(@RequestHeader("Authorization") String token, @PathVariable String groupId, @RequestBody GroupUpdateRequest request) {
+    public ResponseEntity<?> updateGroup(@RequestHeader("Authorization") String token, @PathVariable String groupId, @Valid @RequestBody GroupUpdateRequest request) {
         String username = jwtUtil.getUsernameFromToken(token);
         String userID = jwtUtil.getUserIDFromToken(token);
         // 检查用户是否有权限更新群组信息 (例如, 是否为群主或管理员)
@@ -263,7 +264,7 @@ public class GroupController {
      * @return 申请结果
      */
     @PostMapping("/{groupId}/join")
-    public ResponseEntity<?> joinGroup(@RequestHeader("Authorization") String token, @PathVariable String groupId, @RequestBody(required = false) GroupJoinRequest request) {
+    public ResponseEntity<?> joinGroup(@RequestHeader("Authorization") String token, @PathVariable String groupId, @Valid @RequestBody(required = false) GroupJoinRequest request) {
         String username = jwtUtil.getUsernameFromToken(token);
         String applicantId = jwtUtil.getUserIDFromToken(token);
         String message = (request != null) ? request.getMessage() : null;

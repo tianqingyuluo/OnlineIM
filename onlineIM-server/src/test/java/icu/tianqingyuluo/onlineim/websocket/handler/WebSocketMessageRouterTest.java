@@ -1,6 +1,7 @@
 package icu.tianqingyuluo.onlineim.websocket.handler;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import icu.tianqingyuluo.onlineim.exception.ForbiddenException;
 import icu.tianqingyuluo.onlineim.exception.ReplyTargetUnavailableException;
 import icu.tianqingyuluo.onlineim.service.UserSessionService;
 import icu.tianqingyuluo.onlineim.websocket.listener.handler.MessageTypeSenderRegistry;
@@ -109,6 +110,23 @@ class WebSocketMessageRouterTest {
 
         verify(mockSocket).writeTextMessage(contains("REPLY_TARGET_UNAVAILABLE"));
         verify(mockSocket).writeTextMessage(contains("client_reply"));
+    }
+
+    @Test
+    void forbiddenErrorUses403AndDoesNotLookLikeInternalError() {
+        when(senderRegistry.supportMessageType("PRIVATE_MESSAGE_REQUEST")).thenReturn(true);
+        MessageSenderHandler handler = mock(MessageSenderHandler.class);
+        when(handler.publishMessage(eq(session), any()))
+                .thenThrow(new ForbiddenException("你们还不是好友，无法发送私聊消息"));
+        when(senderRegistry.getHandler("PRIVATE_MESSAGE_REQUEST")).thenReturn(handler);
+
+        router.route(session, "{\"type\":\"PRIVATE_MESSAGE_REQUEST\",\"message\":{"
+                + "\"client_message_id\":\"client_friend\"}}");
+
+        verify(mockSocket).writeTextMessage(contains("\"code\":\"403\""));
+        verify(mockSocket).writeTextMessage(contains("你们还不是好友，无法发送私聊消息"));
+        verify(mockSocket).writeTextMessage(contains("client_friend"));
+        verify(mockSocket, never()).writeTextMessage(contains("INTERNAL_ERROR"));
     }
 
     @Test

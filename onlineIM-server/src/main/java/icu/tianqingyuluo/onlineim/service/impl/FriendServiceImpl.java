@@ -8,6 +8,7 @@ import icu.tianqingyuluo.onlineim.pojo.dto.response.FriendResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
 import icu.tianqingyuluo.onlineim.pojo.entity.UserFriend;
 import icu.tianqingyuluo.onlineim.service.FriendService;
+import icu.tianqingyuluo.onlineim.util.enumeration.FriendshipStatusEnum;
 import lombok.SneakyThrows;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -62,6 +63,22 @@ public class FriendServiceImpl implements FriendService {
     @Override
     public boolean existFriendByID(String friendId,String userid) {
         return friendRequestResponseMapper.existFriendByID(friendId,userid);
+    }
+
+    @Override
+    public boolean areFriends(String userId, String friendUserId) {
+        if (userId == null || friendUserId == null || userId.isBlank() || friendUserId.isBlank()
+                || userId.equals(friendUserId)) {
+            return false;
+        }
+        return isNormalFriend(userId, friendUserId) && isNormalFriend(friendUserId, userId);
+    }
+
+    private boolean isNormalFriend(String userId, String friendUserId) {
+        UserFriend relation = userFriendMapper.getByUserIdAndFriendId(userId, friendUserId);
+        return relation != null
+                && relation.getStatus() != null
+                && relation.getStatus() == FriendshipStatusEnum.NORMAL.getValue();
     }
 
     @Override

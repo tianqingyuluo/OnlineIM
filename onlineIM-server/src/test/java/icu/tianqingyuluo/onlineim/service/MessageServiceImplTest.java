@@ -49,6 +49,7 @@ class MessageServiceImplTest {
     private MessageReplyService messageReplyService;
     private ConversationRepository conversationRepository;
     private RedisStreamService redisStreamService;
+    private FriendService friendService;
     private MessageService service;
 
     @BeforeEach
@@ -61,6 +62,8 @@ class MessageServiceImplTest {
         messageReplyService = mock(MessageReplyService.class);
         conversationRepository = mock(ConversationRepository.class);
         redisStreamService = mock(RedisStreamService.class);
+        friendService = mock(FriendService.class);
+        when(friendService.areFriends(any(), any())).thenReturn(true);
         service = new MessageServiceImpl(
                 privateMessageRepository,
                 groupMessageRepository,
@@ -70,7 +73,8 @@ class MessageServiceImplTest {
                 messageReplyService,
                 conversationRepository,
                 redisStreamService,
-                new ObjectMapper());
+                new ObjectMapper(),
+                friendService);
     }
 
     @Test
@@ -267,6 +271,22 @@ class MessageServiceImplTest {
 
         verify(privateMessageRepository, never()).save(any());
         verify(messageReplyService, never()).createSnapshot(any(), any(), any());
+        verifyNoInteractions(redisStreamService);
+    }
+
+    @Test
+    void httpPrivateSendRejectsNonFriendBeforePersistence() {
+        when(friendService.areFriends("usr_me", "usr_peer")).thenReturn(false);
+
+        assertThrows(ForbiddenException.class, () -> service.sendMessage(MessageSendRequest.builder()
+                .targetId("usr_peer")
+                .messageType("text")
+                .content("非好友消息")
+                .clientMsgId("client_not_friend")
+                .build(), "usr_me"));
+
+        verify(privateMessageRepository, never()).save(any());
+        verify(conversationRepository, never()).findByIdAndUserIDOrTargetId(any(), any());
         verifyNoInteractions(redisStreamService);
     }
 

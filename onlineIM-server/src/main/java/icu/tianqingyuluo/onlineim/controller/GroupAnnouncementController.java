@@ -7,6 +7,7 @@ import icu.tianqingyuluo.onlineim.service.GroupMemberService;
 import icu.tianqingyuluo.onlineim.service.GroupService;
 import icu.tianqingyuluo.onlineim.util.ErrorCodeUtil;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
+import jakarta.validation.Valid;
 import org.apache.ibatis.exceptions.PersistenceException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -101,7 +102,7 @@ public class GroupAnnouncementController {
     public ResponseEntity<?> publishAnnouncement(
             @RequestHeader("Authorization") String token,
             @PathVariable String groupId,
-            @RequestBody GroupAnnouncementRequest request) {
+            @Valid @RequestBody GroupAnnouncementRequest request) {
         String publisherId = jwtUtil.getUserIDFromToken(token); // 获取当前用户ID
         // 设想 groupAnnouncementService.createAnnouncement(groupId, request, publisherId) 方法:
         // 功能: 在指定群组中发布一条新的公告。
@@ -133,7 +134,7 @@ public class GroupAnnouncementController {
             @RequestHeader("Authorization") String token,
             @PathVariable String groupId,
             @PathVariable String announcementId,
-            @RequestBody GroupAnnouncementRequest request) {
+            @Valid @RequestBody GroupAnnouncementRequest request) {
         String updaterId = jwtUtil.getUserIDFromToken(token); // 获取当前用户ID
         // 设想 groupAnnouncementService.updateAnnouncement(groupId, announcementId, request, updaterId) 方法:
         // 功能: 更新指定群组中特定公告的内容。

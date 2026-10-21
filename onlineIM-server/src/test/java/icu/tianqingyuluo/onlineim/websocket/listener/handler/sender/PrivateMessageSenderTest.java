@@ -2,11 +2,13 @@ package icu.tianqingyuluo.onlineim.websocket.listener.handler.sender;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import icu.tianqingyuluo.onlineim.pojo.document.Conversation;
+import icu.tianqingyuluo.onlineim.exception.ForbiddenException;
 import icu.tianqingyuluo.onlineim.exception.ReplyTargetUnavailableException;
 import icu.tianqingyuluo.onlineim.pojo.document.MessageReplySnapshot;
 import icu.tianqingyuluo.onlineim.pojo.document.PrivateMessage;
 import icu.tianqingyuluo.onlineim.repository.ConversationRepository;
 import icu.tianqingyuluo.onlineim.repository.PrivateMessageRepository;
+import icu.tianqingyuluo.onlineim.service.FriendService;
 import icu.tianqingyuluo.onlineim.service.MessageReplyService;
 import icu.tianqingyuluo.onlineim.service.RedisStreamService;
 import icu.tianqingyuluo.onlineim.websocket.handler.WebSocketFrameSender;
@@ -29,6 +31,7 @@ class PrivateMessageSenderTest {
     private ConversationRepository conversationRepository;
     private RedisStreamService redisStreamService;
     private MessageReplyService messageReplyService;
+    private FriendService friendService;
     private WebSocketFrameSender frameSender;
     private PrivateMessageSender sender;
     private WebSocketSession session;
@@ -40,8 +43,11 @@ class PrivateMessageSenderTest {
         redisStreamService = mock(RedisStreamService.class);
         frameSender = mock(WebSocketFrameSender.class);
         messageReplyService = mock(MessageReplyService.class);
+        friendService = mock(FriendService.class);
+        when(friendService.areFriends(any(), any())).thenReturn(true);
         sender = new PrivateMessageSender(
-                new ObjectMapper(), messageRepository, conversationRepository, redisStreamService, frameSender, messageReplyService);
+                new ObjectMapper(), messageRepository, conversationRepository, redisStreamService,
+                frameSender, messageReplyService, friendService);
 
         ServerWebSocket socket = mock(ServerWebSocket.class);
         when(socket.isClosed()).thenReturn(false);
@@ -152,5 +158,17 @@ class PrivateMessageSenderTest {
                         + "\"message_type\":\"text\",\"content\":\"hello\",\"client_message_id\":\"client_1\"}"));
 
         verifyNoInteractions(messageRepository, redisStreamService, frameSender);
+    }
+
+    @Test
+    void rejectsNonFriendBeforePersistence() {
+        when(friendService.areFriends("usr_sender", "usr_receiver")).thenReturn(false);
+
+        assertThrows(ForbiddenException.class, () -> sender.publishMessage(session,
+                "{\"conversation_id\":\"conv_1\",\"receiver_id\":\"usr_receiver\","
+                        + "\"message_type\":\"text\",\"content\":\"hello\",\"client_message_id\":\"client_1\"}"));
+
+        verify(messageRepository, never()).save(any());
+        verifyNoInteractions(redisStreamService, frameSender);
     }
 }

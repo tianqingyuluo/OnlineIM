@@ -55,8 +55,8 @@ String gid = "grp_" + IdUtil.getSnowflakeNextIdStr();
 
 ## JWT / Security
 
-- **JWT secret key must be persistent** — `JwtUtil.SECRET_KEY = Keys.secretKeyFor(HS256)` is `static final` and regenerated on every JVM start, invalidating all tokens on restart and breaking multi-instance deployments. The secret must be loaded from configuration.
-- **Never echo passwords** in responses — `AuthController.register` includes `password` in the response body.
+- **JWT secret key must be persistent** — `JwtUtil` loads `jwt.secret`. Environment variable `JWT_SECRET` overrides it. HS256 requires at least 32 bytes; a missing or shorter secret fails startup. The committed value is a clearly marked dev placeholder, not a production secret.
+- **Never echo passwords** in responses — register and every other API omit the plaintext password and its hash. Passwords are stored with BCrypt. `User.password` is `@JsonIgnore`.
 - **CORS** is currently wide open (`*` origin patterns). Restrict to known origins in production.
 - **CORS preflight must bypass auth filters** — `OPTIONS /**` should be permitted and JWT filters should pass `OPTIONS` through before reading `Authorization`, otherwise browsers report missing CORS headers instead of the real API error.
 - **`db.properties` contains plaintext credentials** committed to the repository. Use environment variables or a secrets manager.

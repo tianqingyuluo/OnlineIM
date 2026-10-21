@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.controller;
 
+import icu.tianqingyuluo.onlineim.exception.ForbiddenException;
 import icu.tianqingyuluo.onlineim.pojo.document.Conversation;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.ConversationCreateRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.ConversationResponse;
@@ -8,8 +9,10 @@ import icu.tianqingyuluo.onlineim.pojo.dto.response.ReadStateResponse;
 import icu.tianqingyuluo.onlineim.repository.ConversationRepository;
 import icu.tianqingyuluo.onlineim.service.ConversationReadStateService;
 import icu.tianqingyuluo.onlineim.service.ConversationService;
+import icu.tianqingyuluo.onlineim.service.FriendService;
 import icu.tianqingyuluo.onlineim.util.ConversationIdUtil;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -28,16 +31,19 @@ public class ConversationController {
     private final JwtUtil jwtUtil;
     private final ConversationRepository conversationRepository;
     private final ConversationReadStateService readStateService;
+    private final FriendService friendService;
 
     @Autowired
     public ConversationController(ConversationService conversationService,
                                   JwtUtil jwtUtil,
                                   ConversationRepository conversationRepository,
-                                  ConversationReadStateService readStateService) {
+                                  ConversationReadStateService readStateService,
+                                  FriendService friendService) {
         this.conversationService = conversationService;
         this.jwtUtil = jwtUtil;
         this.conversationRepository = conversationRepository;
         this.readStateService = readStateService;
+        this.friendService = friendService;
     }
 
     /**
@@ -106,9 +112,12 @@ public class ConversationController {
     @PostMapping("/create")
     public ResponseEntity<?> createConversation(
             @RequestHeader("Authorization") String token,
-            @RequestBody ConversationCreateRequest request
+            @Valid @RequestBody ConversationCreateRequest request
     ) {
         String userId = jwtUtil.getUserIDFromToken(token);
+        if (!"group".equals(request.getType()) && !friendService.areFriends(userId, request.getTargetId())) {
+            throw new ForbiddenException("只能和好友创建私聊会话");
+        }
 
         Conversation conversation = new Conversation();
         Conversation.LastMessage lastMessage = new Conversation.LastMessage();

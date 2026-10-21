@@ -91,6 +91,37 @@ async function registerAndLogin(
   return { token: body.access_token, userId: body.user_info.user_id, username }
 }
 
+async function becomeFriends(
+  request: APIRequestContext,
+  from: AuthSession,
+  to: AuthSession,
+): Promise<void> {
+  const sent = await request.post('http://127.0.0.1:8080/api/v1/friends/request/send', {
+    headers: authHeaders(from),
+    data: { receiver_id: to.userId, message: 'e2e' },
+  })
+  expect(sent.status()).toBe(201)
+
+  const received = await request.get('http://127.0.0.1:8080/api/v1/friends/requests/received', {
+    headers: authHeaders(to),
+  })
+  expect(received.ok()).toBe(true)
+  const body = await received.json() as {
+    requests: Array<{ request_id?: string, sender_info?: { user_id?: string } }>
+  }
+  const pending = body.requests.find(item => item.sender_info?.user_id === from.userId) ?? body.requests[0]
+  expect(pending?.request_id).toBeTruthy()
+
+  const handled = await request.post(
+    `http://127.0.0.1:8080/api/v1/friends/request/${pending.request_id}/handle`,
+    {
+      headers: authHeaders(to),
+      data: { type: 'accept' },
+    },
+  )
+  expect(handled.status()).toBe(201)
+}
+
 function authHeaders(session: AuthSession): Record<string, string> {
   return { Authorization: `Bearer ${session.token}` }
 }
@@ -107,6 +138,7 @@ test.describe('消息回复真实中间件与 WebSocket 集成', () => {
   test('Mongo 快照、Redis 实时投递、上下文、撤回竞态和幂等重试保持一致', async ({ request }) => {
     const userA = await registerAndLogin(request, 'rpa')
     const userB = await registerAndLogin(request, 'rpb')
+    await becomeFriends(request, userA, userB)
     const createConversation = await request.post(
       'http://127.0.0.1:8080/api/v1/conversations/create',
       {

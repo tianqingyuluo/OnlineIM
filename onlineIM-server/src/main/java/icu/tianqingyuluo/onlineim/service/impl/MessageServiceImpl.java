@@ -20,6 +20,7 @@ import icu.tianqingyuluo.onlineim.repository.ConversationRepository;
 import icu.tianqingyuluo.onlineim.repository.GroupMessageRepository;
 import icu.tianqingyuluo.onlineim.repository.PrivateMessageRepository;
 import icu.tianqingyuluo.onlineim.repository.RecallLogRepository;
+import icu.tianqingyuluo.onlineim.service.FriendService;
 import icu.tianqingyuluo.onlineim.service.GroupMemberService;
 import icu.tianqingyuluo.onlineim.service.MessageReplyService;
 import icu.tianqingyuluo.onlineim.service.MessageService;
@@ -56,6 +57,7 @@ public class MessageServiceImpl implements MessageService {
     private final ConversationRepository conversationRepository;
     private final RedisStreamService redisStreamService;
     private final ObjectMapper objectMapper;
+    private final FriendService friendService;
 
     @Autowired
     public MessageServiceImpl(PrivateMessageRepository privateMessageRepository,
@@ -64,7 +66,8 @@ public class MessageServiceImpl implements MessageService {
                               UserService userService, MessageReplyService messageReplyService,
                               ConversationRepository conversationRepository,
                               RedisStreamService redisStreamService,
-                              ObjectMapper objectMapper) {
+                              ObjectMapper objectMapper,
+                              FriendService friendService) {
         this.privateMessageRepository = privateMessageRepository;
         this.groupMessageRepository = groupMessageRepository;
         this.recallLogRepository = recallLogRepository;
@@ -74,6 +77,7 @@ public class MessageServiceImpl implements MessageService {
         this.conversationRepository = conversationRepository;
         this.redisStreamService = redisStreamService;
         this.objectMapper = objectMapper;
+        this.friendService = friendService;
     }
 
     @Override
@@ -371,6 +375,9 @@ public class MessageServiceImpl implements MessageService {
         if (targetId.startsWith("usr_")) {
             if (userId.equals(targetId)) {
                 throw new IllegalArgumentException("不能给自己发送私聊消息");
+            }
+            if (!friendService.areFriends(userId, targetId)) {
+                throw new ForbiddenException("你们还不是好友，无法发送私聊消息");
             }
             String conversationId = ConversationIdUtil.privateConversationId(userId, targetId);
             assertPrivateConversationAccess(conversationId, userId, targetId);

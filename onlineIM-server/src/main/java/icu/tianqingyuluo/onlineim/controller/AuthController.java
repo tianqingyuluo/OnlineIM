@@ -62,7 +62,7 @@ public class AuthController {
      * @return JWT令牌
      */
     @PostMapping("/login")
-    public ResponseEntity<?> createAuthenticationToken(@RequestBody AuthRequest authRequest) {
+    public ResponseEntity<?> createAuthenticationToken(@Valid @RequestBody AuthRequest authRequest) {
         try {
             // 尝试进行身份验证
             authenticationManager.authenticate(
@@ -136,7 +136,6 @@ public class AuthController {
         response.put("user_id", user.getId());
         response.put("username", request.getUsername());
         response.put("nickname", user.getNickname());
-        response.put("password", request.getPassword());
         return ResponseEntity.status(201).body(response);
     }
 

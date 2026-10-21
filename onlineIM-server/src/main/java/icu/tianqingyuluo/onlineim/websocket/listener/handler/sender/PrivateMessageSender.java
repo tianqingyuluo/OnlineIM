@@ -2,6 +2,7 @@ package icu.tianqingyuluo.onlineim.websocket.listener.handler.sender;
 
 import cn.hutool.core.util.IdUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import icu.tianqingyuluo.onlineim.exception.ForbiddenException;
 import icu.tianqingyuluo.onlineim.exception.ReplyTargetUnavailableException;
 import icu.tianqingyuluo.onlineim.pojo.document.Conversation;
 import icu.tianqingyuluo.onlineim.pojo.document.MessageReplySnapshot;
@@ -10,6 +11,7 @@ import icu.tianqingyuluo.onlineim.pojo.dto.request.websocket.PrivateMessageReque
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageAckPayload;
 import icu.tianqingyuluo.onlineim.repository.ConversationRepository;
 import icu.tianqingyuluo.onlineim.repository.PrivateMessageRepository;
+import icu.tianqingyuluo.onlineim.service.FriendService;
 import icu.tianqingyuluo.onlineim.service.MessageReplyService;
 import icu.tianqingyuluo.onlineim.service.RedisStreamService;
 import icu.tianqingyuluo.onlineim.websocket.handler.WebSocketFrameSender;
@@ -28,19 +30,22 @@ public class PrivateMessageSender implements MessageSenderHandler {
     private final RedisStreamService redisStreamService;
     private final WebSocketFrameSender frameSender;
     private final MessageReplyService messageReplyService;
+    private final FriendService friendService;
 
     public PrivateMessageSender(ObjectMapper objectMapper,
                                 PrivateMessageRepository privateMessageRepository,
                                 ConversationRepository conversationRepository,
                                 RedisStreamService redisStreamService,
                                 WebSocketFrameSender frameSender,
-                                MessageReplyService messageReplyService) {
+                                MessageReplyService messageReplyService,
+                                FriendService friendService) {
         this.objectMapper = objectMapper;
         this.privateMessageRepository = privateMessageRepository;
         this.conversationRepository = conversationRepository;
         this.redisStreamService = redisStreamService;
         this.frameSender = frameSender;
         this.messageReplyService = messageReplyService;
+        this.friendService = friendService;
     }
 
     @Override
@@ -61,6 +66,9 @@ public class PrivateMessageSender implements MessageSenderHandler {
                     || session.getUserId().equals(request.getReceiverId())
                     || !isConversationParticipant(request.getConversationId(), session.getUserId(), request.getReceiverId())) {
                 return false;
+            }
+            if (!friendService.areFriends(session.getUserId(), request.getReceiverId())) {
+                throw new ForbiddenException("你们还不是好友，无法发送私聊消息");
             }
 
             String senderId = session.getUserId();
@@ -101,7 +109,7 @@ public class PrivateMessageSender implements MessageSenderHandler {
 
             sendAck(session, privateMessage);
             return true;
-        } catch (ReplyTargetUnavailableException ex) {
+        } catch (ReplyTargetUnavailableException | ForbiddenException ex) {
             throw ex;
         } catch (Exception ex) {
             log.warn("处理私聊消息失败: userId={}, error={}", session.getUserId(), ex.getMessage());

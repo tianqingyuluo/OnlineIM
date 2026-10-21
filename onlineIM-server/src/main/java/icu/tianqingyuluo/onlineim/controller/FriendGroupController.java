@@ -8,6 +8,7 @@ import icu.tianqingyuluo.onlineim.service.FriendGroupService;
 import icu.tianqingyuluo.onlineim.service.impl.FriendGroupServiceImpl;
 import icu.tianqingyuluo.onlineim.util.ErrorCodeUtil;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -70,7 +71,7 @@ public class FriendGroupController {
     @PostMapping("")
     public ResponseEntity<?> createFriendGroup(
             @RequestHeader("Authorization") String token,
-            @RequestBody FriendGroupCreateRequest request) {
+            @Valid @RequestBody FriendGroupCreateRequest request) {
 
         if (request == null) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -108,7 +109,7 @@ public class FriendGroupController {
     public ResponseEntity<?> updateFriendGroup(
             @RequestHeader("Authorization") String token,
             @PathVariable String groupId,
-            @RequestBody FriendGroupUpdateRequest request) {
+            @Valid @RequestBody FriendGroupUpdateRequest request) {
 
         if (request == null) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
