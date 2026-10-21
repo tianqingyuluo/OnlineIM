@@ -191,6 +191,10 @@ public class GroupAnnouncementController {
         if (!groupService.isUserAdminOrOwner(groupId, deleterId)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorCodeUtil.getErrorOutput("403", "你没有此权限"));
         }
+        // 公告必须属于路径里的群，否则别的群的管理员能删掉任意群的公告
+        if (groupAnnouncementService.getAnnouncementById(groupId, announcementId) == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ErrorCodeUtil.getErrorOutput("404", "公告不存在"));
+        }
         try {
             groupAnnouncementService.deleteAnnouncement(groupId, announcementId, deleterId);
             groupAnnouncementReadService.afterDeleted(groupId, announcementId, deleterId);
@@ -228,8 +232,11 @@ public class GroupAnnouncementController {
         if (!groupService.isUserAdminOrOwner(groupId, operatorId)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorCodeUtil.getErrorOutput("403", "你没有此权限"));
         }
+        GroupAnnouncementResponse before = groupAnnouncementService.getAnnouncementById(groupId, announcementId);
+        if (before == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ErrorCodeUtil.getErrorOutput("404", "公告不存在"));
+        }
         try {
-            GroupAnnouncementResponse before = groupAnnouncementService.getAnnouncementById(groupId, announcementId);
             groupAnnouncementService.pinAnnouncement(groupId, announcementId, pinStatus, operatorId);
             GroupAnnouncementResponse after = groupAnnouncementService.getAnnouncementById(groupId, announcementId);
             if (after != null) {

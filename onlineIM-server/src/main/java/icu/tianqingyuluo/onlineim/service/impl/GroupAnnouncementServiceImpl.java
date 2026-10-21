@@ -75,6 +75,9 @@ public class GroupAnnouncementServiceImpl implements GroupAnnouncementService {
 
     @Override
     public void deleteAnnouncement(String groupId, String announcementId, String deleterId) {
+        if (groupAnnouncementMapper.isSelfAnnouncement(announcementId, groupId) != 1) {
+            return;
+        }
         groupAnnouncementMapper.delete(announcementId);
     }
 
