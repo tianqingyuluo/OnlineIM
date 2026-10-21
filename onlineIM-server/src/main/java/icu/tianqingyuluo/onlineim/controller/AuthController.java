@@ -120,7 +120,7 @@ public class AuthController {
                 .builder()
                 .id("usr_" + IdUtil.getSnowflakeNextIdStr())
                 .username(request.getUsername())
-                .nickname("anony_" + IdUtil.fastSimpleUUID())
+                .nickname(resolveNickname(request.getNickname()))
                 .password(bCryptPasswordEncoder.encode(request.getPassword()))
                 .build();
 
@@ -137,6 +137,16 @@ public class AuthController {
         response.put("username", request.getUsername());
         response.put("nickname", user.getNickname());
         return ResponseEntity.status(201).body(response);
+    }
+
+    /**
+     * 注册时使用用户填写的昵称（去掉首尾空白）；未填写或只有空白时生成 anony_ 匿名昵称。
+     */
+    static String resolveNickname(String nickname) {
+        if (nickname != null && !nickname.isBlank()) {
+            return nickname.strip();
+        }
+        return "anony_" + IdUtil.fastSimpleUUID();
     }
 
     /**

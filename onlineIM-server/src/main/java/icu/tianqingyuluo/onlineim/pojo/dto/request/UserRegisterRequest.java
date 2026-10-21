@@ -35,9 +35,9 @@ public class UserRegisterRequest {
     private String password;
     
     /**
-     * 昵称，可选。不传时由服务端生成，避免现有客户端只提交用户名和密码时注册失败。
+     * 昵称，可选，最多 16 个字符。不传、传空串或只有空白时由服务端生成 anony_ 匿名昵称。
      */
-    @Size(min = 1, max = 16, message = "昵称长度必须在1-16之间")
+    @Size(max = 16, message = "昵称长度不能超过16个字符")
     private String nickname;
     
     /**

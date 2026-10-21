@@ -33,6 +33,12 @@ export const RegisterService = {
                 mismatch: '两次输入密码不一致',
                 required: '请确认密码'
             }
+        },
+        nickname: {
+            max: 16,
+            messages: {
+                max: '昵称长度不能超过16个字符'
+            }
         }
     },
 
@@ -46,6 +52,7 @@ export const RegisterService = {
             username: string;
             password: string;
             confirmPassword: string;
+            nickname?: string;
         },
         formContext?: FieldErrors
     ): Promise<boolean> {
@@ -59,9 +66,12 @@ export const RegisterService = {
                 return false;
             }
 
+            // 昵称可选：去掉首尾空白后为空就不传，由服务端生成 anony_ 匿名昵称
+            const nickname = formData.nickname?.trim();
             await api.post('/auth/register', {
                 username: formData.username,
-                password: formData.password
+                password: formData.password,
+                ...(nickname ? { nickname } : {})
             });
             toast.success('注册成功', {
                 description: '账号已创建，请登录',

@@ -63,6 +63,27 @@ class AuthControllerValidationTest {
     }
 
     @Test
+    void registerKeepsProvidedNicknameAndFallsBackWhenBlank() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"nick1\",\"password\":\"secret12\",\"nickname\":\"  小明  \"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.nickname").value("小明"));
+        verify(userService).registerUser(argThat((User user) -> "小明".equals(user.getNickname())));
+
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"nick2\",\"password\":\"secret12\",\"nickname\":\"\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.nickname").value(org.hamcrest.Matchers.startsWith("anony_")));
+
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"nick3\",\"password\":\"secret12\",\"nickname\":\"12345678901234567\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void registerRejectsInvalidUsernameWith400() throws Exception {
         mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)

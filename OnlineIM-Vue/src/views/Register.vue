@@ -48,7 +48,14 @@ const formSchema = toTypedSchema(
           ),
       confirmPassword: z.string({
         required_error: RegisterService.validationRules.confirmPassword.messages.required
-      })
+      }),
+      nickname: z.string()
+          .trim()
+          .max(
+              RegisterService.validationRules.nickname.max,
+              RegisterService.validationRules.nickname.messages.max
+          )
+          .optional()
     }).refine(
         data => data.password === data.confirmPassword,
         {
@@ -63,13 +70,14 @@ const { handleSubmit, setFieldError } = useForm({
   initialValues: {
     username: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    nickname: ''
   }
 })
 
 const onSubmit = handleSubmit(async (values) => {
   const registered = await RegisterService.register(values, {
-    setFieldError: (field, message) => setFieldError(field as 'username' | 'password' | 'confirmPassword', message)
+    setFieldError: (field, message) => setFieldError(field as 'username' | 'password' | 'confirmPassword' | 'nickname', message)
   })
   if (registered) {
     await router.push('/login')
@@ -134,6 +142,23 @@ const onSubmit = handleSubmit(async (values) => {
                 <Input
                     type="password"
                     placeholder="请再次输入密码"
+                    v-bind="componentField"
+                    class="border-gray-200 focus:border-gray-500 focus:ring-gray-500"
+                />
+              </FormControl>
+              <FormMessage class="text-red-500 text-sm">
+                {{ errorMessage }}
+              </FormMessage>
+            </FormItem>
+          </FormField>
+
+          <FormField v-slot="{ componentField, errorMessage }" name="nickname">
+            <FormItem>
+              <FormLabel class="text-sm font-medium text-gray-700">昵称（可选）</FormLabel>
+              <FormControl>
+                <Input
+                    type="text"
+                    placeholder="不填则自动生成"
                     v-bind="componentField"
                     class="border-gray-200 focus:border-gray-500 focus:ring-gray-500"
                 />
