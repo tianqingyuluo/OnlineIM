@@ -10,6 +10,9 @@ import icu.tianqingyuluo.onlineim.websocket.session.SessionKickBus;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.data.redis.core.script.RedisScript;
+import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -29,6 +32,11 @@ public class DeviceSessionService {
 
     public static final String SESSION_PREFIX = "user:sessions:";
     public static final String TYPE_INDEX_PREFIX = "user:device-type:";
+
+    static final RedisScript<Object> INDEX_SWAP = new DefaultRedisScript<>(
+            "local old = redis.call('HGET', KEYS[1], ARGV[1]) "
+                    + "redis.call('HSET', KEYS[1], ARGV[1], ARGV[2]) "
+                    + "return old", Object.class);
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final JwtService jwtService;
@@ -60,42 +68,39 @@ public class DeviceSessionService {
             return;
         }
         String type = DeviceTypes.normalize(deviceType);
-        String previousId = indexGet(userId, type);
-        if (previousId != null && !previousId.equals(safeId)) {
-            evict(userId, previousId, type, DeviceTypes.REASON_SAME_TYPE);
-        } else if (previousId != null) {
-            RedisConnectionMeta existing = read(userId, safeId);
-            String oldToken = existing == null ? null : bearer(existing.getToken());
-            String nextToken = bearer(token);
+        String nextToken = bearer(token);
+        RedisConnectionMeta existing = read(userId, safeId);
+        if (existing != null) {
+            // 同一台设备重新登录：旧 token 作废，旧页面收到下线通知
+            String oldToken = bearer(existing.getToken());
             if (oldToken != null && nextToken != null && !oldToken.equals(nextToken)) {
                 invalidate(oldToken);
                 notifyKicked(userId, safeId, type, DeviceTypes.REASON_RELOGIN);
             }
+            // 同一个 device_id 换了类型登录：清掉旧类型下指向它的索引，避免设备列表出现两条
+            String oldType = existing.getDeviceType() == null ? null : DeviceTypes.normalize(existing.getDeviceType());
+            if (oldType != null && !oldType.equals(type) && safeId.equals(indexGet(userId, oldType))) {
+                redisTemplate.opsForHash().delete(indexKey(userId), oldType);
+            }
         }
 
-        RedisConnectionMeta meta = read(userId, safeId);
-        boolean replacedOtherDevice = previousId != null && !previousId.equals(safeId);
-        if (meta == null || replacedOtherDevice) {
-            meta = new RedisConnectionMeta();
-            meta.setLoginTime(System.currentTimeMillis());
-            meta.setConnectionID(null);
-        }
-        meta.setToken(bearer(token));
+        long now = System.currentTimeMillis();
+        RedisConnectionMeta meta = new RedisConnectionMeta();
+        meta.setToken(nextToken);
         meta.setUserId(userId);
         meta.setDeviceId(safeId);
         meta.setDeviceType(type);
         meta.setCurrentNodeIP(nodeIp);
-        meta.setActiveTime(System.currentTimeMillis());
-        if (meta.getLoginTime() == null) {
-            meta.setLoginTime(meta.getActiveTime());
-        }
-        if (previousId != null && previousId.equals(safeId)) {
-            // 同一设备重新登录，旧连接已经收到下线通知，等新的 WebSocket 再标在线
-            meta.setConnectionID(null);
-            meta.setLoginTime(System.currentTimeMillis());
-        }
+        meta.setLoginTime(now);
+        meta.setActiveTime(now);
+        // 新登录的设备等 WebSocket 连上再标在线
+        meta.setConnectionID(null);
+        // 先写好自己的登录记录再抢索引：并发登录时后抢到的一方能读到先来者的 token 并作废它
         write(userId, safeId, meta);
-        indexPut(userId, type, safeId);
+        String previousId = indexSwap(userId, type, safeId);
+        if (previousId != null && !previousId.equals(safeId)) {
+            evict(userId, previousId, type, DeviceTypes.REASON_SAME_TYPE);
+        }
     }
 
     /**
@@ -110,10 +115,6 @@ public class DeviceSessionService {
         String type = deviceType == null || deviceType.isBlank()
                 ? (meta != null && meta.getDeviceType() != null ? meta.getDeviceType() : DeviceTypes.WEB)
                 : DeviceTypes.normalize(deviceType);
-        String indexed = indexGet(userId, type);
-        if (indexed != null && !indexed.equals(safeId)) {
-            evict(userId, indexed, type, DeviceTypes.REASON_SAME_TYPE);
-        }
         if (meta == null) {
             meta = new RedisConnectionMeta();
             meta.setLoginTime(System.currentTimeMillis());
@@ -126,7 +127,10 @@ public class DeviceSessionService {
         meta.setCurrentNodeIP(nodeIp);
         meta.setActiveTime(System.currentTimeMillis());
         write(userId, safeId, meta);
-        indexPut(userId, type, safeId);
+        String indexed = indexSwap(userId, type, safeId);
+        if (indexed != null && !indexed.equals(safeId)) {
+            evict(userId, indexed, type, DeviceTypes.REASON_SAME_TYPE);
+        }
     }
 
     /**
@@ -283,8 +287,18 @@ public class DeviceSessionService {
         return value == null ? null : String.valueOf(value);
     }
 
-    private void indexPut(String userId, String deviceType, String deviceId) {
-        redisTemplate.opsForHash().put(indexKey(userId), deviceType, deviceId);
+    /**
+     * 原子地把这个类型指向 deviceId，返回原来指向的设备。读和写分开做时，两次并发登录会读到同一个旧设备，
+     * 各自挤掉它之后都留了下来，其中一个 token 有效却不在设备列表里。
+     */
+    @SuppressWarnings("unchecked")
+    String indexSwap(String userId, String deviceType, String deviceId) {
+        RedisSerializer<Object> valueSerializer = (RedisSerializer<Object>) redisTemplate.getHashValueSerializer();
+        byte[] field = RedisSerializer.string().serialize(deviceType);
+        byte[] value = valueSerializer.serialize(deviceId);
+        Object previous = redisTemplate.execute(INDEX_SWAP, RedisSerializer.byteArray(), valueSerializer,
+                List.of(indexKey(userId)), field, value);
+        return previous == null ? null : String.valueOf(previous);
     }
 
     private RedisConnectionMeta read(String userId, String deviceId) {

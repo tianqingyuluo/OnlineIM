@@ -15,7 +15,13 @@ import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.TimeUnit;
+import org.springframework.data.redis.core.script.RedisScript;
+import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.RedisSerializer;
 import java.util.List;
 import java.util.Map;
 
@@ -24,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
@@ -39,11 +46,12 @@ class DeviceSessionServiceTest {
     private JwtService jwtService;
     private SessionKickBus kickBus;
     private LocalSessionRegistry registry;
+    private volatile CyclicBarrier readBarrier;
     private DeviceSessionService service;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @BeforeEach
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings({"unchecked", "rawtypes"})
     void setUp() {
         RedisTemplate<String, Object> redis = mock(RedisTemplate.class);
         ValueOperations<String, Object> valueOps = mock(ValueOperations.class);
@@ -57,6 +65,13 @@ class DeviceSessionServiceTest {
         }).when(valueOps).set(anyString(), any());
         when(redis.delete(anyString())).thenAnswer(invocation -> values.remove(invocation.getArgument(0)) != null);
         when(hashOps.get(anyString(), any())).thenAnswer(invocation -> {
+            if (readBarrier != null) {
+                try {
+                    readBarrier.await(300, TimeUnit.MILLISECONDS);
+                } catch (Exception ignored) {
+                    // 修复后登录不再单独读索引，等不到另一方就直接往下走
+                }
+            }
             Map<Object, Object> hash = hashes.get(invocation.getArgument(0));
             return hash == null ? null : hash.get(invocation.getArgument(1));
         });
@@ -75,6 +90,17 @@ class DeviceSessionServiceTest {
             return 1L;
         }).when(hashOps).delete(anyString(), any());
 
+        GenericJackson2JsonRedisSerializer json = new GenericJackson2JsonRedisSerializer();
+        when(redis.getHashValueSerializer()).thenReturn((RedisSerializer) json);
+        when(redis.execute(any(RedisScript.class), any(RedisSerializer.class), any(RedisSerializer.class), anyList(), any(), any()))
+                .thenAnswer(invocation -> {
+                    String key = (String) ((List<?>) invocation.getArgument(3)).get(0);
+                    String field = new String((byte[]) invocation.getArgument(4), StandardCharsets.UTF_8);
+                    Object value = json.deserialize((byte[]) invocation.getArgument(5));
+                    synchronized (hashes) {
+                        return hashes.computeIfAbsent(key, k -> new HashMap<>()).put(field, value);
+                    }
+                });
         jwtService = mock(JwtService.class);
         kickBus = mock(SessionKickBus.class);
         registry = mock(LocalSessionRegistry.class);
@@ -155,5 +181,41 @@ class DeviceSessionServiceTest {
         when(registry.findByDevice("usr_1", "web-1")).thenReturn(null);
         service.onWebSocketClosed("usr_1", "web-1", "conn_tab1");
         assertFalse(service.list("usr_1", "web-1").get(0).isOnline());
+    }
+
+    @Test
+    void concurrentSameTypeLoginsLeaveExactlyOneValidSession() throws Exception {
+        service.onLogin("usr_1", "web-old", DeviceTypes.WEB, "Bearer old");
+        // 两次登录都先读到 web-old，再各自写索引（修复前的交错）
+        readBarrier = new CyclicBarrier(2);
+        Thread a = new Thread(() -> service.onLogin("usr_1", "web-a", DeviceTypes.WEB, "Bearer a"));
+        Thread b = new Thread(() -> service.onLogin("usr_1", "web-b", DeviceTypes.WEB, "Bearer b"));
+        a.start();
+        b.start();
+        a.join(5000);
+        b.join(5000);
+        readBarrier = null;
+
+        verify(jwtService).invalidateJWT("Bearer old");
+        String winner = (String) hashes.get(DeviceSessionService.indexKey("usr_1")).get(DeviceTypes.WEB);
+        String loser = "web-a".equals(winner) ? "b" : "a";
+        // 没留在索引里的那一方必须被挤下线：token 作废、登录记录删除
+        verify(jwtService).invalidateJWT("Bearer " + loser);
+        verify(jwtService, never()).invalidateJWT("Bearer " + winner.substring(4));
+        assertNull(values.get(DeviceSessionService.sessionKey("usr_1", "web-" + loser)));
+        assertEquals(1, service.list("usr_1", winner).size());
+    }
+
+    @Test
+    void sameDeviceIdLoggingInAsAnotherTypeIsListedOnce() {
+        service.onLogin("usr_1", "dev-1", DeviceTypes.WEB, "Bearer as-web");
+        service.onLogin("usr_1", "dev-1", DeviceTypes.PHONE, "Bearer as-phone");
+
+        verify(jwtService).invalidateJWT("Bearer as-web");
+        List<DeviceSessionResponse> devices = service.list("usr_1", "dev-1");
+        assertEquals(1, devices.size());
+        assertEquals(DeviceTypes.PHONE, devices.get(0).getDeviceType());
+        assertTrue(service.remoteLogout("usr_1", "dev-1"));
+        assertTrue(service.list("usr_1", "dev-1").isEmpty());
     }
 }
