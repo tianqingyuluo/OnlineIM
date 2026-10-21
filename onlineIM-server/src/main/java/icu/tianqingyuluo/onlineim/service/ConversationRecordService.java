@@ -195,6 +195,7 @@ public class ConversationRecordService {
             case "file" -> "[文件]";
             case "voice", "audio" -> "[语音]";
             case "video" -> "[视频]";
+            case "emoji", "sticker" -> "[表情]";
             default -> "[消息]";
         };
     }

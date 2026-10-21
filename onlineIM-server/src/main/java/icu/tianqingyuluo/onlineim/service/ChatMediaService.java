@@ -66,6 +66,7 @@ public class ChatMediaService {
     private final ChatUploadProperties properties;
     private final ObjectMapper objectMapper;
     private final SecureRandom random = new SecureRandom();
+    private EmojiService emojiService;
 
     public ChatMediaService(FileStorageService storage, ChatUploadRepository repository,
                             ChatUploadProperties properties, ObjectMapper objectMapper) {
@@ -75,8 +76,16 @@ public class ChatMediaService {
         this.objectMapper = objectMapper;
     }
 
+    /** 由服务端补全内容的消息类型：图片 / 文件 / 语音按上传记录，表情（emoji/sticker）按表情收藏 */
     public static boolean isMediaMessage(String messageType) {
-        return KIND_IMAGE.equals(messageType) || KIND_FILE.equals(messageType) || KIND_VOICE.equals(messageType);
+        return KIND_IMAGE.equals(messageType) || KIND_FILE.equals(messageType) || KIND_VOICE.equals(messageType)
+                || EmojiService.isEmojiMessage(messageType);
+    }
+
+    /** 表情服务（setter 注入，避免与消息相关服务形成构造器循环依赖；单测中可为空） */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setEmojiService(EmojiService emojiService) {
+        this.emojiService = emojiService;
     }
 
     /** 发送媒体消息时由服务端生成的消息内容（JSON 字符串）与扩展字段 */
@@ -245,6 +254,12 @@ public class ChatMediaService {
      * 只能引用自己上传的文件；图片消息只能引用图片上传。
      */
     public ResolvedMedia resolveForMessage(String senderId, String messageType, String content) {
+        if (EmojiService.isEmojiMessage(messageType)) {
+            if (emojiService == null) {
+                throw ChatMediaException.badRequest("表情功能不可用");
+            }
+            return emojiService.resolveForMessage(senderId, content);
+        }
         String fileId = extractFileId(content);
         if (fileId == null) {
             throw ChatMediaException.badRequest("媒体消息缺少 file_id");
@@ -370,7 +385,7 @@ public class ChatMediaService {
         return current;
     }
 
-    private static byte[] encodeJpeg(BufferedImage image) throws IOException {
+    static byte[] encodeJpeg(BufferedImage image) throws IOException {
         ImageWriter writer = ImageIO.getImageWritersByFormatName("jpeg").next();
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (ImageOutputStream output = ImageIO.createImageOutputStream(out)) {
@@ -385,7 +400,7 @@ public class ChatMediaService {
         return out.toByteArray();
     }
 
-    private static byte[] encodePng(BufferedImage image) throws IOException {
+    static byte[] encodePng(BufferedImage image) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         ImageIO.write(image, "png", out);
         return out.toByteArray();
