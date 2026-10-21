@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.controller;
 
+import icu.tianqingyuluo.onlineim.pojo.dto.request.MessageEditRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.MessageForwardRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.request.MessageSendRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageForwardResponse;
@@ -8,6 +9,7 @@ import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageResponse;
 import icu.tianqingyuluo.onlineim.pojo.entity.UserIDProvider;
 import icu.tianqingyuluo.onlineim.pojo.document.ChatUpload;
 import icu.tianqingyuluo.onlineim.service.ChatMediaService;
+import icu.tianqingyuluo.onlineim.service.MessageEditService;
 import icu.tianqingyuluo.onlineim.service.MessageForwardService;
 import icu.tianqingyuluo.onlineim.service.MessageService;
 import icu.tianqingyuluo.onlineim.util.ErrorCodeUtil;
@@ -36,13 +38,15 @@ public class MessageController {
     private final JwtUtil jwtUtil;
     private final ChatMediaService chatMediaService;
     private final MessageForwardService messageForwardService;
+    private final MessageEditService messageEditService;
 
     public MessageController(MessageService messageService, JwtUtil jwtUtil, ChatMediaService chatMediaService,
-                             MessageForwardService messageForwardService) {
+                             MessageForwardService messageForwardService, MessageEditService messageEditService) {
         this.messageService = messageService;
         this.jwtUtil = jwtUtil;
         this.chatMediaService = chatMediaService;
         this.messageForwardService = messageForwardService;
+        this.messageEditService = messageEditService;
     }
 
     /**
@@ -109,6 +113,20 @@ public class MessageController {
         return ResponseEntity.ok(result);
     }
     
+    /**
+     * 编辑自己发送的文本消息（时间窗内），返回编辑后的消息；会话成员经 WebSocket 收到 MESSAGE_EDITED
+     */
+    @PutMapping("/{messageId}")
+    public ResponseEntity<MessageResponse> editMessage(
+            @PathVariable String messageId,
+            @RequestBody MessageEditRequest request,
+            @AuthenticationPrincipal UserIDProvider principal) {
+        if (principal == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        return ResponseEntity.ok(messageEditService.edit(messageId, request, principal.getID()));
+    }
+
     // 已删除标记消息已读功能
     
     /**

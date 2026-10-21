@@ -247,6 +247,55 @@ public class ConversationRecordService {
         }
     }
 
+    /**
+     * 消息被编辑：如果它是各参与者记录里的最后一条消息，把预览换成新内容（不改 updatedAt / 未读数，列表不重新排序）。
+     */
+    public void onMessageEdited(String conversationId, String messageId, String messageType, String content) {
+        try {
+            mongoTemplate.updateMulti(Query.query(Criteria.where("conversationId").is(conversationId)
+                            .and("lastMessage.messageId").is(messageId)),
+                    new Update().set("lastMessage.content", preview(messageType, content)),
+                    Conversation.class);
+        } catch (RuntimeException ex) {
+            log.warn("更新编辑预览失败: conversationId={}, error={}", conversationId, ex.getMessage());
+        }
+    }
+
+    /**
+     * 群消息编辑后 @ 列表变化：不再被 @ 的成员移除这条“有人@我”，新被 @ 的成员补一条（已读过的会在下次已读推进时清掉）。
+     */
+    public void onMentionsEdited(GroupMessage message, Collection<String> removed, Collection<String> added) {
+        if (message == null || message.getGroupId() == null) {
+            return;
+        }
+        for (String userId : distinct(removed)) {
+            try {
+                updateOwn(message.getGroupId(), userId, new Update().pull("pendingMentions",
+                        Query.query(Criteria.where("messageId").is(message.getId())).getQueryObject()));
+            } catch (RuntimeException ex) {
+                log.warn("移除编辑后失效的 @我 失败: groupId={}, userId={}, error={}", message.getGroupId(), userId, ex.getMessage());
+            }
+        }
+        for (String userId : distinct(added)) {
+            if (userId.equals(message.getSenderId())) {
+                continue;
+            }
+            try {
+                mongoTemplate.updateFirst(Query.query(Criteria.where("_id").is(recordId(message.getGroupId(), userId))
+                                .and("pendingMentions.messageId").ne(message.getId())),
+                        new Update().push("pendingMentions").slice(-MAX_PENDING_MENTIONS).each(
+                                Conversation.PendingMention.builder()
+                                        .messageId(message.getId())
+                                        .seqId(message.getSeqId())
+                                        .senderId(message.getSenderId())
+                                        .build()),
+                        Conversation.class);
+            } catch (RuntimeException ex) {
+                log.warn("补充编辑后的 @我 失败: groupId={}, userId={}, error={}", message.getGroupId(), userId, ex.getMessage());
+            }
+        }
+    }
+
     static String preview(String messageType, String content) {
         String type = messageType == null ? "" : messageType.toLowerCase();
         return switch (type) {

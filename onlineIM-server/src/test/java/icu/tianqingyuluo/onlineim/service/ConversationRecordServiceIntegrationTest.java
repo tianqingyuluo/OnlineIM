@@ -303,4 +303,47 @@ class ConversationRecordServiceIntegrationTest {
         message.setTimestamp(new Date());
         return message;
     }
+
+    @Test
+    void editUpdatesPreviewOnlyWhenItIsTheLastMessageAndAdjustsMentions() {
+        records.ensureGroupMembers(GRP, List.of(A, B, C));
+        GroupMessage first = new GroupMessage();
+        first.setId("msg_g1");
+        first.setGroupId(GRP);
+        first.setSenderId(A);
+        first.setMessageType("text");
+        first.setContent("@b 第一条");
+        first.setSeqId("1");
+        first.setAtUsers(List.of(B));
+        first.setTimestamp(new Date());
+        records.onGroupMessage(first, List.of(A, B, C));
+        GroupMessage second = new GroupMessage();
+        second.setId("msg_g2");
+        second.setGroupId(GRP);
+        second.setSenderId(A);
+        second.setMessageType("text");
+        second.setContent("第二条");
+        second.setSeqId("2");
+        second.setTimestamp(new Date());
+        records.onGroupMessage(second, List.of(A, B, C));
+        Date updatedBefore = record(GRP, B).getUpdatedAt();
+
+        // 不是最后一条：预览不变
+        records.onMessageEdited(GRP, "msg_g1", "text", "@c 第一条改");
+        assertEquals("第二条", record(GRP, B).getLastMessage().getContent());
+
+        records.onMessageEdited(GRP, "msg_g2", "text", "第二条改过");
+        assertEquals("第二条改过", record(GRP, A).getLastMessage().getContent());
+        assertEquals("第二条改过", record(GRP, C).getLastMessage().getContent());
+        assertEquals(updatedBefore, record(GRP, B).getUpdatedAt());
+        assertEquals(2, record(GRP, B).getUnreadCount());
+
+        // @ 从 B 改成 C：B 的 @我 移除，C 补一条；重复调用不会重复添加
+        records.onMentionsEdited(first, List.of(B), List.of(C, A));
+        records.onMentionsEdited(first, List.of(), List.of(C));
+        assertTrue(record(GRP, B).getPendingMentions() == null || record(GRP, B).getPendingMentions().isEmpty());
+        assertEquals(1, record(GRP, C).getPendingMentions().size());
+        assertEquals("msg_g1", record(GRP, C).getPendingMentions().getFirst().getMessageId());
+        assertTrue(record(GRP, A).getPendingMentions() == null || record(GRP, A).getPendingMentions().isEmpty());
+    }
 }

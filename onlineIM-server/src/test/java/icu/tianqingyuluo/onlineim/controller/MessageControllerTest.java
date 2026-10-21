@@ -6,6 +6,7 @@ import icu.tianqingyuluo.onlineim.pojo.dto.request.MessageSendRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageContextResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageResponse;
 import icu.tianqingyuluo.onlineim.pojo.entity.UserIDProvider;
+import icu.tianqingyuluo.onlineim.service.MessageEditService;
 import icu.tianqingyuluo.onlineim.service.MessageForwardService;
 import icu.tianqingyuluo.onlineim.service.MessageService;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
@@ -65,7 +66,7 @@ class MessageControllerTest {
     @Test
     void contextEndpointUsesAuthenticatedPrincipalAndForwardsWindow() throws Exception {
         MessageService messageService = mock(MessageService.class);
-        MessageController controller = new MessageController(messageService, mock(JwtUtil.class), mock(ChatMediaService.class), mock(MessageForwardService.class));
+        MessageController controller = new MessageController(messageService, mock(JwtUtil.class), mock(ChatMediaService.class), mock(MessageForwardService.class), mock(MessageEditService.class));
         UserIDProvider principal = () -> "usr_me";
         MessageContextResponse expected = MessageContextResponse.builder()
                 .targetMessageId("msg_100")
@@ -93,7 +94,7 @@ class MessageControllerTest {
     @Test
     void sendEndpointUsesAuthenticatedPrincipal() {
         MessageService messageService = mock(MessageService.class);
-        MessageController controller = new MessageController(messageService, mock(JwtUtil.class), mock(ChatMediaService.class), mock(MessageForwardService.class));
+        MessageController controller = new MessageController(messageService, mock(JwtUtil.class), mock(ChatMediaService.class), mock(MessageForwardService.class), mock(MessageEditService.class));
         UserIDProvider principal = () -> "usr_me";
         MessageSendRequest request = MessageSendRequest.builder()
                 .targetId("usr_peer")
@@ -139,7 +140,7 @@ class MessageControllerTest {
 
         MessageForwardService forwardService = mock(MessageForwardService.class);
         MessageController controller = new MessageController(mock(MessageService.class), mock(JwtUtil.class),
-                mock(ChatMediaService.class), forwardService);
+                mock(ChatMediaService.class), forwardService, mock(MessageEditService.class));
         icu.tianqingyuluo.onlineim.pojo.dto.response.MessageForwardResponse expected =
                 icu.tianqingyuluo.onlineim.pojo.dto.response.MessageForwardResponse.builder()
                         .mode("merged").results(List.of()).build();
@@ -147,5 +148,24 @@ class MessageControllerTest {
 
         assertEquals(expected, controller.forwardMessages(request, () -> "usr_me").getBody());
         assertEquals(401, controller.forwardMessages(request, null).getStatusCode().value());
+    }
+
+    @Test
+    void editRequestAcceptsSnakeCaseAndEndpointUsesPrincipal() throws Exception {
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        icu.tianqingyuluo.onlineim.pojo.dto.request.MessageEditRequest request = mapper.readValue(
+                "{\"content\":\"新内容\",\"at_users\":[\"usr_b\"]}",
+                icu.tianqingyuluo.onlineim.pojo.dto.request.MessageEditRequest.class);
+        assertEquals("新内容", request.getContent());
+        assertEquals(List.of("usr_b"), request.getAtUsers());
+
+        MessageEditService editService = mock(MessageEditService.class);
+        MessageController controller = new MessageController(mock(MessageService.class), mock(JwtUtil.class),
+                mock(ChatMediaService.class), mock(MessageForwardService.class), editService);
+        MessageResponse expected = MessageResponse.builder().messageId("msg_1").content("新内容").edited(true).build();
+        when(editService.edit("msg_1", request, "usr_me")).thenReturn(expected);
+
+        assertEquals(expected, controller.editMessage("msg_1", request, () -> "usr_me").getBody());
+        assertEquals(401, controller.editMessage("msg_1", request, null).getStatusCode().value());
     }
 }

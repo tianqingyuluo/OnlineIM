@@ -113,6 +113,13 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
     }
 
+    @ExceptionHandler(MessageEditException.class)
+    public ResponseEntity<ErrorResponse> handleMessageEdit(MessageEditException e) {
+        log.warn("编辑被拒绝: {}", e.getMessage());
+        return ResponseEntity.status(e.getStatus())
+                .body(new ErrorResponse(e.getCode(), e.getMessage()));
+    }
+
     @ExceptionHandler(MessageRecallException.class)
     public ResponseEntity<ErrorResponse> handleMessageRecall(MessageRecallException e) {
         log.warn("撤回被拒绝: {}", e.getMessage());

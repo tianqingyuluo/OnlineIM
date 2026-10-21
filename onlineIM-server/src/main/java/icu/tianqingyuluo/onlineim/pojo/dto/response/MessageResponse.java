@@ -57,6 +57,23 @@ public class MessageResponse {
     private ForwardedFrom forwardedFrom;
 
     /**
+     * 是否被编辑过（文本消息）
+     */
+    private Boolean edited;
+
+    /**
+     * 最近一次编辑时间，格式同 timestamp；未编辑为 null
+     */
+    @JsonProperty("edited_at")
+    private String editedAt;
+
+    /**
+     * 内容版本（从 1 开始，每次编辑 +1），客户端据此丢弃乱序到达的旧版本
+     */
+    @JsonProperty("content_revision")
+    private Integer contentRevision;
+
+    /**
      * 群聊 @提及的用户ID列表（服务端清洗后，只含发送时的群成员）
      */
     @JsonProperty("at_users")
