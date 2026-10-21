@@ -34,8 +34,8 @@ public interface GroupJoinRequestMapper {
     @Select("SELECT EXISTS(SELECT 1 FROM group_join_requests WHERE user_id = #{userid} AND status=0)")
     boolean existsByUserid(String userid);
 
-    @Select("SELECT EXISTS(SELECT 1 FROM group_join_requests WHERE id = #{id} AND status=0)")
-    boolean isPendingByRequestId(String id);
+    @Select("SELECT EXISTS(SELECT 1 FROM group_join_requests WHERE id = #{id} AND group_id = #{groupId} AND status=0)")
+    boolean isPendingByRequestId(@Param("id") String id, @Param("groupId") String groupId);
 
     @Insert("INSERT INTO group_join_requests(id, group_id, user_id, inviter_id, message,status) " +
             "VALUES(#{id}, #{groupId}, #{userId}, #{inviterId},#{message},#{status})")

@@ -268,7 +268,7 @@ public class GroupServiceImpl implements GroupService {
     @Transactional
     public boolean handleJoinRequest(String groupId, String requestId, String action, String operatorId) {
         try {
-            if(groupMapper.isAdmin(groupId,operatorId) && groupJoinRequestMapper.isPendingByRequestId(requestId)){
+            if(groupMapper.isAdmin(groupId,operatorId) && groupJoinRequestMapper.isPendingByRequestId(requestId, groupId)){
                 if(action.equals("accept")){
                     String mid="mem_"+ IdUtil.getSnowflakeNextIdStr();
                     String userid=groupJoinRequestMapper.getUseridById(requestId);
