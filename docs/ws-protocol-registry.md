@@ -28,6 +28,7 @@
 | `NOTICE_MESSAGE` | S→C | 业务·接收 | v1 | — |
 | `HEARTBEAT` | C→S | 控制·心跳 | v1 | ws-heartbeat-reconnect |
 | `HEARTBEAT_ACK` | S→C | 控制·心跳 | v1 | ws-heartbeat-reconnect |
+| `PRESENCE_UPDATE` | S→C | 业务·在线状态 | v1 | user-presence |
 | `ERROR` | S→C | 控制·错误 | v1 | — |
 
 ## 引用回复协议
@@ -660,6 +661,69 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 - **引用**：引用了它的消息显示“原消息已撤回”；正在回复它时，回复条同样变为“原消息已撤回”。正在编辑它时撤回会退出编辑。
 - **会话列表**：预览实时变为“你撤回了一条消息 / <名字> 撤回了一条消息”（旧记录没有发送者时显示 `[消息已撤回]`）；群聊里别人发的消息预览带“昵称: ”前缀。别人撤回我还没读到的消息时，未读角标立即减一，随后以服务端值校正。
 
+## 在线状态
+
+好友和同一个未解散群里的成员可以看到对方在线还是离线。没有单独的订阅帧：WebSocket 连着的时候，服务端把变更推给有权看见的人；断开后不再接收。打开页面时用 REST 拉初始状态。
+
+多标签页 / 多设备各自一条连接。只要还有一条连接就显示在线；最后一条连接关闭，或心跳超过 `websocket.heartbeat.timeout`（默认 90 秒）被清理后，才变为离线并记下 `last_seen_at`。连接登记在 Redis（`presence:conn:{connectionId}` 带同样的超时），多个服务实例看到的是同一份状态。实例崩溃后连接键过期，由定时清理补一次离线推送。
+
+### 查询 `GET /api/v1/presence?user_ids=`
+
+`user_ids` 用逗号分隔，去重后 1~100 个。顺序与请求一致。
+
+```json
+{
+  "presences": [
+    { "user_id": "usr_friend", "status": "online", "visible": true },
+    { "user_id": "usr_offline", "status": "offline", "last_seen_at": 1710000000000, "visible": true },
+    { "user_id": "usr_stranger", "visible": false }
+  ]
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `status` | `online` 或 `offline`。`visible=false` 时不返回 |
+| `last_seen_at` | 离线时的上次在线时间，epoch 毫秒。在线、对方隐藏了在线状态、或 `visible=false` 时不返回 |
+| `visible` | 调用者是否有权查看。无权时客户端按离线展示，且不显示上次在线时间 |
+
+谁能看：双方都是正常好友（`user_friends.status = 1`），或仍在同一个未解散的群里。单向好友、拉黑、已删除都不算好友；退群或群已解散后不再因为这个群看见。查自己始终返回真实状态。
+
+### 隐私 `GET` / `PUT /api/v1/presence/settings`
+
+```json
+{ "hide_online_status": true }
+```
+
+打开后，好友和群成员查询结果为 `offline` 且没有 `last_seen_at`，也不再收到该用户的上线推送；服务端会立刻推一条不带上次在线时间的离线。关掉后按真实状态再推一次。未传 `hide_online_status` 返回 400。
+
+### 推送 `PRESENCE_UPDATE`（服务端 → 客户端）
+
+```json
+{
+  "type": "PRESENCE_UPDATE",
+  "message": {
+    "user_id": "usr_xxx",
+    "status": "offline",
+    "last_seen_at": 1710000000000,
+    "server_time": 1710000001000
+  }
+}
+```
+
+上线时 `last_seen_at` 为 `null`。同一用户在本节点有多条连接时，每条都收到，多个标签页一起更新。客户端按 `user_id` 覆盖本地状态；重复的 offline 可以忽略。
+
+### 错误
+
+| 情况 | REST |
+|------|------|
+| `user_ids` 为空，或去重后超过 100 个 | 400 |
+| 未登录 | 401 |
+
+### Web 端
+
+好友列表（桌面和手机）、私聊标题、群成员列表显示“在线”或“离线 · 刚刚 / N 分钟前 / N 小时前 / 昨天 / 日期”。群资料里的成员头像在线时有绿点。群聊标题显示“N 人在线”。个人资料的编辑页（桌面和手机）有“隐藏在线状态”开关。
+
 ## 控制帧详情
 
 ### HEARTBEAT（v1 必需帧）
@@ -667,7 +731,7 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 - **方向**：客户端 → 服务端
 - **载荷**：`{}`（空对象）
 - **语义**：客户端每 30s 发送一次，用于应用层活性检测
-- **处理**：服务端收到后刷新 `WebSocketSession.lastActiveAt` + Redis `user:sessions:{userId}:{deviceId}` 的 `activeTime`，回复 `HEARTBEAT_ACK`
+- **处理**：服务端收到后刷新 `WebSocketSession.lastActiveAt` + Redis `user:sessions:{userId}:{deviceId}` 的 `activeTime`，并给在线状态连接键 `presence:conn:{connectionId}` 续期（超时与 `websocket.heartbeat.timeout` 相同），回复 `HEARTBEAT_ACK`
 - **不持久化**、**不进 Redis Stream**、**不进业务 registry**
 - **兼容性**：旧客户端不发心跳 → 90s 后被服务端判死、强制断连 → 触发重连循环。v1 三端同步升级，可接受
 
@@ -683,7 +747,8 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `websocket.heartbeat.interval` | `30s` | 心跳发送间隔 / 服务端清理间隔 |
-| `websocket.heartbeat.timeout` | `90s` | 心跳超时阈值（超过此时间无入站帧则判定死连接）|
+| `websocket.heartbeat.timeout` | `90s` | 心跳超时阈值（超过此时间无入站帧则判定死连接）；在线状态连接键使用同一阈值 |
+| `presence.sweep-interval-ms` | `30000` | 扫描过期在线连接并补离线推送的间隔（毫秒） |
 | `im.forward.max-targets` | `9` | 一次转发的目标会话上限 |
 | `im.forward.max-messages` | `30` | 逐条转发的消息条数上限 |
 | `im.forward.max-merged-messages` | `100` | 合并转发的消息条数上限 |
