@@ -133,6 +133,12 @@ function findConversation(conversationId: string): Conversation | undefined {
   return useListStore().conversations?.find(c => c.conversation_id === conversationId)
 }
 
+/** 列表里该会话当前是否带着 [有人@我] / [@所有人] */
+export function hasMentionMark(conversationId: string): boolean {
+  const conversation = findConversation(conversationId)
+  return !!conversation && (!!conversation.at_me || !!conversation.at_all)
+}
+
 export function isViewingConversation(conversationId: string, activeConversationId: string | null): boolean {
   if (!activeConversationId || activeConversationId !== conversationId) return false
   return typeof document === 'undefined' || document.visibilityState !== 'hidden'

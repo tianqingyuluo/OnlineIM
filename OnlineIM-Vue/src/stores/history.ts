@@ -24,6 +24,7 @@ import { toServerTimestamp } from '@/utils/conversation-time';
 import { isNewerRevision } from '@/utils/message-edit';
 import {
   applyOfflineConversations,
+  hasMentionMark,
   noteCountedMessages,
   onConversationAck,
   onConversationEdit,
@@ -720,7 +721,8 @@ export const useHistoryStore = defineStore('history', {
           message.reply_to = { ...message.reply_to, state: 'edited' };
         }
       }
-      if (!applied && (atMe || atAll)) mentionChanged = true;
+      // 本地没有这条消息：被新 @ 了，或列表里正带着标记（编辑可能去掉了 @），都以服务端为准刷新
+      if (!applied && (atMe || atAll || hasMentionMark(edited.conversation_id))) mentionChanged = true;
       if (this.replyTarget?.reference.message_id === edited.message_id
         && this.replyTarget.reference.state === 'active') {
         this.replyTarget.reference = { ...this.replyTarget.reference, state: 'edited' };

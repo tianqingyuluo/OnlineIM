@@ -37,6 +37,7 @@ vi.mock('@/services/conversation.service', () => ({
       unread_count: 0,
     }),
     getMessageReaders: vi.fn(),
+    getConversationById: vi.fn(),
   },
 }))
 vi.mock('@/services/message.service', () => ({ MessageService: messageServiceMock }))
@@ -468,6 +469,32 @@ describe('history store message receipt flow', () => {
     // 乱序到达的旧版本被忽略
     await store.handleMessageEdited({ ...edited, content: '旧版本', content_revision: 2 } as never)
     expect(store.chatMessages[0]?.content).toBe('改过了')
+  })
+
+  it('refreshes the conversation when an unloaded group message is edited to drop @所有人', async () => {
+    const { useHistoryStore } = await import('@/stores/history')
+    const { useListStore } = await import('@/stores/list')
+    const { conversationService } = await import('@/services/conversation.service')
+    const getById = vi.mocked(conversationService.getConversationById)
+    getById.mockResolvedValue({ conversation_id: 'grp_1', type: 'group', at_me: false, at_all: false, at_all_count: 0, at_me_count: 0, unread_count: 1 } as never)
+    const listStore = useListStore()
+    listStore.conversations = [{ conversation_id: 'grp_1', type: 'group', at_me: true, at_me_count: 1, at_all: true, at_all_count: 1, at_all_message_id: 'msg_x' } as never]
+    const store = useHistoryStore()
+    const edited = {
+      message_id: 'msg_x', conversation_id: 'grp_1', sender_info: { user_id: 'usr_admin' }, seq_id: '5',
+      content: '取消了', message_type: 'text', edited: true, content_revision: 3, at_users: [],
+    }
+    // 群里这条消息不在本地（没打开过该群），帧上 at_me/at_all 都是 false
+    await store.handleMessageEdited(edited as never, false, false)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(getById).toHaveBeenCalledWith('grp_1')
+    expect(listStore.conversations[0]).toEqual(expect.objectContaining({ at_all: false, at_me: false }))
+
+    // 没带标记、也没被 @ 的会话不必刷新
+    getById.mockClear()
+    await store.handleMessageEdited({ ...edited, content_revision: 4 } as never, false, false)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(getById).not.toHaveBeenCalled()
   })
 
   it('requests offline sync from local seq, falling back to the list snapshot', async () => {
