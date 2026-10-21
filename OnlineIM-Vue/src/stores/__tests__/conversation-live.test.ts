@@ -61,7 +61,7 @@ describe('conversation list live updates', () => {
   it('does not count unread for the conversation being viewed or for own messages', async () => {
     const { list, live } = await setup([conv('conv_a')])
     live.onConversationMessage(msg('m1', 'conv_a', 'usr_peer') as never, 'conv_a')
-    live.onConversationMessage(msg('local_c1', 'conv_a', 'usr_me', { content: 'mine', timestamp: new Date().toISOString() }) as never, null)
+    live.onConversationMessage(msg('local_c1', 'conv_a', 'usr_me', { content: 'mine', timestamp: '2026-10-21 22:01:00' }) as never, null)
     const a = list.conversations[0]
     expect(a.unread_count).toBe(0)
     expect(a.last_message.content_preview).toBe('mine')
