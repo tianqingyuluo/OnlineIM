@@ -200,28 +200,20 @@ export const useListStore = defineStore('list', {
             console.error('默认好友分组不存在，跳过未分组好友迁移');
             return;
           }
-          const friendsWithNoGroup = this.friends
-              .filter(friend => friend.friend_info.friend_group_id == null)
-              .map(friend => friend.friend_info);
-          const friendIds = friendsWithNoGroup.map(friend => friend.user_id);
-          if (friendIds.length > 0) {
-            try {
-
-              for (const friendId of friendIds) {
-
-                await friendsService.setFriendGroup(friendId, defaultGroup.group_id);
-
-
-                await this.updateFriendGroup(friendId, defaultGroup.group_id);
+          // 未分组的好友静默移到默认分组（接口按好友关系 ID rel_ 定位；之前误传 usr_ 导致每次登录 404 弹“移动好友失败”）
+          const ungrouped = this.friends.filter(friend => !friend.friend_info.friend_group_id && friend.friendship_id)
+          if (ungrouped.length > 0) {
+            let failed = 0
+            for (const friend of ungrouped) {
+              try {
+                const result = await friendsService.setFriendGroup(friend.friendship_id, defaultGroup.group_id)
+                await this.updateFriendGroup(friend.friendship_id, result?.friendship_group_id || defaultGroup.group_id)
+              } catch (error) {
+                failed++
+                console.warn('移动好友到默认分组失败:', friend.friendship_id, error)
               }
-
-              toast.success(`已将 ${friendIds.length} 个好友移动到默认分组`);
-            } catch (error) {
-              console.error("更新好友分组失败:", error);
-              toast.error("移动好友失败");
             }
-          } else {
-            console.log("没有未分组的好友");
+            if (failed > 0) console.warn(`有 ${failed} 个好友未能移到默认分组，下次登录重试`)
           }
           // 同步到IndexedDB
           try {

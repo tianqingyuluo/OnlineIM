@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useUserStore } from '@/stores/user'
 import {
   Sidebar,
   SidebarContent,
@@ -73,6 +74,9 @@ function handleSearchSelect(item: MessageSearchItem) {
   selectedId.value = item.conversation?.conversation_id || item.message.conversation_id;
   void router.push(location);
 }
+
+/** 会话预览里区分“你撤回了一条消息” */
+const currentUserId = computed(() => useUserStore().loggedInUser?.user_id)
 </script>
 
 <template>
@@ -110,7 +114,7 @@ function handleSearchSelect(item: MessageSearchItem) {
                   @click="handleChatClick(conversation)"
                   class="data-[active=true]:bg-gray-100 data-[active=true]:text-black flex items-center w-full h-[80px] px-4 hover:bg-gray-50"
                 >
-                  <ConversationListItem :conversation="conversation" />
+                  <ConversationListItem :conversation="conversation" :current-user-id="currentUserId" />
                 </SidebarMenuButton>
               </SidebarMenuItem>
               </div>
@@ -126,7 +130,7 @@ function handleSearchSelect(item: MessageSearchItem) {
                   @click="handleChatClick(conversation)"
                   class="data-[active=true]:bg-gray-100 data-[active=true]:text-black flex items-center w-full h-[80px] px-4 hover:bg-gray-50"
                 >
-                  <ConversationListItem :conversation="conversation" />
+                  <ConversationListItem :conversation="conversation" :current-user-id="currentUserId" />
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </template>

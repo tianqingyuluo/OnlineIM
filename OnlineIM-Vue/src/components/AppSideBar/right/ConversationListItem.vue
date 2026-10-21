@@ -2,9 +2,12 @@
 import { computed } from 'vue'
 import type { Conversation } from '@/type/Conversation'
 import { formatConversationTime, formatUnread } from '@/utils/conversation-time'
+import { conversationPreviewText } from '@/utils/message-recall'
 
 const props = defineProps<{
   conversation: Conversation
+  /** 当前登录用户：撤回预览区分“你撤回了…” / “X 撤回了…” */
+  currentUserId?: string
 }>()
 
 const isGroup = computed(() => props.conversation.type === 'group' || props.conversation.conversation_id?.startsWith('grp_'))
@@ -13,7 +16,9 @@ const avatar = computed(() =>
 const time = computed(() =>
   formatConversationTime(props.conversation.last_message?.timestamp || props.conversation.last_activity_time))
 const unread = computed(() => formatUnread(props.conversation.unread_count ?? props.conversation.notreadednumber))
-const preview = computed(() => props.conversation.last_message?.content_preview || '无消息')
+/** 撤回显示“你/X 撤回了一条消息”，群聊里别人的消息带“昵称: ”前缀 */
+const preview = computed(() =>
+  conversationPreviewText(props.conversation, props.currentUserId) || '无消息')
 </script>
 
 <template>

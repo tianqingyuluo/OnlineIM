@@ -114,6 +114,7 @@ export interface MessageRecalledPayload {
     message_id: string;
     conversation_id: string;
     recall_user_id?: string;
+    seq_id?: string;
     timestamp?: number;
 }
 

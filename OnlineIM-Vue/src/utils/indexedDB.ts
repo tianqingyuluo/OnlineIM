@@ -289,6 +289,9 @@ export const dbService = {
         record.status = 3;
         record.is_recalled = true;
         record.content = '';
+        record.at_users = null;
+        record.reply_to = undefined;
+        record.forwarded_from = null;
         changed = true;
       }
       if (record.reply_to?.message_id === messageId) {

@@ -4,6 +4,7 @@ import { useListStore } from '@/stores/list'
 import { useUserStore } from '@/stores/user'
 import { conversationService } from '@/services/conversation.service'
 import { parseTimestamp, toServerTimestamp } from '@/utils/conversation-time'
+import { compareSeqId } from '@/utils/seq-id'
 
 /**
  * 会话列表实时更新：收发消息、ACK、撤回、已读时立即修改侧栏（预览、时间、未读角标），
@@ -14,6 +15,8 @@ export const RECALLED_PREVIEW = '[消息已撤回]'
 
 const refreshTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const countedMessageIds = new Set<string>()
+/** 已处理过未读扣减的撤回（同一撤回可能先后收到 REST 结果与推送） */
+const recalledMessageIds = new Set<string>()
 const MAX_COUNTED = 2000
 
 const PREVIEW_MAX_LENGTH = 100
@@ -65,6 +68,7 @@ export function applyMessageToConversation(
   }
   const preview: MessagePreviewResponse = {
     message_id: message.message_id,
+    sender_id: message.sender_info?.user_id || null,
     sender_nickname: message.sender_info?.nickname || message.sender_info?.username,
     content_preview: previewOfMessage(message),
     message_type: message.message_type,
@@ -139,16 +143,38 @@ export function onConversationEdit(conversationId: string, message: MessageRespo
   }
 }
 
-export function onConversationRecall(conversationId: string, messageId: string): void {
+export function onConversationRecall(
+  conversationId: string,
+  messageId: string,
+  options: { recallUserId?: string; seqId?: string; activeConversationId?: string | null } = {},
+): void {
   const conversation = findConversation(conversationId)
   if (conversation?.last_message?.message_id === messageId) {
     conversation.last_message = {
       ...conversation.last_message,
+      // 只能撤回自己发的消息，撤回者就是发送者
+      sender_id: conversation.last_message.sender_id || options.recallUserId || null,
       content_preview: RECALLED_PREVIEW,
+      message_type: 'recalled',
       is_recalled: true,
     }
   }
-  // 撤回可能影响未读数，以服务端为准
+  // 别人撤回了我还没读到的消息：未读数立即减一（稍后以服务端值校正）
+  const me = useUserStore().loggedInUser?.user_id
+  const firstRecall = !recalledMessageIds.has(messageId)
+  recalledMessageIds.add(messageId)
+  if (recalledMessageIds.size > MAX_COUNTED) {
+    const first = recalledMessageIds.values().next().value
+    if (first) recalledMessageIds.delete(first)
+  }
+  if (firstRecall && conversation && options.recallUserId && options.recallUserId !== me
+      && !isViewingConversation(conversationId, options.activeConversationId ?? null)
+      && (conversation.unread_count || 0) > 0
+      && (!options.seqId || !conversation.read_seq || compareSeqId(options.seqId, conversation.read_seq) > 0)) {
+    conversation.unread_count = (conversation.unread_count || 0) - 1
+    conversation.notreadednumber = conversation.unread_count
+    if (conversation.at_me_message_id === messageId) clearMention(conversation)
+  }
   scheduleConversationRefresh(conversationId, 600)
 }
 
@@ -210,4 +236,5 @@ export function resetConversationLiveState(): void {
   refreshTimers.forEach(timer => clearTimeout(timer))
   refreshTimers.clear()
   countedMessageIds.clear()
+  recalledMessageIds.clear()
 }

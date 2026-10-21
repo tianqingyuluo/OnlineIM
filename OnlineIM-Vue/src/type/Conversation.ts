@@ -6,7 +6,10 @@ export interface TargetInfo {
 
 export interface MessagePreviewResponse {
     message_id: string
-    sender_nickname?: string
+    /** 发送者 ID（旧会话记录可能没有） */
+    sender_id?: string | null
+    /** 发送者显示名：私聊对方为备注/昵称，其他为昵称 */
+    sender_nickname?: string | null
     content_preview: string
     message_type?: string
     timestamp: string

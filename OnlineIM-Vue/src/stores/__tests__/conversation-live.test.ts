@@ -142,4 +142,26 @@ describe('conversation list live updates', () => {
     expect(g1().at_me).toBe(false)
     expect(g1().at_me_count).toBe(0)
   })
+
+  it('recall by someone else lowers my unread count once, only when I had not read it', async () => {
+    const { list, live } = await setup([
+      conv('conv_a', { unread_count: 2, read_seq: '10', last_message: { message_id: 'm2', content_preview: 'hi', timestamp: '2026-10-21 22:00:00', is_recalled: false } }),
+      conv('conv_b', { unread_count: 1, read_seq: '50' }),
+      conv('conv_c', { unread_count: 3 }),
+    ])
+    live.onConversationRecall('conv_a', 'm2', { recallUserId: 'usr_peer', seqId: '12', activeConversationId: null })
+    live.onConversationRecall('conv_a', 'm2', { recallUserId: 'usr_peer', seqId: '12', activeConversationId: null })
+    const a = list.conversations.find(c => c.conversation_id === 'conv_a')!
+    expect(a.unread_count).toBe(1)
+    expect(a.last_message.is_recalled).toBe(true)
+    expect(a.last_message.sender_id).toBe('usr_peer')
+
+    // 已读过的消息被撤回：不扣
+    live.onConversationRecall('conv_b', 'm_old', { recallUserId: 'usr_peer', seqId: '40', activeConversationId: null })
+    expect(list.conversations.find(c => c.conversation_id === 'conv_b')!.unread_count).toBe(1)
+    // 自己撤回、或正在看这个会话：不扣
+    live.onConversationRecall('conv_c', 'm_mine', { recallUserId: 'usr_me', seqId: '9', activeConversationId: null })
+    live.onConversationRecall('conv_c', 'm_viewing', { recallUserId: 'usr_peer', seqId: '9', activeConversationId: 'conv_c' })
+    expect(list.conversations.find(c => c.conversation_id === 'conv_c')!.unread_count).toBe(3)
+  })
 })

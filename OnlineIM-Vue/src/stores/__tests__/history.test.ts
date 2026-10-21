@@ -280,6 +280,40 @@ describe('history store message receipt flow', () => {
     )
   })
 
+  it('keeps the original text of my own recalled text for 重新编辑 and clears the content', async () => {
+    const { useHistoryStore } = await import('@/stores/history')
+    const store = useHistoryStore()
+    const make = (id: string, sender: string, extra: Record<string, unknown> = {}) => ({
+      message_id: id,
+      conversation_id: 'grp_1',
+      sender_info: { user_id: sender },
+      message_type: 'text',
+      seq_id: '5',
+      content: '原文 ' + id,
+      at_users: ['usr_x'],
+      status: 1,
+      timestamp: new Date().toISOString(),
+      is_recalled: false,
+      client_message_id: id,
+      ...extra,
+    })
+    store.groupMessages.push(make('m_own', 'usr_me') as never, make('m_peer', 'usr_peer') as never,
+      make('m_img', 'usr_me', { message_type: 'image', content: '{"url":"x"}' }) as never)
+
+    for (const id of ['m_own', 'm_peer', 'm_img', 'm_own']) {
+      await store.handleMessageRecalled({ message_id: id, conversation_id: 'grp_1', recall_user_id: id === 'm_peer' ? 'usr_peer' : 'usr_me' })
+    }
+
+    expect(store.recalledOriginal('m_own')).toEqual({ conversationId: 'grp_1', content: '原文 m_own', atUsers: ['usr_x'] })
+    expect(store.recalledOriginal('m_peer')).toBeNull()
+    expect(store.recalledOriginal('m_img')).toBeNull()
+    for (const message of store.groupMessages) {
+      expect(message.is_recalled).toBe(true)
+      expect(message.content).toBe('')
+      expect(message.at_users).toBeNull()
+    }
+  })
+
   it('does not skip an unseen message when advancing a continuous read cursor', async () => {
     const { useHistoryStore } = await import('@/stores/history')
     const store = useHistoryStore()

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useUserStore } from '@/stores/user'
 import {
   Sidebar,
   SidebarContent,
@@ -64,6 +65,9 @@ const chatId = computed(() => {
   const id = route.params.id
   return Array.isArray(id) ? id[0] : id
 })
+
+/** 会话预览里区分“你撤回了一条消息” */
+const currentUserId = computed(() => useUserStore().loggedInUser?.user_id)
 </script>
 
 
@@ -98,7 +102,7 @@ const chatId = computed(() => {
                   @click="handleChatClick(conversation)"
                   class="data-[active=true]:bg-gray-100 data-[active=true]:text-black flex items-center w-full h-[80px] px-4 hover:bg-gray-50"
               >
-                <ConversationListItem :conversation="conversation" />
+                <ConversationListItem :conversation="conversation" :current-user-id="currentUserId" />
               </SidebarMenuButton>
             </SidebarMenuItem>
             <div v-if="searchQuery.trim() && !conversations.length" class="flex justify-center py-3 text-sm text-gray-500">

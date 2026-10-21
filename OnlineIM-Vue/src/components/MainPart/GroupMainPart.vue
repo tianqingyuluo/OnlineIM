@@ -35,6 +35,10 @@ import { isForwardable } from '@/utils/chat-record'
 import { useMessageEdit } from '@/composables/useMessageEdit'
 import { mentionLabelsForEdit } from '@/utils/message-edit'
 import EditComposerBar from '@/components/MainPart/EditComposerBar.vue'
+import RecallNotice from '@/components/MainPart/RecallNotice.vue'
+import RecallConfirmDialog from '@/components/MainPart/RecallConfirmDialog.vue'
+import { useMessageRecall } from '@/composables/useMessageRecall'
+import { isRecalledMessage } from '@/utils/message-recall'
 import { useListStore } from '@/stores/list'
 import type { GroupMemberAll } from '@/type/group'
 import {
@@ -86,6 +90,12 @@ const forward = reactive(useMessageForward(() => groupId.value, () => historySto
 const currentUser = computed(() => userStore.loggedInUser)
 /** 编辑：右键“编辑”把原文放进输入框，回车 / 保存提交；@ 成员按文本里仍存在的 `@名字` 重新计算 */
 const edit = reactive(useMessageEdit(draft, () => userStore.loggedInUser.user_id, () => inputElement()?.focus()))
+/** 撤回：右键 / 长按“撤回” → 确认 → 所有成员看到“X 撤回了一条消息”，自己的文本可“重新编辑” */
+const recall = reactive(useMessageRecall(() => userStore.loggedInUser.user_id, {
+  beforeRecall: message => {
+    if (edit.editing?.messageId === message.message_id) cancelEdit()
+  },
+}))
 const deliveryLabels: Record<string, string> = {
   sending: '发送中',
   failed: '发送失败',
@@ -367,6 +377,23 @@ function handleRetry(message: MessageResponse) {
   historyStore.retryMessage(message, true, groupId.value)
 }
 
+/** “重新编辑”：把撤回的原文放回输入框（输入框已有内容时接在后面），原来 @ 的成员仍然有效 */
+async function handleReedit(message: MessageResponse) {
+  const original = recall.original(message)
+  if (!original) return
+  if (edit.isEditing) cancelEdit()
+  if (!draft.value.trim()) pickedMentions.clear()
+  for (const [userId, label] of mentionLabelsForEdit(original.content, original.atUsers, mentionNames.value)) {
+    pickedMentions.set(userId, label)
+  }
+  draft.value = draft.value.trim() ? `${draft.value}${original.content}` : original.content
+  mention.value = null
+  await nextTick()
+  const element = inputElement()
+  element?.focus()
+  element?.setSelectionRange(draft.value.length, draft.value.length)
+}
+
 function handleReply(message: MessageResponse) {
   if (edit.isEditing) cancelEdit()
   if (historyStore.selectReplyTarget(message)) messageInputRef.value?.focus()
@@ -551,6 +578,15 @@ onBeforeUnmount(() => {
             :disabled="!isForwardable(message)"
             @toggle="forward.toggleSelect(message)"
           />
+          <RecallNotice
+            v-if="isRecalledMessage(message)"
+            :is-self="isOwn(message)"
+            :sender-name="message.sender_info?.nickname || message.sender_info?.username"
+            :timestamp="message.timestamp"
+            :can-reedit="isOwn(message) && !!recall.original(message)"
+            @reedit="handleReedit(message)"
+          />
+          <template v-else>
           <div class="flex justify-center">
             <span class="text-[13px] text-gray-500 truncate">{{ message.timestamp }}</span>
           </div>
@@ -636,7 +672,9 @@ onBeforeUnmount(() => {
                 :edited="message.edited"
                 :edited-at="message.edited_at"
                 :edit-until="forward.selecting ? 0 : edit.editUntil(message)"
+                :recall-until="forward.selecting ? 0 : recall.recallUntil(message)"
                 @edit="startEdit(message)"
+                @recall="recall.request(message)"
                 @forward="forward.forwardOne(message)"
                 @select="forward.startSelect(message)"
                 @reply="handleReply(message)"
@@ -646,6 +684,7 @@ onBeforeUnmount(() => {
               <img :src="currentUser.avatar_url" :alt="currentUser.username" class="w-10 h-10 rounded-full ml-2 object-cover" />
             </div>
           </div>
+          </template>
         </div>
       </div>
       <div v-else class="flex items-center justify-center h-full text-gray-500">暂无消息记录</div>
@@ -733,6 +772,12 @@ onBeforeUnmount(() => {
       >@</button>
       <Button class="absolute bottom-4 right-4" data-testid="send-button" :disabled="edit.saving" @click="handleSendClick">{{ edit.isEditing ? '保存' : '发送' }}</Button>
     </div>
+    <RecallConfirmDialog
+      :open="recall.confirmOpen"
+      :busy="recall.busy"
+      @cancel="recall.cancel()"
+      @confirm="recall.confirm()"
+    />
     <ForwardTargetPicker
       :open="forward.pickerOpen"
       :mode="forward.pickerMode"

@@ -32,6 +32,8 @@ const props = withDefaults(defineProps<{
   editedAt?: string | null
   /** 自己的文本消息可编辑截止时间（毫秒），0 不可编辑 */
   editUntil?: number
+  /** 自己的消息可撤回截止时间（毫秒），0 不可撤回 */
+  recallUntil?: number
 }>(), {
   isSelf: false,
   canReply: true,
@@ -47,6 +49,7 @@ const props = withDefaults(defineProps<{
   edited: false,
   editedAt: undefined,
   editUntil: 0,
+  recallUntil: 0,
 })
 
 const isMedia = computed(() => isMediaMessageType(props.messageType))
@@ -71,6 +74,7 @@ const emit = defineEmits<{
   forward: []
   select: []
   edit: []
+  recall: []
 }>()
 
 async function copyMessage() {
@@ -93,7 +97,9 @@ async function copyMessage() {
     :can-forward="canForward && !recalled"
     :can-select="canSelect"
     :edit-until="recalled ? 0 : editUntil"
+    :recall-until="recalled ? 0 : recallUntil"
     @edit="emit('edit')"
+    @recall="emit('recall')"
     @reply="emit('reply')"
     @copy="copyMessage"
     @save-emoji="emit('saveEmoji')"

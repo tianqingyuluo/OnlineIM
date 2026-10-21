@@ -83,6 +83,12 @@ interface ConversationReadState {
 const MAX_SEND_ATTEMPTS = 3;
 const SEND_CONFIRM_TIMEOUT_MS = 5000;
 
+export interface RecalledOriginal {
+  conversationId: string;
+  content: string;
+  atUsers: string[] | null;
+}
+
 export const useHistoryStore = defineStore('history', {
   state: () => ({
     pendingMessages: {} as Record<string, PendingMessageInfo>,
@@ -104,6 +110,8 @@ export const useHistoryStore = defineStore('history', {
     visibleMessageIds: {} as Record<string, Record<string, boolean>>,
     replyTarget: null as ReplyComposerTarget | null,
     failedReplyDraft: null as FailedReplyDraft | null,
+    /** 本页面会话期间自己撤回的文本原文（“重新编辑”用；只在内存里，刷新后不再提供） */
+    recalledOriginals: {} as Record<string, RecalledOriginal>,
   }),
 
   actions: {
@@ -702,14 +710,36 @@ export const useHistoryStore = defineStore('history', {
       }
     },
 
+    /** 自己撤回的文本原文（“重新编辑”）；没有返回 null */
+    recalledOriginal(messageId: string): RecalledOriginal | null {
+      return this.recalledOriginals[messageId] || null;
+    },
+
     async handleMessageRecalled(payload: MessageRecalledPayload): Promise<void> {
       if (!payload?.message_id || !payload.conversation_id) return;
-      onConversationRecall(payload.conversation_id, payload.message_id);
+      const me = useUserStore().loggedInUser.user_id;
+      onConversationRecall(payload.conversation_id, payload.message_id, {
+        recallUserId: payload.recall_user_id,
+        seqId: payload.seq_id,
+        activeConversationId: this.activeConversationId,
+      });
       for (const message of this.messagesForConversation(payload.conversation_id)) {
         if (message.message_id === payload.message_id) {
+          // 自己撤回的文本：记下原文，撤回提示里提供“重新编辑”
+          if (message.sender_info?.user_id === me && (message.message_type || 'text').toLowerCase() === 'text'
+            && typeof message.content === 'string' && message.content && !this.recalledOriginals[message.message_id]) {
+            this.recalledOriginals[message.message_id] = {
+              conversationId: payload.conversation_id,
+              content: message.content,
+              atUsers: message.at_users ? [...message.at_users] : null,
+            };
+          }
           message.status = 3;
           message.is_recalled = true;
           message.content = '';
+          message.at_users = null;
+          message.reply_to = undefined;
+          message.forwarded_from = null;
         }
         if (message.reply_to?.message_id === payload.message_id) {
           message.reply_to = {

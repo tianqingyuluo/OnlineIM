@@ -56,6 +56,10 @@ export const MessageService = {
         const response = await api.put<MessageResponse>(`/messages/${encodeURIComponent(messageId)}`, request);
         return response.data;
     },
+    /** 撤回自己发送的消息（2 分钟内）；成功后服务端推送 RECALL_MESSAGE_RESPONSE / MESSAGE_RECALLED */
+    async recallMessage(messageId: string): Promise<void> {
+        await api.delete(`/messages/${encodeURIComponent(messageId)}`);
+    },
     /** 按关键字搜索文本消息：不带 conversation_id 为全局搜索，带上只搜该会话；next_cursor 翻页 */
     async searchMessages(params: MessageSearchParams, signal?: AbortSignal): Promise<MessageSearchResponse> {
         const response = await api.get<MessageSearchResponse>('/messages/search', { params, signal });

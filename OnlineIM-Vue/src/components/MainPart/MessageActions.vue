@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Copy, Forward, ListChecks, Pencil, Reply, SmilePlus } from 'lucide-vue-next'
+import { Copy, Forward, ListChecks, Pencil, Reply, SmilePlus, Undo2 } from 'lucide-vue-next'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -16,6 +16,8 @@ const props = withDefaults(defineProps<{
   canSelect?: boolean
   /** 可编辑截止时间（毫秒时间戳），0 表示不可编辑；菜单打开时判断，过了时间窗自动不再显示“编辑” */
   editUntil?: number
+  /** 可撤回截止时间（毫秒时间戳），0 表示不可撤回；同样在菜单打开时判断 */
+  recallUntil?: number
   align?: 'start' | 'end'
 }>(), {
   canReply: true,
@@ -24,6 +26,7 @@ const props = withDefaults(defineProps<{
   canForward: false,
   canSelect: false,
   editUntil: 0,
+  recallUntil: 0,
   align: 'start',
 })
 
@@ -34,10 +37,12 @@ const emit = defineEmits<{
   forward: []
   select: []
   edit: []
+  recall: []
 }>()
 
 const openedAt = ref(Date.now())
 const canEdit = computed(() => props.editUntil > 0 && openedAt.value <= props.editUntil)
+const canRecall = computed(() => props.recallUntil > 0 && openedAt.value <= props.recallUntil)
 
 function handleOpenChange(open: boolean) {
   if (open) {
@@ -62,7 +67,7 @@ function handleCloseAutoFocus(event: Event) {
 
 <template>
   <ContextMenu @update:open="handleOpenChange">
-    <ContextMenuTrigger class="block min-w-0" :disabled="!canCopy && !canReply && !canSaveEmoji && !canForward && !canSelect">
+    <ContextMenuTrigger class="block min-w-0" :disabled="!canCopy && !canReply && !canSaveEmoji && !canForward && !canSelect && !recallUntil">
       <div class="group/message relative min-w-0">
         <button
           v-if="canReply"
@@ -104,6 +109,10 @@ function handleCloseAutoFocus(event: Event) {
       <ContextMenuItem v-if="canSelect" class="gap-2" data-testid="multi-select-action" @select="emit('select')">
         <ListChecks class="h-4 w-4" aria-hidden="true" />
         多选
+      </ContextMenuItem>
+      <ContextMenuItem v-if="canRecall" class="gap-2 text-red-600 focus:text-red-600" data-testid="recall-action" @select="emit('recall')">
+        <Undo2 class="h-4 w-4" aria-hidden="true" />
+        撤回
       </ContextMenuItem>
     </ContextMenuContent>
   </ContextMenu>
