@@ -51,9 +51,9 @@ public class MessageResponse {
     private ReplyReferenceResponse replyTo;
 
     /**
-     * 提及的用户ID列表
+     * 群聊 @提及的用户ID列表（服务端清洗后，只含发送时的群成员）
      */
-    @JsonProperty("mention_user_ids")
+    @JsonProperty("at_users")
     private List<String> mentionedUserIds;
 
     /**

@@ -45,6 +45,24 @@ public class ConversationResponse {
     private Integer unreadCount;
 
     /**
+     * 是否有未读的 @我（群聊）；客户端在会话列表显示“[有人@我]”
+     */
+    @JsonProperty("at_me")
+    private Boolean atMe;
+
+    /**
+     * 未读的 @我 条数（最多统计最近 20 条）
+     */
+    @JsonProperty("at_me_count")
+    private Integer atMeCount;
+
+    /**
+     * 最早一条未读 @我 的消息 ID，可用于跳转定位
+     */
+    @JsonProperty("at_me_message_id")
+    private String atMeMessageId;
+
+    /**
      * 当前用户已送达的最新消息序列号
      */
     @JsonProperty("delivered_seq")

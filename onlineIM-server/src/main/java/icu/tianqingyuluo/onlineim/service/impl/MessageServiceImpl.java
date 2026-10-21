@@ -29,6 +29,7 @@ import icu.tianqingyuluo.onlineim.service.MessageReplyService;
 import icu.tianqingyuluo.onlineim.service.MessageService;
 import icu.tianqingyuluo.onlineim.service.RedisStreamService;
 import icu.tianqingyuluo.onlineim.service.UserService;
+import icu.tianqingyuluo.onlineim.util.MentionUtil;
 import icu.tianqingyuluo.onlineim.util.ConversationIdUtil;
 import icu.tianqingyuluo.onlineim.util.SeqIdComparator;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -454,9 +455,10 @@ public class MessageServiceImpl implements MessageService {
             message.setStatus(0);
             message.setSeqId(IdUtil.getSnowflakeNextIdStr());
 
-            if (request.getAtUserIds() != null && !request.getAtUserIds().isEmpty()) {
-                message.setAtUsers(request.getAtUserIds());
-            }
+            List<String> memberIds = groupReceiverIds(targetId);
+            // 只保留当前群成员（不含自己）的 @，非法项丢弃
+            message.setAtUsers(MentionUtil.sanitize(
+                    request.getMessageType(), userId, request.getAtUserIds(), memberIds));
 
             message.setTimestamp(new Date());
             message.setCreatedAt(new Date());
@@ -464,7 +466,6 @@ public class MessageServiceImpl implements MessageService {
             applyContent(message::setContent, message::setExt, request, userId);
 
             groupMessageRepository.save(message);
-            List<String> memberIds = groupReceiverIds(targetId);
             conversationRecords.onGroupMessage(message, memberIds);
             redisStreamService.publishGroupMessage(
                     "GROUP_MESSAGE",

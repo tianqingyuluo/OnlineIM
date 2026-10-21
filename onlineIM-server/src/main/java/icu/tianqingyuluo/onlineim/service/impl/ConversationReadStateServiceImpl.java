@@ -97,6 +97,7 @@ public class ConversationReadStateServiceImpl implements ConversationReadStateSe
         if (changed && readAfter[0] != null) {
             // 只同步读者自己会话记录上的未读缓存，其他参与者不受影响
             conversationRecords.syncUnread(conversationId, userId, unreadCount(conversationId, readAfter[0], userId));
+            conversationRecords.pruneMentions(conversationId, userId, readAfter[0]);
         }
         return changed;
     }

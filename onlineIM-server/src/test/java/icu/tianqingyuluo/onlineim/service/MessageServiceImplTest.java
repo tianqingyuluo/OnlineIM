@@ -363,6 +363,30 @@ class MessageServiceImplTest {
     }
 
     @Test
+    void httpGroupSendStripsMentionsOfNonMembersAndSelf() {
+        when(groupMemberService.isGroupMember("grp_1", "usr_me")).thenReturn(true);
+        when(groupMemberService.getGroupMembers("grp_1")).thenReturn(List.of(
+                GroupMemberResponse.builder()
+                        .userInfo(UserBriefResponse.builder().userId("usr_me").build())
+                        .build(),
+                GroupMemberResponse.builder()
+                        .userInfo(UserBriefResponse.builder().userId("usr_peer").build())
+                        .build()));
+
+        service.sendMessage(MessageSendRequest.builder()
+                .targetId("grp_1")
+                .messageType("text")
+                .content("@外人 @自己")
+                .clientMsgId("client_http_group_strip")
+                .atUserIds(List.of("usr_outsider", "usr_me"))
+                .build(), "usr_me");
+
+        ArgumentCaptor<GroupMessage> messageCaptor = ArgumentCaptor.forClass(GroupMessage.class);
+        verify(groupMessageRepository).save(messageCaptor.capture());
+        org.junit.jupiter.api.Assertions.assertNull(messageCaptor.getValue().getAtUsers());
+    }
+
+    @Test
     void httpGroupDuplicateReturnsOriginalWithoutPublishingAgain() {
         when(groupMemberService.isGroupMember("grp_1", "usr_me")).thenReturn(true);
         GroupMessage existing = GroupMessage.builder()

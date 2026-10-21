@@ -249,12 +249,18 @@ public class ConversationServiceImpl implements ConversationService {
             // 历史会话可能尚未建立 read state，保留旧会话字段并在后续访问时懒创建。
         }
 
+        // @我 以读游标为准过滤，即使清理失败也不会在已读后继续显示
+        var mentions = ConversationRecordService.unreadMentions(conversation.getPendingMentions(), readSeq);
+
         return ConversationResponse.builder()
                 .conversationID(conversationId)
                 .type(conversation.getConversationType())
                 .targetInfo(targetInfo)
                 .lastMessage(lastMessage)
                 .unreadCount(unreadCount)
+                .atMe(!mentions.isEmpty())
+                .atMeCount(mentions.size())
+                .atMeMessageId(mentions.isEmpty() ? null : mentions.getFirst().getMessageId())
                 .deliveredSeq(deliveredSeq)
                 .readSeq(readSeq)
                 .latestSeq(latestSeq)

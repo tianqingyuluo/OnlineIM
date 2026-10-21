@@ -125,6 +125,31 @@ class ConversationServiceImplTest {
     }
 
     @Test
+    void atMeReflectsOnlyMentionsAfterTheReadCursor() {
+        Conversation group = own("grp_1", "usr_a", "grp_1", "group");
+        group.setPendingMentions(List.of(
+                Conversation.PendingMention.builder().messageId("msg_old").seqId("1000000000000000005").senderId("usr_b").build(),
+                Conversation.PendingMention.builder().messageId("msg_new").seqId("1000000000000000007").senderId("usr_b").build()));
+        Conversation priv = own(PRIV, "usr_a", "usr_b", "private");
+        when(repository.findByUserIdAndStatus(eq("usr_a"), eq(1), any(Sort.class))).thenReturn(List.of(group, priv));
+        GroupBriefResponse brief = new GroupBriefResponse();
+        brief.setName("G");
+        when(groupService.getGroupByID("grp_1")).thenReturn(brief);
+        when(readStateService.getReadState(eq("grp_1"), any(), any())).thenReturn(ReadStateResponse.builder()
+                .deliveredSeq("1000000000000000007").readSeq("1000000000000000005")
+                .latestSeq("1000000000000000007").unreadCount(1L).build());
+
+        List<ConversationResponse> list = service.getUserConversations("usr_a");
+
+        assertTrue(list.get(0).getAtMe());
+        assertEquals(1, list.get(0).getAtMeCount());
+        assertEquals("msg_new", list.get(0).getAtMeMessageId());
+        assertFalse(list.get(1).getAtMe());
+        assertEquals(0, list.get(1).getAtMeCount());
+        assertNull(list.get(1).getAtMeMessageId());
+    }
+
+    @Test
     void listSkipsRecordsWhoseGroupNoLongerExists() {
         when(repository.findByUserIdAndStatus(eq("usr_a"), eq(1), any(Sort.class)))
                 .thenReturn(List.of(own("grp_gone", "usr_a", "grp_gone", "group")));

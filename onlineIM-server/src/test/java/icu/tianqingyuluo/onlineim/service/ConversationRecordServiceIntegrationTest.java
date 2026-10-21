@@ -152,6 +152,50 @@ class ConversationRecordServiceIntegrationTest {
     }
 
     @Test
+    void mentionsAreTrackedPerMentionedMemberAndClearedByReadOrRecall() {
+        records.ensureGroupMembers(GRP, List.of(A, B, C));
+        GroupMessage first = groupText("msg_m1", "1000000000000000101", List.of(B));
+        GroupMessage second = groupText("msg_m2", "1000000000000000102", List.of(B, C));
+        GroupMessage plain = groupText("msg_m3", "1000000000000000103", null);
+        records.onGroupMessage(first, List.of(A, B, C));
+        records.onGroupMessage(second, List.of(A, B, C));
+        records.onGroupMessage(plain, List.of(A, B, C));
+
+        assertEquals(List.of("msg_m1", "msg_m2"),
+                record(GRP, B).getPendingMentions().stream().map(Conversation.PendingMention::getMessageId).toList());
+        assertEquals(List.of("msg_m2"),
+                record(GRP, C).getPendingMentions().stream().map(Conversation.PendingMention::getMessageId).toList());
+        assertNull(record(GRP, A).getPendingMentions(), "发送者和未被 @ 的成员没有标记");
+        assertEquals(1, ConversationRecordService.unreadMentions(record(GRP, B).getPendingMentions(), "1000000000000000101").size());
+
+        records.pruneMentions(GRP, B, "1000000000000000101");
+        assertEquals(List.of("msg_m2"),
+                record(GRP, B).getPendingMentions().stream().map(Conversation.PendingMention::getMessageId).toList());
+        records.onMessageRecalled(GRP, "msg_m2");
+        assertTrue(record(GRP, B).getPendingMentions().isEmpty());
+        assertTrue(record(GRP, C).getPendingMentions().isEmpty());
+
+        for (int i = 0; i < 25; i++) {
+            records.onGroupMessage(groupText("msg_x" + i, String.valueOf(1000000000000000200L + i), List.of(C)), List.of(A, B, C));
+        }
+        assertEquals(ConversationRecordService.MAX_PENDING_MENTIONS, record(GRP, C).getPendingMentions().size());
+        assertEquals("msg_x24", record(GRP, C).getPendingMentions().getLast().getMessageId());
+    }
+
+    private static GroupMessage groupText(String id, String seq, List<String> atUsers) {
+        GroupMessage message = new GroupMessage();
+        message.setId(id);
+        message.setGroupId(GRP);
+        message.setSenderId(A);
+        message.setMessageType("text");
+        message.setContent("hi");
+        message.setSeqId(seq);
+        message.setAtUsers(atUsers);
+        message.setTimestamp(new Date());
+        return message;
+    }
+
+    @Test
     void readSyncTouchesOnlyTheReader() {
         records.onPrivateMessage(privateMessage("msg_1", A, B, "x"));
         records.onPrivateMessage(privateMessage("msg_2", B, A, "y"));

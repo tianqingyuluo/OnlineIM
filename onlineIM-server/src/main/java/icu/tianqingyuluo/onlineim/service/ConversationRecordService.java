@@ -12,9 +12,13 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 
+import icu.tianqingyuluo.onlineim.util.SeqIdComparator;
+
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -33,6 +37,8 @@ public class ConversationRecordService {
     public static final String TYPE_PRIVATE = "private";
     public static final String TYPE_GROUP = "group";
     static final int PREVIEW_MAX_LENGTH = 100;
+    /** 每条会话记录最多保留的未读 @我 条数 */
+    static final int MAX_PENDING_MENTIONS = 20;
 
     private final MongoTemplate mongoTemplate;
 
@@ -148,10 +154,20 @@ public class ConversationRecordService {
             Conversation.LastMessage last = lastMessage(message.getId(), message.getMessageType(),
                     message.getContent(), message.getTimestamp());
             BulkOperations bulk = mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, Conversation.class);
+            Set<String> mentioned = distinct(message.getAtUsers());
             for (String userId : members) {
-                bulk.upsert(byRecordId(message.getGroupId(), userId),
-                        newMessageUpdate(message.getGroupId(), TYPE_GROUP, userId, message.getGroupId(), last,
-                                !userId.equals(message.getSenderId())));
+                Update update = newMessageUpdate(message.getGroupId(), TYPE_GROUP, userId, message.getGroupId(), last,
+                        !userId.equals(message.getSenderId()));
+                if (mentioned.contains(userId) && !userId.equals(message.getSenderId())) {
+                    // 被 @ 的成员记一条“有人@我”，读到该消息（或撤回）时移除
+                    update.push("pendingMentions").slice(-MAX_PENDING_MENTIONS).each(
+                            Conversation.PendingMention.builder()
+                                    .messageId(message.getId())
+                                    .seqId(message.getSeqId())
+                                    .senderId(message.getSenderId())
+                                    .build());
+                }
+                bulk.upsert(byRecordId(message.getGroupId(), userId), update);
             }
             bulk.execute();
         } catch (RuntimeException ex) {
@@ -171,9 +187,56 @@ public class ConversationRecordService {
     }
 
     /**
+     * 已读推进后移除读者自己记录上 seqId ≤ readSeq 的 @我。
+     */
+    public void pruneMentions(String conversationId, String userId, String readSeq) {
+        if (conversationId == null || userId == null || readSeq == null) {
+            return;
+        }
+        try {
+            Conversation record = mongoTemplate.findOne(byRecordId(conversationId, userId), Conversation.class);
+            if (record == null || record.getPendingMentions() == null || record.getPendingMentions().isEmpty()) {
+                return;
+            }
+            List<Conversation.PendingMention> remaining = unreadMentions(record.getPendingMentions(), readSeq);
+            if (remaining.size() != record.getPendingMentions().size()) {
+                updateOwn(conversationId, userId, new Update().set("pendingMentions", remaining));
+            }
+        } catch (RuntimeException ex) {
+            log.warn("清理 @我 标记失败: conversationId={}, userId={}, error={}", conversationId, userId, ex.getMessage());
+        }
+    }
+
+    /** 过滤出 seqId 大于 readSeq 的 @我（readSeq 为空时全部保留） */
+    public static List<Conversation.PendingMention> unreadMentions(List<Conversation.PendingMention> mentions, String readSeq) {
+        if (mentions == null || mentions.isEmpty()) {
+            return List.of();
+        }
+        List<Conversation.PendingMention> result = new ArrayList<>();
+        for (Conversation.PendingMention mention : mentions) {
+            if (mention == null || mention.getSeqId() == null) {
+                continue;
+            }
+            if (readSeq == null || readSeq.isBlank() || SeqIdComparator.compare(mention.getSeqId(), readSeq) > 0) {
+                result.add(mention);
+            }
+        }
+        return result;
+    }
+
+    /**
      * 消息被撤回：如果它是各参与者记录里的最后一条消息，把预览替换掉，避免列表继续展示原文。
+     * 同时移除各成员记录上指向它的 @我。
      */
     public void onMessageRecalled(String conversationId, String messageId) {
+        try {
+            mongoTemplate.updateMulti(Query.query(Criteria.where("conversationId").is(conversationId)
+                            .and("pendingMentions.messageId").is(messageId)),
+                    new Update().pull("pendingMentions", Query.query(Criteria.where("messageId").is(messageId)).getQueryObject()),
+                    Conversation.class);
+        } catch (RuntimeException ex) {
+            log.warn("移除撤回消息的 @我 失败: conversationId={}, error={}", conversationId, ex.getMessage());
+        }
         try {
             mongoTemplate.updateMulti(Query.query(Criteria.where("conversationId").is(conversationId)
                             .and("lastMessage.messageId").is(messageId)),

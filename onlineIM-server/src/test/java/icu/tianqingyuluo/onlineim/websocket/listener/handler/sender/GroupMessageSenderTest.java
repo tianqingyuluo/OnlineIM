@@ -107,6 +107,17 @@ class GroupMessageSenderTest {
     }
 
     @Test
+    void keepsOnlyMentionsOfCurrentMembers() {
+        assertTrue(sender.publishMessage(session,
+                "{\"group_id\":\"grp_1\",\"message_type\":\"text\",\"content\":\"@r hi\","
+                        + "\"client_message_id\":\"client_m\","
+                        + "\"at_users\":[\"usr_receiver\",\"usr_outsider\",\"usr_sender\",\"all\",\"usr_receiver\"]}"));
+
+        verify(messageRepository).save(argThat(message ->
+                List.of("usr_receiver").equals(message.getAtUsers())));
+    }
+
+    @Test
     void rejectsNonMember() {
         when(groupMemberService.isGroupMember("grp_1", "usr_sender")).thenReturn(false);
 

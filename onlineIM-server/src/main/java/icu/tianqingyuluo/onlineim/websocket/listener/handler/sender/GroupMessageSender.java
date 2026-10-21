@@ -16,6 +16,7 @@ import icu.tianqingyuluo.onlineim.service.ConversationRecordService;
 import icu.tianqingyuluo.onlineim.service.GroupMemberService;
 import icu.tianqingyuluo.onlineim.service.MessageReplyService;
 import icu.tianqingyuluo.onlineim.service.RedisStreamService;
+import icu.tianqingyuluo.onlineim.util.MentionUtil;
 import icu.tianqingyuluo.onlineim.websocket.handler.WebSocketFrameSender;
 import icu.tianqingyuluo.onlineim.websocket.session.WebSocketSession;
 import lombok.extern.slf4j.Slf4j;
@@ -103,12 +104,6 @@ public class GroupMessageSender implements MessageSenderHandler {
             groupMessage.setStatus(0);
             groupMessage.setSeqId(IdUtil.getSnowflakeNextIdStr());
             groupMessage.setClientMessageId(request.getClientMessageId());
-            groupMessage.setAtUsers(request.getAtUsers());
-            groupMessage.setTimestamp(new Date());
-            groupMessage.setCreatedAt(new Date());
-            groupMessage.setUpdatedAt(new Date());
-
-            groupMessageRepository.save(groupMessage);
             java.util.List<String> memberIds = groupMemberService.getGroupMembers(groupMessage.getGroupId())
                     .stream()
                     .map(GroupMemberResponse::getUserInfo)
@@ -116,6 +111,14 @@ public class GroupMessageSender implements MessageSenderHandler {
                     .map(UserBriefResponse::getUserId)
                     .filter(java.util.Objects::nonNull)
                     .toList();
+            // 只保留当前群成员（不含自己）的 @，非法项丢弃
+            groupMessage.setAtUsers(MentionUtil.sanitize(
+                    request.getMessageType(), senderId, request.getAtUsers(), memberIds));
+            groupMessage.setTimestamp(new Date());
+            groupMessage.setCreatedAt(new Date());
+            groupMessage.setUpdatedAt(new Date());
+
+            groupMessageRepository.save(groupMessage);
             conversationRecords.onGroupMessage(groupMessage, memberIds);
             redisStreamService.publishGroupMessage(
                     "GROUP_MESSAGE",
