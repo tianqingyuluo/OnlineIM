@@ -17,6 +17,7 @@ import { websocketService } from '@/services/websocket.service';
 import { conversationService } from '@/services/conversation.service';
 import { compareSeqId, maxSeqId } from '@/utils/seq-id';
 import { buildReplyReference } from '@/utils/reply-preview';
+import { toServerTimestamp } from '@/utils/conversation-time';
 import {
   onConversationAck,
   onConversationMessage,
@@ -313,7 +314,7 @@ export const useHistoryStore = defineStore('history', {
 
     addPendingMessageContent(content: string, conversationId: string): string {
       const clientId = this.generateClientId();
-      const now = new Date().toISOString();
+      const now = toServerTimestamp();
       const item: PendingMessageInfoItem = {
         clientId,
         content,
@@ -335,7 +336,7 @@ export const useHistoryStore = defineStore('history', {
       const item = this.pendingMessagesInfo.find(entry => entry.clientId === clientId);
       if (!item) return;
       if (item.timeoutId) clearTimeout(item.timeoutId);
-      item.timestamp = new Date().toISOString();
+      item.timestamp = toServerTimestamp();
       item.state = 'sending';
       item.attempts = 1;
       this.updateMessageState(clientId, 'sending');
@@ -351,7 +352,7 @@ export const useHistoryStore = defineStore('history', {
       atUsers?: string[],
     ): string {
       const clientId = this.generateClientId();
-      const timestamp = new Date().toISOString();
+      const timestamp = toServerTimestamp();
       const currentUser = useUserStore().loggedInUser;
       const replyTo = this.replyTarget?.conversationId === conversationId
         ? { ...this.replyTarget.reference }
@@ -427,7 +428,7 @@ export const useHistoryStore = defineStore('history', {
         if (existing.timeoutId) clearTimeout(existing.timeoutId);
         existing.state = 'sending';
         existing.attempts = 1;
-        existing.timestamp = new Date().toISOString();
+        existing.timestamp = toServerTimestamp();
         message.delivery_state = 'sending';
         this.sendPendingMessage(existing);
         this.schedulePendingRetry(existing.clientId);
@@ -438,7 +439,7 @@ export const useHistoryStore = defineStore('history', {
         clientId: message.client_message_id,
         content: message.content,
         messageType: message.message_type,
-        timestamp: new Date().toISOString(),
+        timestamp: toServerTimestamp(),
         createAt: message.timestamp,
         conversationId: message.conversation_id,
         receiverId,
