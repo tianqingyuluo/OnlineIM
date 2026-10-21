@@ -14,9 +14,18 @@ import {Search} from "lucide-vue-next";
 import {useListStore} from '@/stores/list.ts'
 import {type Conversation} from "@/type/Conversation.ts";
 import router from "@/router";
+import { useRoute } from "vue-router";
+import ConversationListItem from "@/components/AppSideBar/right/ConversationListItem.vue";
+import { sortByActivity } from "@/stores/conversation-live";
 
 
-const activeId = ref<string | null>(null);
+const route = useRoute();
+const selectedId = ref<string | null>(null);
+// 高亮跟随当前路由，直接打开聊天地址时也能正确选中
+const activeId = computed(() => {
+  const id = route.params.id;
+  return (Array.isArray(id) ? id[0] : id) || selectedId.value;
+});
 const searchQuery = ref('');
 const emits = defineEmits(['chatSelected'])
 const listStore = useListStore()
@@ -24,7 +33,7 @@ const listStore = useListStore()
 
 const pinnedConversations = computed(() => {
   const query = searchQuery.value.toLowerCase().trim();
-  const conversations = (listStore.conversations || []).filter(conversation => conversation.is_pinned);
+  const conversations = sortByActivity((listStore.conversations || []).filter(conversation => conversation.is_pinned));
   if (!query) return conversations;
   return conversations.filter(conversation => {
     const name = (conversation.target_info?.name || '').toLowerCase();
@@ -34,7 +43,7 @@ const pinnedConversations = computed(() => {
 
 const unpinnedConversations = computed(() => {
   const query = searchQuery.value.toLowerCase().trim();
-  const conversations = (listStore.conversations || []).filter(conversation => !conversation.is_pinned);
+  const conversations = sortByActivity((listStore.conversations || []).filter(conversation => !conversation.is_pinned));
   if (!query) return conversations;
   return conversations.filter(conversation => {
     const name = (conversation.target_info?.name || '').toLowerCase();
@@ -46,7 +55,7 @@ const unpinnedConversations = computed(() => {
 const hasConversations = computed(() => pinnedConversations.value.length > 0 || unpinnedConversations.value.length > 0);
 
 function handleChatClick(conversation: Conversation) {
-  activeId.value = conversation.conversation_id;
+  selectedId.value = conversation.conversation_id;
   emits('chatSelected', conversation);
   listStore.setConversationFieldsToNull(conversation.conversation_id);
   if (conversation.type=='private')
@@ -90,27 +99,7 @@ function handleChatClick(conversation: Conversation) {
                   @click="handleChatClick(conversation)"
                   class="data-[active=true]:bg-gray-100 data-[active=true]:text-black flex items-center w-full h-[80px] px-4 hover:bg-gray-50"
                 >
-                  <div class="flex items-center w-full">
-                    <div class="w-[50px] h-[50px] rounded-full overflow-hidden mr-4 flex-shrink-0">
-                      <img
-                        :src="conversation.target_info?.avatar_url || (conversation.conversation_id?.startsWith('grp_') ? '/images/group.png' : '/images/help.png')"
-                        :alt="conversation.target_info?.name || ''"
-                        class="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div class="flex flex-col flex-grow space-y-1 relative">
-                      <span class="text-[18px] font-bold truncate">
-                        {{ conversation.target_info?.name || 'Unknown' }}
-                      </span>
-                      <span class="text-[13px] text-gray-500 truncate truncate">
-                        <span v-if="conversation.is_at" class="text-red-500">[有人@我]</span>
-                        {{ conversation.last_message?.content_preview || '无消息' }}
-                      </span>
-                      <span v-if="conversation.notreadednumber && conversation.notreadednumber !== 0" :class="{'absolute top-0 right-0 text-white text-xs rounded-full px-2 py-1 truncate': true, 'bg-red-500': !conversation.is_muted, 'bg-gray-50': conversation.is_muted}">
-                          {{ conversation.notreadednumber >= 100 ? '99+' : conversation.notreadednumber }}
-                        </span>
-                    </div>
-                  </div>
+                  <ConversationListItem :conversation="conversation" />
                 </SidebarMenuButton>
               </SidebarMenuItem>
               </div>
@@ -126,23 +115,7 @@ function handleChatClick(conversation: Conversation) {
                   @click="handleChatClick(conversation)"
                   class="data-[active=true]:bg-gray-100 data-[active=true]:text-black flex items-center w-full h-[80px] px-4 hover:bg-gray-50"
                 >
-                  <div class="flex items-center w-full">
-                    <div class="w-[50px] h-[50px] rounded-full overflow-hidden mr-4 flex-shrink-0">
-                      <img
-                        :src="conversation.target_info?.avatar_url || (conversation.conversation_id?.startsWith('grp_') ? '/images/group.png' : '/images/help.png')"
-                        :alt="conversation.target_info?.name || ''"
-                        class="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div class="flex flex-col flex-grow space-y-1">
-                      <span class="text-[18px] font-bold">
-                        {{ conversation.target_info?.name || 'Unknown' }}
-                      </span>
-                      <span class="text-[13px] text-gray-500 truncate">
-                        {{ conversation.last_message?.content_preview || '无消息' }}
-                      </span>
-                    </div>
-                  </div>
+                  <ConversationListItem :conversation="conversation" />
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </template>

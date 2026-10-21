@@ -17,6 +17,13 @@ import { websocketService } from '@/services/websocket.service';
 import { conversationService } from '@/services/conversation.service';
 import { compareSeqId, maxSeqId } from '@/utils/seq-id';
 import { buildReplyReference } from '@/utils/reply-preview';
+import {
+  onConversationAck,
+  onConversationMessage,
+  onConversationRead,
+  onConversationRecall,
+  scheduleConversationRefresh,
+} from '@/stores/conversation-live';
 
 interface PendingMessageRange {
   id?: number;
@@ -371,6 +378,7 @@ export const useHistoryStore = defineStore('history', {
       };
       if (isGroup) this.groupMessages.push(tempMessage);
       else this.chatMessages.push(tempMessage);
+      onConversationMessage(tempMessage, this.activeConversationId);
 
       const item: PendingMessageInfoItem = {
         clientId,
@@ -455,9 +463,12 @@ export const useHistoryStore = defineStore('history', {
       const existing = this.findMessage(normalized.client_message_id, normalized.message_id);
       if (existing) {
         Object.assign(existing, normalized);
-      } else {
+      } else if (normalized.conversation_id === this.activeConversationId) {
+        // 只有当前打开的会话才放进消息列表；其他会话的消息只更新侧栏并写入本地缓存，
+        // 否则会混进正在查看的聊天窗口
         this.processMessages([normalized], isGroup);
       }
+      onConversationMessage(normalized, this.activeConversationId);
       void dbService.putHistory([normalized])
         .then(() => this.sendDeliveredReceipts([normalized]))
         .catch(error => console.error('保存实时消息失败:', error));
@@ -608,6 +619,7 @@ export const useHistoryStore = defineStore('history', {
         }
         this.pendingMessagesInfo.splice(pendingIndex, 1);
       }
+      onConversationAck(payload.conversation_id, payload.client_message_id, payload.message_id);
       this.updateReadStateLatest(payload.conversation_id, payload.seq_id);
     },
 
@@ -645,6 +657,7 @@ export const useHistoryStore = defineStore('history', {
 
     async handleMessageRecalled(payload: MessageRecalledPayload): Promise<void> {
       if (!payload?.message_id || !payload.conversation_id) return;
+      onConversationRecall(payload.conversation_id, payload.message_id);
       for (const message of this.messagesForConversation(payload.conversation_id)) {
         if (message.message_id === payload.message_id) {
           message.status = 3;
@@ -822,6 +835,9 @@ export const useHistoryStore = defineStore('history', {
         conversation_id: message.conversation_id,
         read_seq: candidate,
       });
+      const remaining = messages.filter(item => compareSeqId(item.seq_id, candidate) > 0
+        && item.sender_info.user_id !== currentUserId).length;
+      onConversationRead(message.conversation_id, remaining);
     },
 
     markConversationReadToLatest(conversationId: string) {
@@ -834,6 +850,16 @@ export const useHistoryStore = defineStore('history', {
       state.unread_count = 0;
       this.readStates[conversationId] = state;
       websocketService.sendReadReceipt({ conversation_id: conversationId, read_seq: target });
+      onConversationRead(conversationId, 0);
+    },
+
+    /** 聊天窗口卸载：不再视为“正在查看”，并用服务端值校正该会话的未读与预览 */
+    leaveConversation(conversationId: string) {
+      if (this.activeConversationId === conversationId) {
+        this.activeConversationId = null;
+        this.activeConversationIsGroup = false;
+      }
+      scheduleConversationRefresh(conversationId, 300);
     },
 
     async syncActiveConversation() {

@@ -13,16 +13,33 @@ import {Input} from "@/components/ui/input";
 import {Search} from "lucide-vue-next";
 import {useListStore} from '@/stores/list.ts'
 import {type Conversation} from "@/type/Conversation.ts";
+import router from "@/router";
+import ConversationListItem from "@/components/AppSideBar/right/ConversationListItem.vue";
+import { sortByActivity } from "@/stores/conversation-live";
 
 
 const activeId = ref<string | null>(null);
 const emits = defineEmits(['chatSelected'])
 const listStore = useListStore()
-const conversations = computed(() => listStore.conversations)
+const searchQuery = ref('')
+// 置顶在前，其余按最近活动时间倒序；支持按名称搜索
+const conversations = computed(() => {
+  const query = searchQuery.value.toLowerCase().trim()
+  const all = (listStore.conversations || []).filter(conversation =>
+    !query || (conversation.target_info?.name || '').toLowerCase().includes(query))
+  return [
+    ...sortByActivity(all.filter(conversation => conversation.is_pinned)),
+    ...sortByActivity(all.filter(conversation => !conversation.is_pinned)),
+  ]
+})
 
+// 之前只 emit 事件而父组件没有监听，点击会话不会进入聊天页
 function handleChatClick(conversation: Conversation) {
   activeId.value = conversation.conversation_id
   emits('chatSelected', conversation)
+  listStore.setConversationFieldsToNull(conversation.conversation_id)
+  const isGroup = conversation.type === 'group' || conversation.conversation_id.startsWith('grp_')
+  void router.push(`/main/chat/${isGroup ? 'group' : 'private'}/${conversation.conversation_id}`)
 }
 import { useRoute } from 'vue-router'
 import UserMainPart from '@/components/MainPart/UserMainPart.vue'
@@ -54,6 +71,7 @@ const chatId = computed(() => {
             id="search"
             type="text"
             placeholder="搜索"
+            v-model="searchQuery"
             class="w-full pl-10 bg-white border-blue-100 focus:border-blue-100 focus:ring-0"
         />
         <Search class="absolute left-3 top-1/2 transform -translate-y-1/2 size-6 text-muted-foreground" />
@@ -70,23 +88,7 @@ const chatId = computed(() => {
                   @click="handleChatClick(conversation)"
                   class="data-[active=true]:bg-gray-100 data-[active=true]:text-black flex items-center w-full h-[80px] px-4 hover:bg-gray-50"
               >
-                <div class="flex items-center w-full">
-                  <div class="w-[50px] h-[50px] rounded-full overflow-hidden mr-4 flex-shrink-0">
-                    <img
-                        :src="conversation.target_info?.avatar_url || (conversation.conversation_id?.startsWith('grp_') ? '/images/group.png' : '/images/help.png')"
-                        :alt="conversation.target_info.name"
-                        class="w-full h-full object-cover"
-                    />
-                  </div>
-                  <div class="flex flex-col flex-grow space-y-1">
-                    <span class="text-[18px] font-bold">
-                      {{ conversation.target_info.name }}
-                    </span>
-                    <span class="text-[13px] text-gray-500 truncate">
-                      {{ conversation.last_message.content_preview }}
-                    </span>
-                  </div>
-                </div>
+                <ConversationListItem :conversation="conversation" />
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>

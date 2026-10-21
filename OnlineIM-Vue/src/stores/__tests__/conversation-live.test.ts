@@ -1,0 +1,120 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
+
+const getConversationById = vi.fn()
+vi.mock('@/services/conversation.service', () => ({
+  conversationService: { getConversationById, getReadState: vi.fn().mockResolvedValue({ conversation_id: 'x', delivered_seq: '0', read_seq: '0', latest_seq: '0', unread_count: 0 }), getMessageReaders: vi.fn() },
+}))
+vi.mock('@/stores/user', () => ({ useUserStore: () => ({ loggedInUser: { user_id: 'usr_me', username: 'me' } }) }))
+vi.mock('@/utils/indexedDB', () => ({ dbService: { putHistory: vi.fn().mockResolvedValue(undefined), markMessageRecalled: vi.fn().mockResolvedValue(undefined) }, STORES: {} }))
+vi.mock('@/services/websocket.service', () => ({ websocketService: { sendMessage: vi.fn(), sendReceipt: vi.fn(), sendReadReceipt: vi.fn() } }))
+
+const conv = (id: string, extra: Record<string, unknown> = {}) => ({
+  conversation_id: id,
+  type: id.startsWith('grp_') ? 'group' : 'private',
+  target_info: { id: 'usr_peer', name: id },
+  last_message: null,
+  unread_count: 0,
+  last_activity_time: '2026-10-21 10:00:00',
+  ...extra,
+})
+const msg = (id: string, conversationId: string, sender: string, extra: Record<string, unknown> = {}) => ({
+  message_id: id,
+  conversation_id: conversationId,
+  sender_info: { user_id: sender, username: sender },
+  message_type: 'text',
+  content: 'hello ' + id,
+  timestamp: '2026-10-21 22:00:00',
+  seq_id: '1',
+  status: 1,
+  ...extra,
+})
+
+describe('conversation list live updates', () => {
+  beforeEach(async () => {
+    vi.useFakeTimers()
+    vi.clearAllMocks()
+    setActivePinia(createPinia())
+    const live = await import('@/stores/conversation-live')
+    live.resetConversationLiveState()
+  })
+
+  async function setup(conversations: unknown[]) {
+    const { useListStore } = await import('@/stores/list')
+    const list = useListStore()
+    list.conversations = conversations as never
+    return { list, live: await import('@/stores/conversation-live') }
+  }
+
+  it('updates preview, time and unread for incoming messages of other conversations, once per message', async () => {
+    const { list, live } = await setup([conv('conv_a'), conv('conv_b', { last_activity_time: '2026-10-21 12:00:00' })])
+    live.onConversationMessage(msg('m1', 'conv_a', 'usr_peer') as never, 'conv_b')
+    live.onConversationMessage(msg('m1', 'conv_a', 'usr_peer') as never, 'conv_b')
+    live.onConversationMessage(msg('m2', 'conv_a', 'usr_peer', { message_type: 'image', content: '{}' }) as never, null)
+    const a = list.conversations.find(c => c.conversation_id === 'conv_a')!
+    expect(a.unread_count).toBe(2)
+    expect(a.last_message.content_preview).toBe('[图片]')
+    expect(a.last_activity_time).toBe('2026-10-21 22:00:00')
+    expect(live.sortByActivity(list.conversations)[0].conversation_id).toBe('conv_a')
+  })
+
+  it('does not count unread for the conversation being viewed or for own messages', async () => {
+    const { list, live } = await setup([conv('conv_a')])
+    live.onConversationMessage(msg('m1', 'conv_a', 'usr_peer') as never, 'conv_a')
+    live.onConversationMessage(msg('local_c1', 'conv_a', 'usr_me', { content: 'mine', timestamp: new Date().toISOString() }) as never, null)
+    const a = list.conversations[0]
+    expect(a.unread_count).toBe(0)
+    expect(a.last_message.content_preview).toBe('mine')
+    live.onConversationAck('conv_a', 'c1', 'msg_real')
+    expect(a.last_message.message_id).toBe('msg_real')
+    live.onConversationRecall('conv_a', 'msg_real')
+    expect(a.last_message.content_preview).toBe('[消息已撤回]')
+    expect(a.last_message.is_recalled).toBe(true)
+  })
+
+  it('ignores out-of-order older messages for the preview but still counts them', async () => {
+    const { list, live } = await setup([conv('conv_a')])
+    live.onConversationMessage(msg('m2', 'conv_a', 'usr_peer', { timestamp: '2026-10-21 22:05:00', content: 'newer' }) as never, null)
+    live.onConversationMessage(msg('m1', 'conv_a', 'usr_peer', { timestamp: '2026-10-21 22:00:00', content: 'older' }) as never, null)
+    expect(list.conversations[0].last_message.content_preview).toBe('newer')
+    expect(list.conversations[0].unread_count).toBe(2)
+  })
+
+  it('fetches a conversation that is not in the list yet', async () => {
+    const { list, live } = await setup([conv('conv_a')])
+    getConversationById.mockResolvedValue(conv('conv_new', { unread_count: 1, last_message: { message_id: 'm9', content_preview: 'hi', timestamp: '2026-10-21 22:09:00', is_recalled: false } }))
+    live.onConversationMessage(msg('m9', 'conv_new', 'usr_peer') as never, null)
+    await vi.runAllTimersAsync()
+    expect(getConversationById).toHaveBeenCalledWith('conv_new')
+    expect(list.conversations[0].conversation_id).toBe('conv_new')
+    expect(list.conversations[0].unread_count).toBe(1)
+  })
+
+  it('clears unread on read and reconciles with the server, removing conversations that became invisible', async () => {
+    const { list, live } = await setup([conv('conv_a', { unread_count: 3 }), conv('grp_gone')])
+    getConversationById.mockImplementation(async (id: string) => {
+      if (id === 'grp_gone') throw { status: 404 }
+      return conv('conv_a', { unread_count: 0 })
+    })
+    live.onConversationRead('conv_a', 0)
+    expect(list.conversations[0].unread_count).toBe(0)
+    await vi.runAllTimersAsync()
+    expect(getConversationById).toHaveBeenCalledWith('conv_a')
+    await live.refreshConversation('grp_gone')
+    expect(list.conversations.map(c => c.conversation_id)).toEqual(['conv_a'])
+  })
+
+  it('history store keeps messages of other conversations out of the open chat', async () => {
+    const { list } = await setup([conv('conv_a'), conv('conv_b')])
+    const { useHistoryStore } = await import('@/stores/history')
+    const history = useHistoryStore()
+    history.activeConversationId = 'conv_b'
+    history.handleWebSocketMessage(msg('m1', 'conv_a', 'usr_peer') as never)
+    history.handleWebSocketMessage(msg('m2', 'conv_b', 'usr_peer', { seq_id: '2' }) as never)
+    expect(history.chatMessages.map(m => m.message_id)).toEqual(['m2'])
+    expect(list.conversations.find(c => c.conversation_id === 'conv_a')!.unread_count).toBe(1)
+    expect(list.conversations.find(c => c.conversation_id === 'conv_b')!.unread_count).toBe(0)
+    history.leaveConversation('conv_b')
+    expect(history.activeConversationId).toBeNull()
+  })
+})
