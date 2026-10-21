@@ -136,7 +136,7 @@ class ChatMediaServiceTest {
                 new MockMultipartFile("file", "noext", "text/plain", "x".getBytes())));
         assertStatus(HttpStatus.BAD_REQUEST, () -> service.upload("usr_a", "file",
                 new MockMultipartFile("file", "a.txt", "text/plain", new byte[0])));
-        assertStatus(HttpStatus.BAD_REQUEST, () -> service.upload("usr_a", "voice",
+        assertStatus(HttpStatus.BAD_REQUEST, () -> service.upload("usr_a", "audio",
                 new MockMultipartFile("file", "a.txt", "text/plain", "x".getBytes())));
         verify(repository, never()).save(any());
     }
@@ -176,6 +176,107 @@ class ChatMediaServiceTest {
         assertStatus(HttpStatus.BAD_REQUEST, () -> service.resolveForMessage("usr_a", "file", "upl_ffffffffffffffffffffffffffffffff"));
         assertStatus(HttpStatus.BAD_REQUEST, () -> service.resolveForMessage("usr_a", "file", "https://example.com/a.pdf"));
         assertStatus(HttpStatus.BAD_REQUEST, () -> service.resolveForMessage("usr_a", "file", "{broken"));
+    }
+
+    // ---------------- 语音 ----------------
+
+    private static byte[] audio(String name) throws Exception {
+        return icu.tianqingyuluo.onlineim.util.AudioProbeTest.fixture(name);
+    }
+
+    @Test
+    void voiceUploadDetectsFormatStoresUnderVoicesAndUsesParsedDuration() throws Exception {
+        byte[] webm = audio("chrome-mediarecorder.webm");
+        // 客户端谎报 30 秒、Content-Type 和扩展名都不对：以内容和解析时长为准
+        ChatUpload upload = service.upload("usr_a", "voice",
+                new MockMultipartFile("file", "录音.mp3", "text/html", webm), 30_000L);
+        assertTrue(upload.getObjectKey().matches("chats/voices/\\d{6}/[0-9a-f]{32}\\.webm"), upload.getObjectKey());
+        assertEquals("audio/webm", upload.getMime());
+        assertEquals("voice", upload.getKind());
+        assertEquals("parsed", upload.getDurationSource());
+        assertEquals("opus", upload.getCodec());
+        assertTrue(Math.abs(upload.getDurationMs() - 2000) < 700, String.valueOf(upload.getDurationMs()));
+        assertArrayEquals(webm, stored.get(upload.getObjectKey()));
+        assertEquals("audio/webm", storedMime.get(upload.getObjectKey()));
+
+        Map<String, Object> media = service.toMediaMap(upload);
+        assertEquals(upload.getDurationMs(), media.get("duration_ms"));
+        assertEquals(Math.max(1L, Math.round(upload.getDurationMs() / 1000.0)), media.get("duration"));
+
+        for (String name : new String[]{"tone-1500ms-opus.ogg", "tone-1500ms.m4a", "tone-1500ms.mp3"}) {
+            ChatUpload other = service.upload("usr_a", "voice", new MockMultipartFile("file", "v", "application/octet-stream", audio(name)), null);
+            assertTrue(Math.abs(other.getDurationMs() - 1500) < 150, name + " " + other.getDurationMs());
+        }
+        ChatUpload wav = service.upload("usr_a", "voice",
+                new MockMultipartFile("file", "a.wav", "audio/wav", icu.tianqingyuluo.onlineim.util.AudioProbeTest.wav(8000, 3000)), null);
+        assertEquals(3000, wav.getDurationMs());
+        assertTrue(wav.getObjectKey().endsWith(".wav"));
+    }
+
+    @Test
+    void voiceWithoutParsableDurationUsesValidatedClientDuration() throws Exception {
+        byte[] fragmented = audio("tone-1500ms-fragmented.m4a");
+        ChatUpload upload = service.upload("usr_a", "voice", new MockMultipartFile("file", "v.m4a", "audio/mp4", fragmented), 1500L);
+        assertEquals(1500, upload.getDurationMs());
+        assertEquals("client", upload.getDurationSource());
+        assertTrue(upload.getObjectKey().endsWith(".m4a"));
+        // 缺少时长 / 时长与大小明显不符 / 超长 / 太短
+        assertStatus(HttpStatus.BAD_REQUEST, () -> service.upload("usr_a", "voice", new MockMultipartFile("file", "v.m4a", "audio/mp4", fragmented), null));
+        assertStatus(HttpStatus.BAD_REQUEST, () -> service.upload("usr_a", "voice", new MockMultipartFile("file", "v.m4a", "audio/mp4", fragmented), 59_000L));
+        assertStatus(HttpStatus.BAD_REQUEST, () -> service.upload("usr_a", "voice", new MockMultipartFile("file", "v.m4a", "audio/mp4", fragmented), 1L));
+        assertStatus(HttpStatus.BAD_REQUEST, () -> service.upload("usr_a", "voice", new MockMultipartFile("file", "v.m4a", "audio/mp4", fragmented), 120_000L));
+    }
+
+    @Test
+    void rejectsInvalidVoiceUploads() throws Exception {
+        // 超过 60 秒（解析值）
+        assertStatus(HttpStatus.BAD_REQUEST, () -> service.upload("usr_a", "voice",
+                new MockMultipartFile("file", "long.wav", "audio/wav", icu.tianqingyuluo.onlineim.util.AudioProbeTest.wav(8000, 62_000)), 10_000L));
+        // 太短
+        assertStatus(HttpStatus.BAD_REQUEST, () -> service.upload("usr_a", "voice",
+                new MockMultipartFile("file", "short.wav", "audio/wav", icu.tianqingyuluo.onlineim.util.AudioProbeTest.wav(8000, 200)), null));
+        // 伪造：HTML/PNG/视频
+        assertStatus(HttpStatus.UNSUPPORTED_MEDIA_TYPE, () -> service.upload("usr_a", "voice",
+                new MockMultipartFile("file", "x.webm", "audio/webm", "<html>not audio</html>".getBytes()), 1000L));
+        assertStatus(HttpStatus.UNSUPPORTED_MEDIA_TYPE, () -> service.upload("usr_a", "voice",
+                new MockMultipartFile("file", "x.webm", "audio/webm", noisyImage(10, 10, "png", false)), 1000L));
+        assertStatus(HttpStatus.UNSUPPORTED_MEDIA_TYPE, () -> service.upload("usr_a", "voice",
+                new MockMultipartFile("file", "x.webm", "video/webm", audio("video-1s.webm")), 1000L));
+        // 损坏
+        byte[] truncated = java.util.Arrays.copyOf(audio("tone-1500ms-opus.ogg"), 100);
+        assertStatus(HttpStatus.BAD_REQUEST, () -> service.upload("usr_a", "voice",
+                new MockMultipartFile("file", "x.ogg", "audio/ogg", truncated), 1000L));
+        // 不在允许列表
+        properties.setVoiceFormats(new java.util.ArrayList<>(java.util.List.of("webm", "ogg")));
+        assertStatus(HttpStatus.UNSUPPORTED_MEDIA_TYPE, () -> service.upload("usr_a", "voice",
+                new MockMultipartFile("file", "x.mp3", "audio/mpeg", audio("tone-1500ms.mp3")), null));
+        // 超过大小
+        properties.setVoiceMaxSize(DataSize.ofKilobytes(2));
+        assertStatus(HttpStatus.PAYLOAD_TOO_LARGE, () -> service.upload("usr_a", "voice",
+                new MockMultipartFile("file", "x.webm", "audio/webm", audio("tone-1500ms.webm")), null));
+        verify(repository, never()).save(any());
+        assertTrue(stored.isEmpty(), "被拒绝的语音不会写入对象存储");
+    }
+
+    @Test
+    void voiceMessageMustReferenceOwnVoiceUpload() throws Exception {
+        ChatUpload voice = service.upload("usr_a", "voice",
+                new MockMultipartFile("file", "v.webm", "audio/webm", audio("tone-1500ms.webm")), null);
+        ChatUpload image = service.upload("usr_a", "image",
+                new MockMultipartFile("file", "a.png", "image/png", noisyImage(50, 50, "png", false)));
+        ChatMediaService.ResolvedMedia resolved = service.resolveForMessage("usr_a", "voice",
+                "{\"file_id\":\"" + voice.getId() + "\",\"duration_ms\":999999,\"url\":\"https://evil.example/a.webm\"}");
+        Map<?, ?> content = new ObjectMapper().readValue(resolved.content(), Map.class);
+        assertEquals(voice.getUrl(), content.get("url"));
+        assertEquals("voice", content.get("type"));
+        assertEquals(voice.getDurationMs().intValue(), ((Number) content.get("duration_ms")).intValue(), "时长取服务端记录，忽略客户端");
+        assertEquals(voice.getDurationMs().intValue(), ((Number) resolved.ext().get("duration_ms")).intValue());
+        assertTrue(ChatMediaService.isMediaMessage("voice"));
+
+        assertStatus(HttpStatus.BAD_REQUEST, () -> service.resolveForMessage("usr_b", "voice", voice.getId()));
+        assertStatus(HttpStatus.BAD_REQUEST, () -> service.resolveForMessage("usr_a", "voice", image.getId()));
+        assertStatus(HttpStatus.BAD_REQUEST, () -> service.resolveForMessage("usr_a", "image", voice.getId()));
+        assertNotNull(service.resolveForMessage("usr_a", "file", voice.getId()), "语音也可以作为文件发送");
     }
 
     @Test

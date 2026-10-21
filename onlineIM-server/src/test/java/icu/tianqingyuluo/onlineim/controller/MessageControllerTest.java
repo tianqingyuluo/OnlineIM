@@ -109,4 +109,14 @@ class MessageControllerTest {
         assertEquals(expected, response.getBody());
         verify(messageService).sendMessage(request, "usr_me");
     }
+
+    @Test
+    void parsesVoiceClientDuration() {
+        org.junit.jupiter.api.Assertions.assertNull(MessageController.parseClientDuration(null, null));
+        org.junit.jupiter.api.Assertions.assertEquals(1500L, MessageController.parseClientDuration(null, "1500"));
+        org.junit.jupiter.api.Assertions.assertEquals(2500L, MessageController.parseClientDuration("2.5", null));
+        org.junit.jupiter.api.Assertions.assertEquals(800L, MessageController.parseClientDuration("9", "800"), "duration_ms 优先");
+        org.junit.jupiter.api.Assertions.assertThrows(icu.tianqingyuluo.onlineim.exception.ChatMediaException.class,
+                () -> MessageController.parseClientDuration("abc", null));
+    }
 }

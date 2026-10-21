@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.unit.DataSize;
 
 import java.util.ArrayList;
+import java.time.Duration;
 import java.util.List;
 
 /**
@@ -35,6 +36,18 @@ public class ChatUploadProperties {
 
     /** 缩略图最长边（像素），按比例缩放，不放大 */
     private int thumbnailMaxEdge = 320;
+
+    /** 语音大小上限 */
+    private DataSize voiceMaxSize = DataSize.ofMegabytes(5);
+
+    /** 允许的语音容器格式（按文件内容识别）：webm、ogg、mp4、mp3、wav */
+    private List<String> voiceFormats = new ArrayList<>(List.of("webm", "ogg", "mp4", "mp3", "wav"));
+
+    /** 语音最长时长 */
+    private Duration voiceMaxDuration = Duration.ofSeconds(60);
+
+    /** 语音最短时长 */
+    private Duration voiceMinDuration = Duration.ofMillis(500);
 
     /** 图片最大像素数（宽 × 高），防止解压炸弹 */
     private long imageMaxPixels = 40_000_000L;

@@ -300,6 +300,33 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 
 会话预览显示 `[图片]` / `[文件]`，引用预览显示 `[图片]` / `[文件] 文件名`。
 
+## 语音消息
+
+与图片/文件同一条管线：先 `POST /api/v1/messages/upload`（`type=voice`）上传，再以 `message_type=voice` 发送。
+
+### 上传
+
+- multipart 字段：`type=voice`、`file`=录音文件，可选 `duration_ms`（毫秒）或 `duration`（秒，可带小数）作为客户端测得的时长。
+- 格式按文件内容识别（不信任扩展名/Content-Type），默认允许 `im.upload.voice-formats=webm,ogg,mp4,mp3,wav`：WebM（Opus/Vorbis，浏览器 MediaRecorder 默认）、Ogg（Opus/Vorbis）、MP4/M4A（只含音轨；含视频轨拒绝）、MP3、WAV。
+- 时长：服务端能解析时以解析值为准（WAV 头、Ogg granule、MP4 mvhd、MP3 逐帧、WebM Info/Duration 或最后一个 Block 时间戳——MediaRecorder 产物没有 Duration 也能估算）；解析不到（如分片 MP4）时才用客户端上报值，并要求“文件大小 / 时长”折算码率在 2 kbit/s～3.2 Mbit/s 之间，否则视为伪造。
+- 限制：`im.upload.voice-max-duration`（默认 60s，解析值允许 1 秒帧对齐余量，存储时截到上限）、`im.upload.voice-min-duration`（默认 500ms）、`im.upload.voice-max-size`（默认 5MB）。
+- 错误：无法识别/不允许的格式或视频文件 `415`；文件损坏、时长超限/太短、缺少时长、时长与大小不符 `400`；超过大小 `413`。
+- 对象键 `chats/voices/yyyyMM/<128 位随机十六进制>.<webm|ogg|m4a|mp3|wav>`；`/onlineim/**` 代理按扩展名返回 `audio/*`，支持单段 `Range`（206，便于拖动进度）。
+
+上传响应在媒体字段基础上增加：
+
+```json
+{ "type": "voice", "mime": "audio/webm", "duration_ms": 2040, "duration": 2 }
+```
+
+`duration_ms` 为权威时长（毫秒），`duration` 为四舍五入的秒数（至少 1）。不含 `thumbnail_*`、`width`、`height`。
+
+### 发送与展示
+
+`message_type=voice`，`content` 规则与图片相同：只认 `file_id`，必须是发送者本人的**语音**上传（引用图片/文件上传或他人上传 → WS `ERROR code=400` / HTTP `400`，不落库）；`content` 被替换为服务端元数据 JSON（含 `duration_ms`/`duration`），客户端提交的 `url`、`duration_ms` 等一律忽略。私聊/群聊 WS 与 `POST /api/v1/messages` 都支持；历史、同步、上下文返回同一 `content`。语音上传也可以作为 `file` 消息发送。
+
+会话预览 `[语音]`；引用预览 `[语音 00:12]`（无时长时 `[语音]`）。
+
 ## 撤回事件与引用联动
 
 当前撤回发送方确认 `RECALL_MESSAGE_RESPONSE` 与接收方通知 `MESSAGE_RECALLED` 沿用既有顶层字段格式，而不是标准 `message` 信封；Web 客户端兼容两种解析方式。

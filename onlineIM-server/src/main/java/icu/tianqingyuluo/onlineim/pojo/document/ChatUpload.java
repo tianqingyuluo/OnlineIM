@@ -22,7 +22,7 @@ public class ChatUpload {
     @Id
     private String id;            // upl_ + 32 位随机十六进制
     private String uploaderId;
-    private String kind;          // image / file
+    private String kind;          // image / file / voice
     private String objectKey;     // chats/images/yyyyMM/<random>.png
     private String url;
     private String thumbnailKey;
@@ -35,5 +35,8 @@ public class ChatUpload {
     private Integer thumbnailWidth;
     private Integer thumbnailHeight;
     private Long thumbnailSize;
+    private Long durationMs;      // 语音时长（毫秒）
+    private String durationSource; // 语音时长来源：parsed=服务端解析 / client=客户端上报（已校验范围）
+    private String codec;          // 语音编码（opus/vorbis/aac/mp3/pcm…，能识别时）
     private Date createdAt;
 }

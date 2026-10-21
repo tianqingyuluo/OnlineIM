@@ -7,6 +7,7 @@ import icu.tianqingyuluo.onlineim.config.ChatUploadProperties;
 import icu.tianqingyuluo.onlineim.exception.ChatMediaException;
 import icu.tianqingyuluo.onlineim.pojo.document.ChatUpload;
 import icu.tianqingyuluo.onlineim.repository.ChatUploadRepository;
+import icu.tianqingyuluo.onlineim.util.AudioProbe;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.http.MediaTypeFactory;
@@ -39,10 +40,10 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * 聊天图片/文件：上传到对象存储（经 OSSAdapterFactory 创建的适配器）、生成图片缩略图、
+ * 聊天图片/文件/语音：上传到对象存储（经 OSSAdapterFactory 创建的适配器）、生成图片缩略图、
  * 发送消息时把客户端提交的 file_id 解析成服务端权威的媒体元数据。
  *
- * <p>对象键：{@code chats/images|files/yyyyMM/<128 位随机十六进制>.<ext>}，不包含用户/会话 ID 和原文件名，
+ * <p>对象键：{@code chats/images|files|voices/yyyyMM/<128 位随机十六进制>.<ext>}，不包含用户/会话 ID 和原文件名，
  * 不可枚举；浏览器经 {@code /onlineim/**} 代理读取。</p>
  */
 @Slf4j
@@ -51,6 +52,12 @@ public class ChatMediaService {
 
     public static final String KIND_IMAGE = "image";
     public static final String KIND_FILE = "file";
+    public static final String KIND_VOICE = "voice";
+    /** 服务端解析出的时长与客户端上报的差异超过该值时以解析值为准（仅记录日志） */
+    private static final long DURATION_MISMATCH_LOG_MS = 2000;
+    /** 仅凭客户端上报时长时的码率合理范围（bit/s），用于识别明显伪造的时长 */
+    static final long MIN_PLAUSIBLE_BPS = 2_000;
+    static final long MAX_PLAUSIBLE_BPS = 3_200_000;
     static final int MAX_NAME_LENGTH = 200;
     private static final float JPEG_QUALITY = 0.82f;
 
@@ -69,7 +76,7 @@ public class ChatMediaService {
     }
 
     public static boolean isMediaMessage(String messageType) {
-        return KIND_IMAGE.equals(messageType) || KIND_FILE.equals(messageType);
+        return KIND_IMAGE.equals(messageType) || KIND_FILE.equals(messageType) || KIND_VOICE.equals(messageType);
     }
 
     /** 发送媒体消息时由服务端生成的消息内容（JSON 字符串）与扩展字段 */
@@ -77,21 +84,32 @@ public class ChatMediaService {
     }
 
     public ChatUpload upload(String userId, String kind, MultipartFile file) {
-        if (!KIND_IMAGE.equals(kind) && !KIND_FILE.equals(kind)) {
-            throw ChatMediaException.badRequest("type 只能是 image 或 file");
+        return upload(userId, kind, file, null);
+    }
+
+    /**
+     * @param clientDurationMs 客户端上报的语音时长（毫秒，可空）。服务端能从文件解析出时长时以解析值为准，
+     *                         解析不到（如分片 MP4）时才使用上报值，并校验范围与码率合理性。
+     */
+    public ChatUpload upload(String userId, String kind, MultipartFile file, Long clientDurationMs) {
+        if (!KIND_IMAGE.equals(kind) && !KIND_FILE.equals(kind) && !KIND_VOICE.equals(kind)) {
+            throw ChatMediaException.badRequest("type 只能是 image、file 或 voice");
         }
         if (file == null || file.isEmpty()) {
             throw ChatMediaException.badRequest("文件不能为空");
         }
-        long limit = (KIND_IMAGE.equals(kind) ? properties.getImageMaxSize() : properties.getFileMaxSize()).toBytes();
+        long limit = (KIND_IMAGE.equals(kind) ? properties.getImageMaxSize()
+                : KIND_VOICE.equals(kind) ? properties.getVoiceMaxSize() : properties.getFileMaxSize()).toBytes();
         if (file.getSize() > limit) {
-            throw ChatMediaException.tooLarge("文件超过大小上限 " + (limit / 1024 / 1024) + "MB");
+            throw ChatMediaException.tooLarge((KIND_VOICE.equals(kind) ? "语音" : "文件") + "超过大小上限 " + formatLimit(limit));
         }
-        String name = sanitizeName(file.getOriginalFilename(), KIND_IMAGE.equals(kind) ? "image" : "file");
+        String name = sanitizeName(file.getOriginalFilename(), kind);
         try {
-            ChatUpload upload = KIND_IMAGE.equals(kind)
-                    ? uploadImage(userId, name, file.getBytes())
-                    : uploadFile(userId, name, file);
+            ChatUpload upload = switch (kind) {
+                case KIND_IMAGE -> uploadImage(userId, name, file.getBytes());
+                case KIND_VOICE -> uploadVoice(userId, name, file.getBytes(), clientDurationMs);
+                default -> uploadFile(userId, name, file);
+            };
             return repository.save(upload);
         } catch (ChatMediaException e) {
             throw e;
@@ -159,6 +177,69 @@ public class ChatMediaService {
                 .build();
     }
 
+    private ChatUpload uploadVoice(String userId, String name, byte[] bytes, Long clientDurationMs) throws Exception {
+        AudioProbe.Result probe;
+        try {
+            probe = AudioProbe.probe(bytes);
+        } catch (AudioProbe.Unsupported e) {
+            throw ChatMediaException.unsupportedType("不支持的语音格式：" + e.getMessage());
+        } catch (AudioProbe.Corrupt e) {
+            throw ChatMediaException.badRequest("语音文件已损坏或无法解析：" + e.getMessage());
+        }
+        if (!properties.getVoiceFormats().contains(probe.format())) {
+            throw ChatMediaException.unsupportedType("不支持的语音格式: " + probe.format());
+        }
+        long durationMs = resolveVoiceDuration(probe, bytes.length, clientDurationMs);
+        String objectKey = objectBase("voices") + "." + probe.extension();
+        String url = storage.uploadObject(objectKey, new ByteArrayInputStream(bytes), probe.mime(), bytes.length);
+        return ChatUpload.builder()
+                .id(newUploadId())
+                .uploaderId(userId)
+                .kind(KIND_VOICE)
+                .objectKey(objectKey)
+                .url(url)
+                .name(name)
+                .size((long) bytes.length)
+                .mime(probe.mime())
+                .durationMs(durationMs)
+                .durationSource(probe.durationMs() != null ? "parsed" : "client")
+                .codec(probe.codec())
+                .createdAt(new Date())
+                .build();
+    }
+
+    long resolveVoiceDuration(AudioProbe.Result probe, long size, Long clientDurationMs) {
+        long max = properties.getVoiceMaxDuration().toMillis();
+        long min = properties.getVoiceMinDuration().toMillis();
+        Long duration = probe.durationMs();
+        if (duration != null) {
+            if (clientDurationMs != null && Math.abs(clientDurationMs - duration) > DURATION_MISMATCH_LOG_MS) {
+                log.info("语音时长上报与解析不一致，以解析为准: client={}ms parsed={}ms", clientDurationMs, duration);
+            }
+        } else {
+            if (clientDurationMs == null) {
+                throw ChatMediaException.badRequest("无法从文件解析语音时长，请同时提交 duration");
+            }
+            duration = clientDurationMs;
+            long bitsPerSecond = duration <= 0 ? Long.MAX_VALUE : size * 8 * 1000 / duration;
+            if (bitsPerSecond < MIN_PLAUSIBLE_BPS || bitsPerSecond > MAX_PLAUSIBLE_BPS) {
+                throw ChatMediaException.badRequest("语音时长与文件大小不符");
+            }
+        }
+        // 编码器帧对齐会让解析时长略超过录制上限，留 1 秒余量
+        if (duration > max + 1000) {
+            throw ChatMediaException.badRequest("语音时长不能超过 " + (max / 1000) + " 秒");
+        }
+        if (duration < min) {
+            throw ChatMediaException.badRequest("语音时长太短");
+        }
+        return Math.min(duration, max);
+    }
+
+    private static String formatLimit(long bytes) {
+        return bytes % (1024 * 1024) == 0 ? (bytes / 1024 / 1024) + "MB" : (bytes / 1024) + "KB";
+    }
+
     /**
      * 把客户端提交的媒体消息内容（file_id，或含 file_id 的 JSON）解析成服务端权威元数据。
      * 只能引用自己上传的文件；图片消息只能引用图片上传。
@@ -174,6 +255,9 @@ public class ChatMediaService {
         }
         if (KIND_IMAGE.equals(messageType) && !KIND_IMAGE.equals(upload.getKind())) {
             throw ChatMediaException.badRequest("该文件不是图片，不能作为图片消息发送");
+        }
+        if (KIND_VOICE.equals(messageType) && !KIND_VOICE.equals(upload.getKind())) {
+            throw ChatMediaException.badRequest("该文件不是语音，不能作为语音消息发送");
         }
         Map<String, Object> media = toMediaMap(upload);
         Map<String, Object> ext = new LinkedHashMap<>(media);
@@ -199,6 +283,10 @@ public class ChatMediaService {
         putIfPresent(media, "height", upload.getHeight());
         putIfPresent(media, "thumbnail_width", upload.getThumbnailWidth());
         putIfPresent(media, "thumbnail_height", upload.getThumbnailHeight());
+        if (upload.getDurationMs() != null) {
+            media.put("duration_ms", upload.getDurationMs());
+            media.put("duration", Math.max(1L, Math.round(upload.getDurationMs() / 1000.0)));
+        }
         return media;
     }
 

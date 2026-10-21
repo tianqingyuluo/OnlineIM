@@ -219,4 +219,13 @@ class MessageReplyServiceImplTest {
         verify(privateMessageRepository).findByConversationIdAndIdIn(eq("conv_1"), anyCollection());
         verify(privateMessageRepository, never()).findByIdAndConversationId(anyString(), anyString());
     }
+
+    @Test
+    void voiceReplyPreviewIncludesDuration() {
+        assertEquals("[语音 00:12]", icu.tianqingyuluo.onlineim.service.impl.MessageReplyServiceImpl.voicePreview(java.util.Map.of("duration_ms", 12_300)));
+        assertEquals("[语音 01:00]", icu.tianqingyuluo.onlineim.service.impl.MessageReplyServiceImpl.voicePreview(java.util.Map.of("duration_ms", 60_000L)));
+        assertEquals("[语音 00:01]", icu.tianqingyuluo.onlineim.service.impl.MessageReplyServiceImpl.voicePreview(java.util.Map.of("duration_ms", 400)));
+        assertEquals("[语音]", icu.tianqingyuluo.onlineim.service.impl.MessageReplyServiceImpl.voicePreview(null));
+        assertEquals("[语音]", icu.tianqingyuluo.onlineim.service.impl.MessageReplyServiceImpl.voicePreview(java.util.Map.of()));
+    }
 }

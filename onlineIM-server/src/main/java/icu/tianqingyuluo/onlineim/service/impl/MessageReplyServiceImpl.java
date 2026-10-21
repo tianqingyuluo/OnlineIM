@@ -217,12 +217,22 @@ public class MessageReplyServiceImpl implements MessageReplyService {
         return switch (normalizedType) {
             case "text" -> truncate(normalizeText(content));
             case "image" -> "[图片]";
-            case "voice", "audio" -> "[语音]";
+            case "voice", "audio" -> voicePreview(ext);
             case "video" -> "[视频]";
             case "emoji", "sticker" -> "[表情]";
             case "file" -> filePreview(ext);
             default -> "[消息]";
         };
+    }
+
+    /** 语音引用预览带时长，例如 “[语音 00:12]”；没有时长时为 “[语音]” */
+    public static String voicePreview(Map<String, Object> ext) {
+        Object raw = ext == null ? null : ext.get("duration_ms");
+        if (raw instanceof Number number && number.longValue() > 0) {
+            long seconds = Math.max(1, Math.round(number.longValue() / 1000.0));
+            return String.format("[语音 %02d:%02d]", seconds / 60, seconds % 60);
+        }
+        return "[语音]";
     }
 
     private String filePreview(Map<String, Object> ext) {

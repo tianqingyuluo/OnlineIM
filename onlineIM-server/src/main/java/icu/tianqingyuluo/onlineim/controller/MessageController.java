@@ -129,7 +129,7 @@ public class MessageController {
     }
     
     /**
-     * 上传聊天图片/文件（multipart：type=image|file，file=文件）。
+     * 上传聊天图片/文件/语音（multipart：type=image|file|voice，file=文件；语音可带 duration 秒或 duration_ms）。
      * 图片按内容识别格式并生成缩略图；返回 file_id 和 url、thumbnail_url、name、size、mime、width、height。
      * 发送图片/文件消息时 content 填 file_id（或含 file_id 的 JSON），服务端据此补全元数据。
      */
@@ -137,16 +137,33 @@ public class MessageController {
     public ResponseEntity<Map<String, Object>> uploadFile(
             @RequestHeader("Authorization") String token,
             @RequestParam String type,
-            @RequestParam("file") MultipartFile file) {
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "duration", required = false) String duration,
+            @RequestParam(value = "duration_ms", required = false) String durationMs) {
         String userId = jwtUtil.getUserIDFromToken(token);
         if (userId == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        ChatUpload upload = chatMediaService.upload(userId, type, file);
+        ChatUpload upload = chatMediaService.upload(userId, type, file, parseClientDuration(duration, durationMs));
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("status", "success");
         result.putAll(chatMediaService.toMediaMap(upload));
         return ResponseEntity.ok(result);
+    }
+
+    /** 语音客户端时长：duration_ms（毫秒）优先，其次 duration（秒，可带小数）；非法值按 400 处理 */
+    static Long parseClientDuration(String duration, String durationMs) {
+        try {
+            if (durationMs != null && !durationMs.isBlank()) {
+                return Math.round(Double.parseDouble(durationMs.trim()));
+            }
+            if (duration != null && !duration.isBlank()) {
+                return Math.round(Double.parseDouble(duration.trim()) * 1000);
+            }
+        } catch (NumberFormatException e) {
+            throw icu.tianqingyuluo.onlineim.exception.ChatMediaException.badRequest("duration 必须是数字");
+        }
+        return null;
     }
 
     /**
