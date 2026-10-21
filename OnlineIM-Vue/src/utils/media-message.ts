@@ -1,4 +1,4 @@
-export type ChatMediaKind = 'image' | 'file'
+export type ChatMediaKind = 'image' | 'file' | 'voice'
 
 /** 与后端上传接口及图片/文件消息 content 一致的字段（snake_case） */
 export interface ChatMedia {
@@ -13,15 +13,58 @@ export interface ChatMedia {
   height?: number
   thumbnail_width?: number
   thumbnail_height?: number
+  /** 语音时长（毫秒，服务端权威值）与取整后的秒数 */
+  duration_ms?: number
+  duration?: number
 }
 
 /** 客户端预检上限，与后端默认 im.upload.* 保持一致；最终以服务端校验为准 */
 export const IMAGE_MAX_BYTES = 10 * 1024 * 1024
 export const FILE_MAX_BYTES = 20 * 1024 * 1024
 export const IMAGE_ACCEPT = 'image/jpeg,image/png,image/gif,image/bmp'
+/** 语音：与后端 im.upload.voice-* 默认值一致 */
+export const VOICE_MAX_BYTES = 5 * 1024 * 1024
+export const VOICE_MAX_MS = 60 * 1000
+export const VOICE_MIN_MS = 1000
 
 export function isMediaMessageType(messageType?: string): messageType is ChatMediaKind {
-  return messageType === 'image' || messageType === 'file'
+  return messageType === 'image' || messageType === 'file' || messageType === 'voice'
+}
+
+/** 毫秒 -> m:ss 中的 “00:12” 形式（不足 1 秒按 1 秒） */
+export function formatVoiceClock(ms?: number): string {
+  if (!ms || !Number.isFinite(ms) || ms <= 0) return '00:00'
+  const seconds = Math.max(1, Math.round(ms / 1000))
+  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
+}
+
+/** 气泡里展示的秒数，如 12″ */
+export function formatVoiceSeconds(ms?: number): string {
+  if (!ms || !Number.isFinite(ms) || ms <= 0) return '0″'
+  return `${Math.max(1, Math.round(ms / 1000))}″`
+}
+
+/**
+ * 选择浏览器 MediaRecorder 支持的录音格式（优先 Opus）。返回空串表示让浏览器用默认格式。
+ */
+export function pickRecorderMimeType(isSupported: (type: string) => boolean): string {
+  const candidates = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/webm', 'audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/mpeg']
+  return candidates.find(type => {
+    try {
+      return isSupported(type)
+    } catch {
+      return false
+    }
+  }) || ''
+}
+
+/** 录音文件名扩展名（仅用于展示/下载名，服务端按内容识别格式） */
+export function voiceFileExtension(mime: string): string {
+  if (mime.includes('ogg')) return 'ogg'
+  if (mime.includes('mp4') || mime.includes('aac')) return 'm4a'
+  if (mime.includes('mpeg')) return 'mp3'
+  if (mime.includes('wav')) return 'wav'
+  return 'webm'
 }
 
 /** 解析图片/文件消息的 content（JSON 字符串或对象）；无法解析时返回 null，界面按占位显示 */
@@ -68,7 +111,9 @@ export function formatFileSize(bytes?: number): string {
 /** 本地预检；返回错误提示，通过返回 null */
 export function validateBeforeUpload(kind: ChatMediaKind, file: File): string | null {
   if (file.size === 0) return '不能发送空文件'
-  if (kind === 'image') {
+  if (kind === 'voice') {
+    if (file.size > VOICE_MAX_BYTES) return `语音不能超过 ${formatFileSize(VOICE_MAX_BYTES)}`
+  } else if (kind === 'image') {
     if (!IMAGE_ACCEPT.split(',').includes(file.type)) return '仅支持 JPG、PNG、GIF、BMP 图片，其他格式请作为文件发送'
     if (file.size > IMAGE_MAX_BYTES) return `图片不能超过 ${formatFileSize(IMAGE_MAX_BYTES)}`
   } else if (file.size > FILE_MAX_BYTES) {

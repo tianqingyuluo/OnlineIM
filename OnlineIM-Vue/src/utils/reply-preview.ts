@@ -1,5 +1,5 @@
 import type { MessageResponse, ReplyReference } from '@/type/message'
-import { parseMediaContent } from '@/utils/media-message'
+import { formatVoiceClock, parseMediaContent } from '@/utils/media-message'
 
 const MAX_PREVIEW_CODE_POINTS = 80
 
@@ -7,6 +7,7 @@ export function getReplyPreviewText(
   messageType: string,
   content: string,
   fileName?: string,
+  durationMs?: number,
 ): string {
   switch (messageType.toLowerCase()) {
     case 'text':
@@ -15,7 +16,7 @@ export function getReplyPreviewText(
       return '[图片]'
     case 'voice':
     case 'audio':
-      return '[语音]'
+      return durationMs && durationMs > 0 ? `[语音 ${formatVoiceClock(durationMs)}]` : '[语音]'
     case 'video':
       return '[视频]'
     case 'emoji':
@@ -43,6 +44,7 @@ export function buildReplyReference(message: MessageResponse): ReplyReference | 
       message.message_type,
       typeof message.content === 'string' ? message.content : '',
       parseMediaContent(message.message_type, message.content)?.name,
+      parseMediaContent(message.message_type, message.content)?.duration_ms,
     ),
     state: 'active',
   }

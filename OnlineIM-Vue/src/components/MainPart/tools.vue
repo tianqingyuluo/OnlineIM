@@ -3,6 +3,8 @@ import { Smile, Image as ImageIcon, Paperclip, X } from "lucide-vue-next"
 import { ref } from "vue"
 import { toast } from "vue-sonner"
 import EmojiArea from "@/components/independent/emojiArea/EmojiArea.vue"
+import VoiceRecordButton from "@/components/MainPart/VoiceRecordButton.vue"
+import type { RecordedVoice } from "@/utils/voice-recorder"
 import { uploadChatMedia } from "@/services/upload.service"
 import {
   IMAGE_ACCEPT,
@@ -49,7 +51,11 @@ async function handleFileChange(kind: ChatMediaKind, event: Event) {
   await upload(kind, file)
 }
 
-async function upload(kind: ChatMediaKind, file: File) {
+async function handleVoiceRecorded(voice: RecordedVoice) {
+  await upload('voice', voice.file, voice.durationMs)
+}
+
+async function upload(kind: ChatMediaKind, file: File, durationMs?: number) {
   const invalid = validateBeforeUpload(kind, file)
   if (invalid) {
     toast.error(invalid)
@@ -60,6 +66,7 @@ async function upload(kind: ChatMediaKind, file: File) {
   try {
     const media = await uploadChatMedia(kind, file, {
       signal: uploadController.signal,
+      durationMs,
       onProgress: percent => {
         if (uploading.value) uploading.value.percent = percent
       },
@@ -109,6 +116,7 @@ defineExpose({ upload })
       >
         <Paperclip style="width: 27px; height: 27px" />
       </button>
+      <VoiceRecordButton :disabled="!!uploading" @recorded="handleVoiceRecorded" />
       <input
         ref="imageInputRef"
         type="file"
@@ -130,7 +138,7 @@ defineExpose({ upload })
       class="flex min-w-0 flex-1 items-center justify-end gap-2 pl-4 text-xs text-slate-500"
       data-testid="upload-progress"
     >
-      <span class="truncate max-w-[40%]">{{ uploading.kind === 'image' ? '图片' : '文件' }} {{ uploading.name }}</span>
+      <span class="truncate max-w-[40%]">{{ uploading.kind === 'image' ? '图片' : uploading.kind === 'voice' ? '语音' : '文件' }} {{ uploading.kind === 'voice' ? '' : uploading.name }}</span>
       <div class="h-1.5 w-28 shrink-0 overflow-hidden rounded bg-slate-200">
         <div class="h-full bg-blue-500 transition-all" :style="{ width: `${uploading.percent}%` }" />
       </div>

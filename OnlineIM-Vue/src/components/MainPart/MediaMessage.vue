@@ -2,10 +2,12 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { Download, FileText, ImageOff, X } from 'lucide-vue-next'
 import { formatFileSize, parseMediaContent } from '@/utils/media-message'
+import VoiceMessage from '@/components/MainPart/VoiceMessage.vue'
 
 const props = defineProps<{
   messageType: string
   content: unknown
+  isSelf?: boolean
 }>()
 
 const media = computed(() => parseMediaContent(props.messageType, props.content))
@@ -59,8 +61,10 @@ onBeforeUnmount(() => {
 
 <template>
   <div v-if="!media" data-testid="media-invalid" class="text-sm text-slate-400">
-    {{ messageType === 'image' ? '[图片]' : '[文件]' }}
+    {{ messageType === 'image' ? '[图片]' : messageType === 'voice' ? '[语音]' : '[文件]' }}
   </div>
+
+  <VoiceMessage v-else-if="messageType === 'voice'" :media="media" :is-self="isSelf" />
 
   <div v-else-if="messageType === 'image'" data-testid="media-image">
     <button

@@ -67,6 +67,7 @@ async function copyMessage() {
         v-else-if="isMedia"
         :message-type="messageType"
         :content="message"
+        :is-self="isSelf"
       />
       <div
         v-else
