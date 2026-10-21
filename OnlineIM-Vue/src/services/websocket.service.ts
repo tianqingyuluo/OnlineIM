@@ -1,5 +1,5 @@
 import { computed, ref, type ComputedRef, type Ref } from 'vue';
-import { WS_API_URL } from '../../shared/config.ts';
+import { API_BASE_URL, WS_API_URL } from '../../shared/config.ts';
 import { useUserStore } from '@/stores/user';
 import { useHistoryStore } from '@/stores/history';
 import { usePresenceStore } from '@/stores/presence';
@@ -99,8 +99,10 @@ export class WebSocketService {
   }
 
   private bindWsEvents(socket: WebSocket): void {
+    let opened = false;
     socket.onopen = (event) => {
       if (this.ws !== socket) return;
+      opened = true;
       this.setConnectionState('online');
       this.reconnectAttempts = 0;
       this.missedAckCount = 0;
@@ -223,8 +225,36 @@ export class WebSocketService {
         this.connectionState.value = 'offline';
         return;
       }
-      if (!this.isManualDisconnect) this.startReconnect();
+      if (this.isManualDisconnect) return;
+      // 连接没建立就断开：可能是 token 已作废（在别处被挤下线时没收到通知、同设备另一个标签页退出了登录）。
+      // 先确认登录是否还有效，否则会带着作废的 token 一直重连
+      if (!opened) {
+        // 状态与 startReconnect 一致，确认期间界面不回跳
+        this.setConnectionState(this.reconnectAttempts + 1 >= OFFLINE_THRESHOLD ? 'offline' : 'reconnecting');
+        void this.verifySessionBeforeReconnect();
+        return;
+      }
+      this.startReconnect();
     };
+  }
+
+  private async verifySessionBeforeReconnect(): Promise<void> {
+    const token = useUserStore().token;
+    let expired = !token;
+    if (token) {
+      try {
+        const response = await fetch(`${API_BASE_URL}/users/me`, { headers: { Authorization: `Bearer ${token}` } });
+        expired = response.status === 401;
+      } catch {
+        // 网络不通或服务端暂时不可用：照常重连
+      }
+    }
+    if (this.isManualDisconnect || this.sessionKicked || this.ws) return;
+    if (expired) {
+      this.handleSessionKicked('登录已失效，请重新登录');
+      return;
+    }
+    this.startReconnect();
   }
 
   /**

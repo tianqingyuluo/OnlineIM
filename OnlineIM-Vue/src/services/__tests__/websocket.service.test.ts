@@ -47,6 +47,8 @@ vi.mock('vue-sonner', () => ({
   toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() },
 }))
 
+const fetchMock = vi.fn()
+
 class FakeWebSocket {
   static CONNECTING = 0
   static OPEN = 1
@@ -94,6 +96,9 @@ describe('WebSocketService', () => {
     dbServiceMock.getPendingReceipts.mockResolvedValue([])
     dbServiceMock.enqueueReceipt.mockResolvedValue(1)
     vi.stubGlobal('WebSocket', FakeWebSocket)
+    fetchMock.mockReset()
+    fetchMock.mockResolvedValue({ status: 200 })
+    vi.stubGlobal('fetch', fetchMock)
     vi.stubGlobal('crypto', { randomUUID: () => 'generated-client-id' })
     vi.spyOn(Math, 'random').mockReturnValue(0.5)
   })
@@ -453,6 +458,40 @@ describe('WebSocketService', () => {
     await vi.advanceTimersByTimeAsync(30_000)
     expect(FakeWebSocket.instances).toHaveLength(1)
     expect(historyStore.requestOfflineSync).toHaveBeenCalledTimes(syncCalls)
+  })
+
+  it('stops reconnecting when the handshake is refused because the token was revoked', async () => {
+    const { WebSocketService } = await import('@/services/websocket.service')
+    const service = new WebSocketService()
+    service.connect()
+    FakeWebSocket.instances[0].open()
+    // 同设备另一个标签页退出登录：服务端安静关闭这条连接，之后的握手都被拒绝
+    fetchMock.mockResolvedValue({ status: 401 })
+    FakeWebSocket.instances[0].close()
+    await vi.advanceTimersByTimeAsync(30_000)
+    const attempts = FakeWebSocket.instances.length
+    expect(attempts).toBe(2)
+    FakeWebSocket.instances[1].close()
+
+    await vi.waitFor(() => expect(userStore.clearLocalSession).toHaveBeenCalledOnce())
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(/\/users\/me$/), expect.anything())
+    expect(toast.error).toHaveBeenCalledWith('登录已失效，请重新登录')
+    await vi.waitFor(() => expect(routerPush).toHaveBeenCalledWith('/login'))
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(FakeWebSocket.instances).toHaveLength(attempts)
+    expect(service.connectionState.value).toBe('offline')
+  })
+
+  it('keeps reconnecting after a refused handshake when the token is still valid', async () => {
+    const { WebSocketService } = await import('@/services/websocket.service')
+    const service = new WebSocketService()
+    service.connect()
+    FakeWebSocket.instances[0].close()
+    await vi.advanceTimersByTimeAsync(30_000)
+
+    expect(FakeWebSocket.instances.length).toBeGreaterThan(1)
+    expect(userStore.clearLocalSession).not.toHaveBeenCalled()
+    service.disconnect()
   })
 
 })
