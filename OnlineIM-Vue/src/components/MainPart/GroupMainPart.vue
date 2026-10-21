@@ -102,7 +102,7 @@ const draftSync = useConversationDraft({
   conversationId: groupId,
   draft,
   isEditing: computed(() => edit.isEditing),
-  getExtra: () => {
+  getExtra: id => {
     const atUsers: DraftMention[] = []
     for (const [userId, name] of pickedMentions) {
       if (collectAtUsers(draft.value, new Map([[userId, name]]))?.includes(userId)) {
@@ -110,7 +110,7 @@ const draftSync = useConversationDraft({
       }
     }
     return {
-      replyToMessageId: historyStore.replyTarget?.conversationId === groupId.value
+      replyToMessageId: id && historyStore.replyTarget?.conversationId === id
         ? historyStore.replyTarget.reference.message_id
         : null,
       atUsers,

@@ -77,8 +77,8 @@ const draftSync = useConversationDraft({
   conversationId,
   draft,
   isEditing: computed(() => edit.isEditing),
-  getExtra: () => ({
-    replyToMessageId: historyStore.replyTarget?.conversationId === conversationId.value
+  getExtra: id => ({
+    replyToMessageId: id && historyStore.replyTarget?.conversationId === id
       ? historyStore.replyTarget.reference.message_id
       : null,
     atUsers: [],

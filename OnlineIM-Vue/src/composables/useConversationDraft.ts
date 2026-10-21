@@ -24,7 +24,8 @@ export function useConversationDraft(options: {
   conversationId: Ref<string | undefined>
   draft: Ref<string>
   isEditing: Ref<boolean> | ComputedRef<boolean>
-  getExtra: () => DraftExtra
+  /** 取某个会话当前的回复目标 / @；参数是草稿所属的会话（切换瞬间路由参数可能已经是新会话） */
+  getExtra: (conversationId: string | undefined) => DraftExtra
   applyExtra: (extra: DraftExtra, payload: DraftPayload | null) => void
 }) {
   const { conversationId, draft, isEditing, getExtra, applyExtra } = options
@@ -35,6 +36,11 @@ export function useConversationDraft(options: {
   let lastSynced = draftSignature('', EMPTY_DRAFT_EXTRA)
   let timer: ReturnType<typeof setTimeout> | null = null
   let retryTimer: ReturnType<typeof setTimeout> | null = null
+  /**
+   * 输入框里的内容属于哪个会话。私聊、群聊路由共用 :id 参数，从私聊点到群聊时
+   * 路由参数先变成群 ID、旧组件随后才卸载，不能用 conversationId.value 判断草稿归属。
+   */
+  let boundId: string | undefined = conversationId.value
 
   function clearTimers() {
     if (timer) clearTimeout(timer)
@@ -44,7 +50,7 @@ export function useConversationDraft(options: {
   }
 
   function currentSignature() {
-    return draftSignature(draft.value, getExtra())
+    return draftSignature(draft.value, getExtra(boundId))
   }
 
   function apply(payload: DraftPayload | null) {
@@ -81,7 +87,7 @@ export function useConversationDraft(options: {
           updated_at: Date.now(),
         }
         publishDraftUpdate(cleared)
-        if (id === conversationId.value && currentSignature() === savedSignature) {
+        if (id === boundId && currentSignature() === savedSignature) {
           lastSynced = savedSignature
         }
       } catch (error) {
@@ -104,9 +110,9 @@ export function useConversationDraft(options: {
         at_users: extra.atUsers,
       })
       if (saved) publishDraftUpdate(saved)
-      if (id === conversationId.value && currentSignature() === savedSignature) {
+      if (id === boundId && currentSignature() === savedSignature) {
         lastSynced = savedSignature
-      } else if (id === conversationId.value && !isEditing.value) {
+      } else if (id === boundId && !isEditing.value) {
         schedule()
       }
     } catch (error) {
@@ -116,11 +122,11 @@ export function useConversationDraft(options: {
 
   function scheduleRetry(id: string, error: unknown) {
     const status = (error as { status?: number } | null)?.status
-    if (status === 400 || status === 403 || id !== conversationId.value) return
+    if (status === 400 || status === 403 || id !== boundId) return
     if (retryTimer) clearTimeout(retryTimer)
     retryTimer = setTimeout(() => {
       retryTimer = null
-      if (id === conversationId.value && ready && !isEditing.value && currentSignature() !== lastSynced) {
+      if (id === boundId && ready && !isEditing.value && currentSignature() !== lastSynced) {
         void flush()
       }
     }, 2000)
@@ -136,10 +142,10 @@ export function useConversationDraft(options: {
 
   async function flush() {
     clearTimers()
-    const id = conversationId.value
-    if (!id || !ready || isEditing.value) return
+    const id = boundId
+    if (!id || id !== conversationId.value || !ready || isEditing.value) return
     const content = draft.value
-    const extra = getExtra()
+    const extra = getExtra(id)
     if (draftSignature(content, extra) === lastSynced) return
     await persist(id, content, extra)
   }
@@ -148,6 +154,7 @@ export function useConversationDraft(options: {
     const id = conversationId.value
     if (!id) return
     const gen = ++generation
+    boundId = id
     ready = false
     clearTimers()
     try {
@@ -172,18 +179,21 @@ export function useConversationDraft(options: {
   }
 
   watch(conversationId, (next, prev) => {
+    const from = boundId ?? prev
     const editing = isEditing.value
     const content = draft.value
-    const extra = getExtra()
+    const extra = getExtra(from)
+    const wasReady = ready
     ready = false
     clearTimers()
     generation += 1
-    if (prev && prev !== next && !editing) {
-      void persist(prev, content, extra)
+    boundId = next
+    if (from && from !== next && !editing && wasReady) {
+      void persist(from, content, extra)
     }
   })
 
-  watch(() => draftSignature(draft.value, getExtra()), (next) => {
+  watch(() => draftSignature(draft.value, getExtra(boundId)), (next) => {
     if (applying || !ready || isEditing.value) return
     if (next === lastSynced) return
     schedule()
@@ -197,7 +207,7 @@ export function useConversationDraft(options: {
   const unsubscribe = subscribeDraftUpdates(payload => {
     if (!payload?.conversation_id) return
     applyDraftPreview(payload.conversation_id, payload.cleared ? null : payload.draft_preview)
-    if (payload.conversation_id !== conversationId.value) return
+    if (payload.conversation_id !== boundId) return
     if (!ready || isEditing.value || applying) return
     if (currentSignature() !== lastSynced) return
     apply(payload.cleared ? { ...payload, content: '' } : payload)
@@ -213,9 +223,9 @@ export function useConversationDraft(options: {
   onBeforeUnmount(() => {
     document.removeEventListener('visibilitychange', onVisible)
     unsubscribe()
-    const id = conversationId.value
+    const id = boundId
     if (id && ready && !isEditing.value && currentSignature() !== lastSynced) {
-      void persist(id, draft.value, getExtra())
+      void persist(id, draft.value, getExtra(id))
     }
     clearTimers()
   })
