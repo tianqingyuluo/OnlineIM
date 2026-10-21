@@ -96,6 +96,12 @@ public interface GroupMemberMapper {
     @Select("SELECT user_id FROM group_members WHERE id = #{id} AND group_id = #{groupId}")
     String getUserIdByMemberId(@Param("id") String id, @Param("groupId") String groupId);
 
+    @Select("SELECT user_id FROM group_members WHERE group_id = #{groupId}")
+    List<String> listUserIdsByGroupId(@Param("groupId") String groupId);
+
+    @Select("SELECT DISTINCT group_id FROM group_members")
+    List<String> listGroupIdsWithMembers();
+
     @Update("UPDATE group_members SET role = 2 WHERE group_id = #{groupId} AND user_id=#{userid}")
     void initGroupOwner(@Param("groupId") String groupId, @Param("userid") String userid);
     /**

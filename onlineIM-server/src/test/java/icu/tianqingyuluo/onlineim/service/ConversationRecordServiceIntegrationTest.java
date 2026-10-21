@@ -2,9 +2,12 @@ package icu.tianqingyuluo.onlineim.service;
 
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
+import icu.tianqingyuluo.onlineim.config.ConversationRecordMigration;
+import icu.tianqingyuluo.onlineim.mapper.GroupMemberMapper;
 import icu.tianqingyuluo.onlineim.pojo.document.Conversation;
 import icu.tianqingyuluo.onlineim.pojo.document.GroupMessage;
 import icu.tianqingyuluo.onlineim.pojo.document.PrivateMessage;
+import org.bson.Document;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,9 +26,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
- * 集成测试：用真实 MongoDB 验证“每个参与者一条会话记录”的写入语义。
+ * 集成测试：用真实 MongoDB 验证“每个参与者一条会话记录”的写入语义与启动迁移。
  */
 @Testcontainers
 class ConversationRecordServiceIntegrationTest {
@@ -192,6 +197,47 @@ class ConversationRecordServiceIntegrationTest {
         CompletableFuture.allOf(futures).join();
         assertEquals(2, template.count(Query.query(Criteria.where("conversationId").is(PRIV)), Conversation.class));
         assertEquals(20, record(PRIV, B).getUnreadCount());
+    }
+
+    @Test
+    void migrationSplitsLegacyDocumentsAndIsIdempotent() {
+        template.insert(new Document("_id", PRIV).append("userId", B).append("targetId", A)
+                .append("conversationType", "private").append("unreadCount", 5).append("lastMessage", new Document())
+                .append("top", true).append("mute", false).append("status", 1).append("updatedAt", new Date()), "conversations");
+        template.insert(new Document("_id", GRP).append("userId", A).append("targetId", GRP)
+                .append("conversationType", "group").append("unreadCount", 0).append("lastMessage", new Document())
+                .append("top", false).append("mute", true).append("status", 1).append("updatedAt", new Date()), "conversations");
+        template.insert(new Document("_id", "grp_gone").append("userId", A).append("targetId", "grp_gone")
+                .append("conversationType", "group").append("status", 1), "conversations");
+        GroupMemberMapper mapper = mock(GroupMemberMapper.class);
+        when(mapper.listUserIdsByGroupId(GRP)).thenReturn(List.of(A, B, C));
+        when(mapper.listUserIdsByGroupId("grp_2")).thenReturn(List.of(B, C));
+        when(mapper.listUserIdsByGroupId("grp_gone")).thenReturn(List.of());
+        when(mapper.listGroupIdsWithMembers()).thenReturn(List.of(GRP, "grp_2"));
+        ConversationRecordMigration migration = new ConversationRecordMigration(template, mapper, records);
+
+        migration.afterPropertiesSet();
+        records.updateOwn(PRIV, A, new Update().set("top", false));
+        migration.afterPropertiesSet();
+
+        assertFalse(template.exists(Query.query(Criteria.where("_id").in(PRIV, GRP, "grp_gone")), "conversations"));
+        assertFalse(record(PRIV, A).getTop(), "重复迁移不能覆盖迁移后用户自己的修改");
+        assertTrue(record(PRIV, B).getTop());
+        assertEquals(A, record(PRIV, B).getTargetId());
+        assertEquals(B, record(PRIV, A).getTargetId());
+        assertTrue(record(GRP, A).getMute(), "群文档的偏好只属于原创建者");
+        assertFalse(record(GRP, B).getMute());
+        assertNotNull(record(GRP, C));
+        assertNotNull(record("grp_2", B), "一次性补建：现存群的所有成员都有记录");
+        assertNotNull(record("grp_2", C));
+        assertEquals(7, template.count(new Query(), Conversation.class));
+        assertTrue(template.indexOps("conversations").getIndexInfo().stream()
+                .anyMatch(index -> "uk_user_conversation".equals(index.getName()) && index.isUnique()));
+
+        // 补建只执行一次：之后被移出群的成员不会在重启时被加回来
+        records.removeRecord("grp_2", C);
+        migration.afterPropertiesSet();
+        assertNull(record("grp_2", C));
     }
 
     @Test
