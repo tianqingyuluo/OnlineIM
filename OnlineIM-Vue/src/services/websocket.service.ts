@@ -14,6 +14,8 @@ import type {
   ReceiptPayload,
   ServerErrorPayload,
 } from '@/type/message';
+import type { DraftPayload } from '@/utils/draft';
+import { publishDraftUpdate } from '@/utils/draft-bus';
 import {
   type ConnectionState,
   HEARTBEAT_INTERVAL_MS,
@@ -153,6 +155,9 @@ export class WebSocketService {
           case 'ERROR':
             historyStore.handleServerError(payload as ServerErrorPayload);
             toast.error((payload as ServerErrorPayload).message || '消息处理失败');
+            break;
+          case 'DRAFT_UPDATED':
+            publishDraftUpdate(payload as unknown as DraftPayload);
             break;
           case 'MESSAGE_EDITED':
             // 帧形如 MessageEditedFrame：message 为编辑后的完整消息，群聊带顶层 at_me

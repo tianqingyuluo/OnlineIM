@@ -33,6 +33,8 @@ import ForwardSelectionBar from '@/components/MainPart/ForwardSelectionBar.vue'
 import MessageSelectOverlay from '@/components/MainPart/MessageSelectOverlay.vue'
 import { isForwardable } from '@/utils/chat-record'
 import { useMessageEdit } from '@/composables/useMessageEdit'
+import { useConversationDraft } from '@/composables/useConversationDraft'
+import type { DraftMention } from '@/utils/draft'
 import { mentionLabelsForEdit } from '@/utils/message-edit'
 import EditComposerBar from '@/components/MainPart/EditComposerBar.vue'
 import RecallNotice from '@/components/MainPart/RecallNotice.vue'
@@ -91,7 +93,41 @@ const groupId = computed(() => {
 const forward = reactive(useMessageForward(() => groupId.value, () => historyStore.groupMessages))
 const currentUser = computed(() => userStore.loggedInUser)
 /** 编辑：右键“编辑”把原文放进输入框，回车 / 保存提交；@ 成员按文本里仍存在的 `@名字` 重新计算 */
-const edit = reactive(useMessageEdit(draft, () => userStore.loggedInUser.user_id, () => inputElement()?.focus()))
+const edit = reactive(useMessageEdit(draft, () => userStore.loggedInUser.user_id, () => inputElement()?.focus(), {
+  beforeRestore: () => restoreStashedMentions(),
+}))
+/** 进入编辑前的 @ 选择，取消或保存后放回输入框，避免编辑态覆盖服务端草稿 */
+let stashedMentions: Array<[string, string]> = []
+const draftSync = useConversationDraft({
+  conversationId: groupId,
+  draft,
+  isEditing: computed(() => edit.isEditing),
+  getExtra: () => {
+    const atUsers: DraftMention[] = []
+    for (const [userId, name] of pickedMentions) {
+      if (collectAtUsers(draft.value, new Map([[userId, name]]))?.includes(userId)) {
+        atUsers.push({ user_id: userId, name })
+      }
+    }
+    return {
+      replyToMessageId: historyStore.replyTarget?.conversationId === groupId.value
+        ? historyStore.replyTarget.reference.message_id
+        : null,
+      atUsers,
+    }
+  },
+  applyExtra: (extra, payload) => {
+    pickedMentions.clear()
+    for (const item of extra.atUsers) pickedMentions.set(item.user_id, item.name)
+    const id = groupId.value
+    if (!id) return
+    if (extra.replyToMessageId && payload?.reply_to) {
+      historyStore.replyTarget = { conversationId: id, reference: payload.reply_to }
+    } else if (historyStore.replyTarget?.conversationId === id) {
+      historyStore.cancelReplyTarget()
+    }
+  },
+})
 /** 撤回：右键 / 长按“撤回” → 确认 → 所有成员看到“X 撤回了一条消息”，自己的文本可“重新编辑” */
 const recall = reactive(useMessageRecall(() => userStore.loggedInUser.user_id, {
   beforeRecall: message => {
@@ -273,6 +309,7 @@ async function loadConversation() {
     void loadMembers()
     await historyStore.init()
     await historyStore.loadInitialHistory(userStore.loggedInUser.user_id, groupId.value, true)
+    await draftSync.reload()
     await nextTick()
     scrollToBottom()
     installMessageObserver()
@@ -349,9 +386,22 @@ function handleSaveEmoji(message: MessageResponse) {
   void emojiStore.saveFromMessage(groupId.value, message.message_id)
 }
 
-function startEdit(message: MessageResponse) {
+function restoreStashedMentions() {
+  pickedMentions.clear()
+  for (const [userId, name] of stashedMentions) pickedMentions.set(userId, name)
+  stashedMentions = []
+}
+
+async function startEdit(message: MessageResponse) {
+  if (!edit.isEditing) {
+    await draftSync.flush()
+    stashedMentions = [...pickedMentions.entries()]
+  }
   edit.start(message)
-  if (!edit.isEditing) return
+  if (!edit.isEditing) {
+    stashedMentions = []
+    return
+  }
   pickedMentions.clear()
   for (const [userId, label] of mentionLabelsForEdit(message.content, message.at_users, mentionNames.value)) {
     pickedMentions.set(userId, label)
@@ -361,7 +411,7 @@ function startEdit(message: MessageResponse) {
 
 function cancelEdit() {
   edit.cancel()
-  pickedMentions.clear()
+  restoreStashedMentions()
   mention.value = null
 }
 
@@ -369,7 +419,6 @@ async function handleSendClick() {
   if (edit.isEditing) {
     const atUsers = collectAtUsers(draft.value.trim(), pickedMentions) ?? []
     if (await edit.save(atUsers)) {
-      pickedMentions.clear()
       mention.value = null
     }
     return
@@ -380,7 +429,9 @@ async function handleSendClick() {
   historyStore.sendMessage(groupId.value, groupId.value, 'text', content, true, atUsers)
   draft.value = ''
   pickedMentions.clear()
+  stashedMentions = []
   mention.value = null
+  await draftSync.flush()
   await nextTick()
   scrollToBottom()
 }

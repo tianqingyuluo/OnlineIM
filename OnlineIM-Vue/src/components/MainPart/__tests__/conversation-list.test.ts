@@ -35,6 +35,23 @@ describe('conversation list', () => {
     expect(wrapper.find('[data-testid="conversation-unread"]').exists()).toBe(false)
   })
 
+  it('shows [草稿] in place of the last message, and keeps [有人@我]', async () => {
+    const { default: Item } = await import('@/components/AppSideBar/right/ConversationListItem.vue')
+    const wrapper = mount(Item, {
+      props: { conversation: { ...base, draft_preview: '写了一半' } as never },
+    })
+    expect(wrapper.get('[data-testid="conversation-preview"]').text()).toContain('[草稿]')
+    expect(wrapper.get('[data-testid="conversation-preview"]').text()).toContain('写了一半')
+    expect(wrapper.get('[data-testid="conversation-preview"]').text()).not.toContain('你好')
+    await wrapper.setProps({
+      conversation: { ...base, type: 'group', at_me: true, draft_preview: '下周一见' } as never,
+    })
+    const text = wrapper.get('[data-testid="conversation-preview"]').text()
+    expect(text).toContain('[有人@我]')
+    expect(text).toContain('[草稿]')
+    expect(text).toContain('下周一见')
+  })
+
   it('phone list opens the chat route when a conversation is tapped', async () => {
     setActivePinia(createPinia())
     const { useListStore } = await import('@/stores/list')

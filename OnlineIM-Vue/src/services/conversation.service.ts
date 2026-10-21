@@ -5,6 +5,7 @@ import type {
   MessageReadersResponse,
   ReadStateResponse,
 } from '@/type/Conversation';
+import type { DraftMention, DraftPayload } from '@/utils/draft';
 
 // 置顶/免打扰只作用于当前用户自己的会话记录；成功后同步本地列表，侧栏的置顶分组/免打扰样式随之更新
 function patchLocalConversation(conversationId: string, patch: Partial<Conversation>) {
@@ -89,6 +90,25 @@ export const conversationService = {
   async clearMessages(conversationId: string) {
     const response = await api.delete(`/conversations/${conversationId}/messages`);
     return response.data;
+  },
+
+  async getDraft(conversationId: string): Promise<DraftPayload | null> {
+    const response = await api.get<DraftPayload | ''>(`/conversations/${conversationId}/draft`);
+    if (response.status === 204 || !response.data || typeof response.data === 'string') return null;
+    return response.data;
+  },
+
+  async saveDraft(
+    conversationId: string,
+    body: { content: string; reply_to_message_id: string | null; at_users: DraftMention[] },
+  ): Promise<DraftPayload | null> {
+    const response = await api.put<DraftPayload | ''>(`/conversations/${conversationId}/draft`, body);
+    if (response.status === 204 || !response.data || typeof response.data === 'string') return null;
+    return response.data;
+  },
+
+  async clearDraft(conversationId: string): Promise<void> {
+    await api.delete(`/conversations/${conversationId}/draft`);
   },
 
   async createConversation(target_id: string, type: string): Promise<Conversation> {

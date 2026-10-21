@@ -3,6 +3,7 @@ import { toast } from 'vue-sonner'
 import { MessageService } from '@/services/message.service'
 import { useHistoryStore } from '@/stores/history'
 import type { MessageResponse } from '@/type/message'
+import type { ReplyComposerTarget } from '@/stores/history'
 import { EDIT_MAX_LENGTH, EDIT_WINDOW_MS, isEditable, isTerminalEditError } from '@/utils/message-edit'
 import { parseTimestamp } from '@/utils/conversation-time'
 
@@ -24,11 +25,13 @@ export function useMessageEdit(
   draft: Ref<string>,
   currentUserId: () => string | undefined,
   focusInput: () => void,
+  hooks?: { beforeRestore?: () => void },
 ) {
   const historyStore = useHistoryStore()
   const editing = ref<EditingState | null>(null)
   const saving = ref(false)
   let stashedDraft = ''
+  let stashedReply: ReplyComposerTarget | null = null
 
   const isEditing = computed(() => editing.value !== null)
 
@@ -43,14 +46,19 @@ export function useMessageEdit(
       toast.error('消息发送已超过2分钟，无法编辑')
       return
     }
-    if (!editing.value) stashedDraft = draft.value
+    if (!editing.value) {
+      stashedDraft = draft.value
+      stashedReply = historyStore.replyTarget
+    }
     editing.value = {
       messageId: message.message_id,
       conversationId: message.conversation_id,
       original: message.content,
       atUsers: message.at_users,
     }
+    // 编辑条占住引用条的位置；取消或保存后把原来的回复目标放回来
     historyStore.cancelReplyTarget()
+    historyStore.replyTarget = null
     draft.value = message.content
     focusInput()
     // 右键菜单关闭（焦点陷阱释放）后再聚焦一次
@@ -60,14 +68,18 @@ export function useMessageEdit(
   function cancel() {
     if (!editing.value) return
     editing.value = null
+    hooks?.beforeRestore?.()
     draft.value = stashedDraft
     stashedDraft = ''
+    historyStore.replyTarget = stashedReply
+    stashedReply = null
   }
 
   /** 会话切换时直接丢弃编辑态（不恢复草稿到新会话） */
   function reset() {
     editing.value = null
     stashedDraft = ''
+    stashedReply = null
   }
 
   /**

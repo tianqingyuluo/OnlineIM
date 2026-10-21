@@ -14,7 +14,12 @@ vi.mock('@/services/message.service', () => ({ MessageService: { editMessage } }
 
 const handleMessageEdited = vi.fn()
 const cancelReplyTarget = vi.fn()
-vi.mock('@/stores/history', () => ({ useHistoryStore: () => ({ handleMessageEdited, cancelReplyTarget }) }))
+const historyStore = {
+  handleMessageEdited,
+  cancelReplyTarget,
+  replyTarget: null as { conversationId: string; reference: { message_id: string } } | null,
+}
+vi.mock('@/stores/history', () => ({ useHistoryStore: () => historyStore }))
 
 const message = (extra: Record<string, unknown> = {}) => ({
   message_id: 'msg_1',
@@ -40,6 +45,7 @@ async function menuItems(wrapper: ReturnType<typeof mount>) {
 describe('edit components', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    historyStore.replyTarget = null
     setActivePinia(createPinia())
     document.body.innerHTML = ''
   })
@@ -87,10 +93,13 @@ describe('edit components', () => {
     expect(edit.editUntil(message() as never)).toBeGreaterThan(Date.now())
     expect(edit.editUntil(message({ sender_info: { user_id: 'usr_x' } }) as never)).toBe(0)
 
+    const reply = { conversationId: 'conv_1', reference: { message_id: 'msg_quote' } }
+    historyStore.replyTarget = reply
     edit.start(message() as never)
     expect(edit.isEditing.value).toBe(true)
     expect(draft.value).toBe('原文')
     expect(cancelReplyTarget).toHaveBeenCalled()
+    expect(historyStore.replyTarget).toBeNull()
     expect(focus).toHaveBeenCalled()
 
     draft.value = '  新内容 '
@@ -101,6 +110,7 @@ describe('edit components', () => {
     expect(handleMessageEdited).toHaveBeenCalledWith(updated)
     expect(edit.isEditing.value).toBe(false)
     expect(draft.value).toBe('写了一半的草稿')
+    expect(historyStore.replyTarget).toBe(reply)
 
     // 群聊带 at_users；内容和 @ 都没变直接退出，不请求
     edit.start(message({ at_users: ['usr_a'] }) as never)

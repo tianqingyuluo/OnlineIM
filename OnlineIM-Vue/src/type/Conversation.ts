@@ -56,5 +56,7 @@ export interface Conversation {
     at_me_count?: number
     /** 最早一条未读 @我 消息 */
     at_me_message_id?: string
+    /** 未发送草稿的摘要；会话列表显示“[草稿] ”加这段文字 */
+    draft_preview?: string | null
     notreadednumber?: number
 }

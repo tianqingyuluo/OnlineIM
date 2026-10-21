@@ -57,6 +57,21 @@ describe('conversationService 与后端 ConversationController 路由一致', ()
     expect(listStore.conversations).toBe(list)
   })
 
+  it('草稿走 /conversations/{id}/draft：保存、读取、清空', async () => {
+    apiMock.put.mockResolvedValue({ status: 200, data: { conversation_id: 'conv_1', content: 'hi', draft_preview: 'hi' } })
+    apiMock.get.mockResolvedValueOnce({ status: 200, data: { conversation_id: 'conv_1', content: 'hi' } })
+    apiMock.get.mockResolvedValueOnce({ status: 204, data: '' })
+    const { conversationService } = await import('@/services/conversation.service')
+    await conversationService.saveDraft('conv_1', { content: 'hi', reply_to_message_id: 'msg_1', at_users: [{ user_id: 'usr_b', name: '小明' }] })
+    expect(apiMock.put).toHaveBeenCalledWith('/conversations/conv_1/draft', {
+      content: 'hi', reply_to_message_id: 'msg_1', at_users: [{ user_id: 'usr_b', name: '小明' }],
+    })
+    await expect(conversationService.getDraft('conv_1')).resolves.toMatchObject({ content: 'hi' })
+    await expect(conversationService.getDraft('conv_1')).resolves.toBeNull()
+    await conversationService.clearDraft('conv_1')
+    expect(apiMock.delete).toHaveBeenCalledWith('/conversations/conv_1/draft')
+  })
+
   it('打开会话走幂等的 POST /conversations/create', async () => {
     apiMock.post.mockResolvedValue({ data: { conversation_id: 'grp_1' } })
     const { conversationService } = await import('@/services/conversation.service')

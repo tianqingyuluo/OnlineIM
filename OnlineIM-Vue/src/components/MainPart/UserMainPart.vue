@@ -31,6 +31,7 @@ import ForwardSelectionBar from '@/components/MainPart/ForwardSelectionBar.vue'
 import MessageSelectOverlay from '@/components/MainPart/MessageSelectOverlay.vue'
 import { isForwardable } from '@/utils/chat-record'
 import { useMessageEdit } from '@/composables/useMessageEdit'
+import { useConversationDraft } from '@/composables/useConversationDraft'
 import EditComposerBar from '@/components/MainPart/EditComposerBar.vue'
 import RecallNotice from '@/components/MainPart/RecallNotice.vue'
 import RecallConfirmDialog from '@/components/MainPart/RecallConfirmDialog.vue'
@@ -72,6 +73,26 @@ const conversationId = computed(() => {
 const forward = reactive(useMessageForward(() => conversationId.value, () => historyStore.chatMessages))
 /** 编辑：右键“编辑”把原文放进输入框，回车 / 保存提交 */
 const edit = reactive(useMessageEdit(draft, () => userStore.loggedInUser.user_id, () => inputElement()?.focus()))
+const draftSync = useConversationDraft({
+  conversationId,
+  draft,
+  isEditing: computed(() => edit.isEditing),
+  getExtra: () => ({
+    replyToMessageId: historyStore.replyTarget?.conversationId === conversationId.value
+      ? historyStore.replyTarget.reference.message_id
+      : null,
+    atUsers: [],
+  }),
+  applyExtra: (extra, payload) => {
+    const id = conversationId.value
+    if (!id) return
+    if (extra.replyToMessageId && payload?.reply_to) {
+      historyStore.replyTarget = { conversationId: id, reference: payload.reply_to }
+    } else if (historyStore.replyTarget?.conversationId === id) {
+      historyStore.cancelReplyTarget()
+    }
+  },
+})
 /** 撤回：右键 / 长按“撤回” → 确认 → 气泡变成“你撤回了一条消息”，自己的文本可“重新编辑” */
 const recall = reactive(useMessageRecall(() => userStore.loggedInUser.user_id, {
   beforeRecall: message => {
@@ -136,6 +157,7 @@ async function loadConversation() {
     currentUser.value = await userService.getUserById(targetUserId.value)
     await historyStore.init()
     await historyStore.loadInitialHistory(userStore.loggedInUser.user_id, id, false)
+    await draftSync.reload()
     await nextTick()
     scrollToBottom()
     installMessageObserver()
@@ -202,6 +224,11 @@ function handleSaveEmoji(message: MessageResponse) {
   void emojiStore.saveFromMessage(conversation.value.conversation_id, message.message_id)
 }
 
+async function beginEdit(message: MessageResponse) {
+  if (!edit.isEditing) await draftSync.flush()
+  edit.start(message)
+}
+
 async function handleSendClick() {
   if (edit.isEditing) {
     await edit.save()
@@ -211,6 +238,7 @@ async function handleSendClick() {
   if (!content || !conversation.value) return
   historyStore.sendMessage(conversation.value.conversation_id, targetUserId.value, 'text', content, false)
   draft.value = ''
+  await draftSync.flush()
   await nextTick()
   scrollToBottom()
 }
@@ -439,7 +467,7 @@ onBeforeUnmount(() => {
                 :edited="message.edited"
                 :edited-at="message.edited_at"
                 :edit-until="forward.selecting ? 0 : edit.editUntil(message)"
-                @edit="edit.start(message)"
+                @edit="beginEdit(message)"
                 @forward="forward.forwardOne(message)"
                 @select="forward.startSelect(message)"
                 @reply="handleReply(message)"
@@ -473,7 +501,7 @@ onBeforeUnmount(() => {
                 :edited-at="message.edited_at"
                 :edit-until="forward.selecting ? 0 : edit.editUntil(message)"
                 :recall-until="forward.selecting ? 0 : recall.recallUntil(message)"
-                @edit="edit.start(message)"
+                @edit="beginEdit(message)"
                 @recall="recall.request(message)"
                 @forward="forward.forwardOne(message)"
                 @select="forward.startSelect(message)"

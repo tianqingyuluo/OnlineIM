@@ -19,6 +19,7 @@ const unread = computed(() => formatUnread(props.conversation.unread_count ?? pr
 /** 撤回显示“你/X 撤回了一条消息”，群聊里别人的消息带“昵称: ”前缀 */
 const preview = computed(() =>
   conversationPreviewText(props.conversation, props.currentUserId) || '无消息')
+const draftText = computed(() => (props.conversation.draft_preview || '').trim())
 </script>
 
 <template>
@@ -35,8 +36,12 @@ const preview = computed(() =>
       </div>
       <div class="flex items-center gap-2">
         <span class="min-w-0 flex-1 truncate text-[13px] text-gray-500" data-testid="conversation-preview">
-          <span v-if="conversation.at_me" class="text-red-500" data-testid="conversation-at-me">[有人@我]</span>
-          {{ preview }}
+          <span v-if="conversation.at_me" class="text-red-500" data-testid="conversation-at-me">[有人@我] </span>
+          <template v-if="draftText">
+            <span class="text-red-500" data-testid="conversation-draft">[草稿]</span>
+            {{ ' ' + draftText }}
+          </template>
+          <template v-else>{{ preview }}</template>
         </span>
         <span
           v-if="unread"

@@ -364,6 +364,23 @@ describe('WebSocketService', () => {
     }))
   })
 
+  it('routes DRAFT_UPDATED to the draft bus', async () => {
+    const { subscribeDraftUpdates } = await import('@/utils/draft-bus')
+    const seen: Array<{ conversation_id?: string; content?: string | null }> = []
+    const stop = subscribeDraftUpdates(payload => seen.push(payload))
+    const { WebSocketService } = await import('@/services/websocket.service')
+    const service = new WebSocketService()
+    service.connect()
+    const socket = FakeWebSocket.instances[0]
+    socket.open()
+    socket.receive({
+      type: 'DRAFT_UPDATED',
+      message: { conversation_id: 'conv_1', content: '写了一半', draft_preview: '写了一半', cleared: false },
+    })
+    expect(seen).toEqual([expect.objectContaining({ conversation_id: 'conv_1', content: '写了一半' })])
+    stop()
+  })
+
   it('persists read receipts while offline and sends them after reconnect', async () => {
     const { WebSocketService } = await import('@/services/websocket.service')
     const service = new WebSocketService()
