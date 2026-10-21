@@ -8,6 +8,7 @@ import icu.tianqingyuluo.onlineim.pojo.dto.response.PresenceQueryResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.PresenceSettingsResponse;
 import icu.tianqingyuluo.onlineim.websocket.registry.LocalSessionRegistry;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -42,6 +43,8 @@ public class PresenceService {
     private final java.time.Clock clock;
     private final long sweepLockMs;
 
+    /** 有两个构造器，Spring 需要明确用这一个，否则启动时报 “No default constructor found”。 */
+    @Autowired
     public PresenceService(PresenceConnectionStore store,
                            PresenceAudienceService audience,
                            RedisStreamService redisStreamService,
