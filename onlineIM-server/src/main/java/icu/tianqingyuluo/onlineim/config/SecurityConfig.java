@@ -1,6 +1,7 @@
 package icu.tianqingyuluo.onlineim.config;
 
 import icu.tianqingyuluo.onlineim.filter.JwtAuthenticationFilter;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -13,6 +14,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
@@ -61,10 +63,20 @@ public class SecurityConfig {
                 // 其他所有请求都需要认证
                 .anyRequest().authenticated()
             )
+            // 未携带令牌访问受保护接口返回 401（默认是 403，客户端无法区分“未登录”和“无权限”）
+            .exceptionHandling(ex -> ex.authenticationEntryPoint(jsonUnauthorizedEntryPoint()))
             // 添加JWT过滤器，在用户名密码认证过滤器之前
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    static AuthenticationEntryPoint jsonUnauthorizedEntryPoint() {
+        return (request, response, authException) -> {
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("application/json;charset=UTF-8");
+            response.getWriter().write("{\"code\":\"401\",\"message\":\"未登录或登录已失效\"}");
+        };
     }
 
     /**
