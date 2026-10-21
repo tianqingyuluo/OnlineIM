@@ -16,7 +16,7 @@ export const RECALLED_PREVIEW = '[消息已撤回]'
 const refreshTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const countedMessageIds = new Set<string>()
 /** 本页会话里本地加过未读、且可能还没被服务端快照覆盖的消息 */
-const unreadExtras = new Map<string, { conversationId: string, seq: string }>()
+const unreadExtras = new Map<string, { conversationId: string, seq: string, atMe: boolean, atAll: boolean }>()
 /** 已处理过未读扣减的撤回（同一撤回可能先后收到 REST 结果与推送） */
 const recalledMessageIds = new Set<string>()
 const MAX_COUNTED = 2000
@@ -70,6 +70,17 @@ function extraUnread(conversationId: string, afterSeq: string): number {
     if (item.conversationId === conversationId && compareSeqId(item.seq, afterSeq) > 0) count++
   }
   return count
+}
+
+function extraMentions(conversationId: string, afterSeq: string): { atMe: number, atAll: number } {
+  let atMe = 0
+  let atAll = 0
+  for (const item of unreadExtras.values()) {
+    if (item.conversationId !== conversationId || compareSeqId(item.seq, afterSeq) <= 0) continue
+    if (item.atMe) atMe++
+    if (item.atAll) atAll++
+  }
+  return { atMe, atAll }
 }
 
 function clearExtras(conversationId: string): void {
@@ -127,11 +138,18 @@ export function isViewingConversation(conversationId: string, activeConversation
   return typeof document === 'undefined' || document.visibilityState !== 'hidden'
 }
 
-/** 该消息是否 @ 了 userId（帧上的 at_me 优先，否则看 at_users） */
-export function mentionsUser(message: MessageResponse, userId: string | undefined, atMe?: boolean): boolean {
-  if (atMe !== undefined && atMe) return true
+/** 该消息是否 @所有人（帧上的 at_all，或 at_users 含保留值 all） */
+export function mentionsAll(message: MessageResponse, atAll?: boolean): boolean {
+  if (atAll === true) return true
+  if (message.is_recalled || String(message.status) === '3') return false
+  return Array.isArray(message.at_users) && message.at_users.includes('all')
+}
+
+/** 该消息是否 @ 了 userId（帧上的 at_me / at_all 优先，否则看 at_users，含 @所有人） */
+export function mentionsUser(message: MessageResponse, userId: string | undefined, atMe?: boolean, atAll?: boolean): boolean {
+  if (atMe === true || atAll === true) return true
   if (!userId || message.is_recalled || String(message.status) === '3') return false
-  return Array.isArray(message.at_users) && message.at_users.includes(userId)
+  return Array.isArray(message.at_users) && (message.at_users.includes(userId) || message.at_users.includes('all'))
 }
 
 /** 收到或发出一条消息；atMe 来自 GROUP_MESSAGE_RESPONSE 帧顶层字段 */
@@ -139,6 +157,7 @@ export function onConversationMessage(
   message: MessageResponse,
   activeConversationId: string | null,
   atMe?: boolean,
+  atAll?: boolean,
 ): void {
   if (!message?.conversation_id) return
   const me = useUserStore().loggedInUser?.user_id
@@ -154,15 +173,27 @@ export function onConversationMessage(
   }
   const replay = conversation.last_message?.message_id === message.message_id
   const countThis = countUnread && !replay
+  const mentioned = mentionsUser(message, me, atMe, atAll)
+  const mentionedAll = mentionsAll(message, atAll)
   if (countThis && message.message_id) {
-    unreadExtras.set(message.message_id, { conversationId: message.conversation_id, seq: message.seq_id || '0' })
+    unreadExtras.set(message.message_id, {
+      conversationId: message.conversation_id,
+      seq: message.seq_id || '0',
+      atMe: mentioned,
+      atAll: mentionedAll,
+    })
   }
   applyMessageToConversation(conversation, message, { countUnread: countThis })
-  if (countThis && mentionsUser(message, me, atMe)) {
-    // “[有人@我]”：直到读到该消息（已读推进后服务端清除，本地在 onConversationRead 清除）
+  if (countThis && mentioned) {
+    // “[有人@我] / [@所有人]”：直到读到该消息（已读推进后服务端清除，本地在 onConversationRead 清除）
     conversation.at_me = true
     conversation.at_me_count = (conversation.at_me_count || 0) + 1
     conversation.at_me_message_id = conversation.at_me_message_id || message.message_id
+    if (mentionsAll(message, atAll)) {
+      conversation.at_all = true
+      conversation.at_all_count = (conversation.at_all_count || 0) + 1
+      conversation.at_all_message_id = conversation.at_all_message_id || message.message_id
+    }
   }
 }
 
@@ -205,6 +236,11 @@ export function onConversationRecall(
   const me = useUserStore().loggedInUser?.user_id
   const firstRecall = !recalledMessageIds.has(messageId)
   recalledMessageIds.add(messageId)
+  const mentionExtra = unreadExtras.get(messageId)
+  if (mentionExtra) {
+    mentionExtra.atMe = false
+    mentionExtra.atAll = false
+  }
   if (recalledMessageIds.size > MAX_COUNTED) {
     const first = recalledMessageIds.values().next().value
     if (first) recalledMessageIds.delete(first)
@@ -216,7 +252,9 @@ export function onConversationRecall(
       && (!options.seqId || !conversation.read_seq || compareSeqId(options.seqId, conversation.read_seq) > 0)) {
     conversation.unread_count = (conversation.unread_count || 0) - 1
     conversation.notreadednumber = conversation.unread_count
-    if (conversation.at_me_message_id === messageId) clearMention(conversation)
+    if (conversation.at_me_message_id === messageId || conversation.at_all_message_id === messageId) {
+      clearMention(conversation)
+    }
   }
   if (adjustUnread) scheduleConversationRefresh(conversationId, 600)
 }
@@ -236,7 +274,15 @@ export function onConversationRead(conversationId: string, remaining = 0): void 
   if (conversation) {
     conversation.unread_count = Math.max(0, remaining)
     conversation.notreadednumber = conversation.unread_count
-    if (conversation.unread_count === 0) clearMention(conversation)
+    if (conversation.unread_count === 0) {
+      clearMention(conversation)
+      for (const item of unreadExtras.values()) {
+        if (item.conversationId === conversationId) {
+          item.atMe = false
+          item.atAll = false
+        }
+      }
+    }
   }
   scheduleConversationRefresh(conversationId, 800)
 }
@@ -245,6 +291,9 @@ export function clearMention(conversation: Conversation): void {
   conversation.at_me = false
   conversation.at_me_count = 0
   conversation.at_me_message_id = undefined
+  conversation.at_all = false
+  conversation.at_all_count = 0
+  conversation.at_all_message_id = undefined
 }
 
 export function scheduleConversationRefresh(conversationId: string, delay = 500): void {
@@ -276,6 +325,21 @@ export async function refreshConversation(conversationId: string): Promise<void>
   }
 }
 
+/** 上线补齐里的 @我 / @所有人 以服务端快照为准；快照之后本页才数到的提及仍保留。 */
+function applyMentionSnapshot(existing: Conversation, fresh: Conversation, afterSeq: string | null): void {
+  const extra = afterSeq ? extraMentions(existing.conversation_id, afterSeq) : { atMe: 0, atAll: 0 }
+  const atMe = !!fresh.at_me || extra.atMe > 0
+  const atAll = !!fresh.at_all || extra.atAll > 0
+  const atMeCount = (fresh.at_me_count || 0) + extra.atMe
+  const atAllCount = (fresh.at_all_count || 0) + extra.atAll
+  existing.at_me = atMe
+  existing.at_me_count = atMe ? Math.max(atMeCount, 1) : 0
+  existing.at_me_message_id = atMe ? (fresh.at_me_message_id || existing.at_me_message_id) : undefined
+  existing.at_all = atAll
+  existing.at_all_count = atAll ? Math.max(atAllCount, 1) : 0
+  existing.at_all_message_id = atAll ? (fresh.at_all_message_id || existing.at_all_message_id) : undefined
+}
+
 /**
  * 用上线补齐快照覆盖会话列表的未读数和最新预览。
  * 快照之后才到达的实时消息（seq 更大）保留本地加过的未读，避免被旧快照盖掉。
@@ -301,6 +365,9 @@ export function applyOfflineConversations(
     if (Object.prototype.hasOwnProperty.call(fresh, 'draft_preview')) {
       existing.draft_preview = fresh.draft_preview || null
     }
+    const serverLatest = fresh.latest_seq || '0'
+    const localAhead = compareSeqId(existing.latest_seq, serverLatest) > 0
+    applyMentionSnapshot(existing, fresh, localAhead ? serverLatest : null)
     if (isViewingConversation(fresh.conversation_id, activeConversationId)) {
       if (compareSeqId(fresh.latest_seq, existing.latest_seq) >= 0) {
         existing.last_message = fresh.last_message
@@ -311,8 +378,7 @@ export function applyOfflineConversations(
       }
       continue
     }
-    const serverLatest = fresh.latest_seq || '0'
-    if (compareSeqId(existing.latest_seq, serverLatest) > 0) {
+    if (localAhead) {
       const unread = (fresh.unread_count ?? 0) + extraUnread(fresh.conversation_id, serverLatest)
       existing.unread_count = unread
       existing.notreadednumber = unread

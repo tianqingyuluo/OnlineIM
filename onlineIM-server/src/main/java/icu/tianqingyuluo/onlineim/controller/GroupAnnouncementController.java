@@ -2,6 +2,7 @@ package icu.tianqingyuluo.onlineim.controller;
 
 import icu.tianqingyuluo.onlineim.pojo.dto.request.GroupAnnouncementRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.GroupAnnouncementResponse;
+import icu.tianqingyuluo.onlineim.service.GroupAnnouncementReadService;
 import icu.tianqingyuluo.onlineim.service.GroupAnnouncementService;
 import icu.tianqingyuluo.onlineim.service.GroupMemberService;
 import icu.tianqingyuluo.onlineim.service.GroupService;
@@ -24,12 +25,16 @@ import java.util.Map;
 public class GroupAnnouncementController {
 
     private final GroupAnnouncementService groupAnnouncementService;
+    private final GroupAnnouncementReadService groupAnnouncementReadService;
     private final JwtUtil jwtUtil;
     private final GroupService groupService;
     private final GroupMemberService groupMemberService;
 
-    public GroupAnnouncementController(GroupAnnouncementService groupAnnouncementService, JwtUtil jwtUtil, GroupService groupService, GroupMemberService groupMemberService) {
+    public GroupAnnouncementController(GroupAnnouncementService groupAnnouncementService,
+                                       GroupAnnouncementReadService groupAnnouncementReadService,
+                                       JwtUtil jwtUtil, GroupService groupService, GroupMemberService groupMemberService) {
         this.groupAnnouncementService = groupAnnouncementService;
+        this.groupAnnouncementReadService = groupAnnouncementReadService;
         this.jwtUtil = jwtUtil;
         this.groupService = groupService;
         this.groupMemberService = groupMemberService;
@@ -50,13 +55,15 @@ public class GroupAnnouncementController {
         // 我又幻想了 groupMemberService.isGroupMember(groupId, userid) 方法:
         // 功能: 检查该用户是否是群组成员
         // 返回: bool
-        if (!groupMemberService.isGroupMember(groupId, jwtUtil.getUserIDFromToken(token))) {
-            ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorCodeUtil.getErrorOutput("403", "你没有该权限"));
+        String userId = jwtUtil.getUserIDFromToken(token);
+        if (!groupMemberService.isGroupMember(groupId, userId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorCodeUtil.getErrorOutput("403", "你没有该权限"));
         }
         List<GroupAnnouncementResponse> announcements = groupAnnouncementService.getAnnouncementsByGroupId(groupId);
         if (announcements.isEmpty()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ErrorCodeUtil.getErrorOutput("404", "该群组还没有公告"));
         }
+        groupAnnouncementReadService.attach(groupId, userId, announcements);
         return ResponseEntity.ok(announcements);
     }
 
@@ -75,12 +82,14 @@ public class GroupAnnouncementController {
         // 功能: 根据群组ID和公告ID获取特定公告的详细信息。
         //      会校验公告是否属于该群组且状态正常。
         // 返回: GroupAnnouncementResponse 公告DTO，如果找不到或不符合条件则可能返回null或抛出特定异常。
-        if (!groupMemberService.isGroupMember(groupId, jwtUtil.getUserIDFromToken(token))) {
-            ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorCodeUtil.getErrorOutput("403", "你没有该权限"));
+        String userId = jwtUtil.getUserIDFromToken(token);
+        if (!groupMemberService.isGroupMember(groupId, userId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorCodeUtil.getErrorOutput("403", "你没有该权限"));
         }
         try {
             GroupAnnouncementResponse announcement = groupAnnouncementService.getAnnouncementById(groupId, announcementId);
             if (announcement != null) {
+                groupAnnouncementReadService.attach(groupId, userId, List.of(announcement));
                 return ResponseEntity.ok(announcement);
             } else {
                 return ResponseEntity.notFound().build();
@@ -114,6 +123,7 @@ public class GroupAnnouncementController {
         }
         try {
             GroupAnnouncementResponse newAnnouncement = groupAnnouncementService.createAnnouncement(groupId, request, publisherId);
+            groupAnnouncementReadService.afterPublished(newAnnouncement, publisherId);
             return ResponseEntity.status(201).body(newAnnouncement); // 201 Created
         }
         catch (PersistenceException e) {
@@ -145,8 +155,10 @@ public class GroupAnnouncementController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorCodeUtil.getErrorOutput("403", "你没有此权限"));
         }
         try {
+            GroupAnnouncementResponse before = groupAnnouncementService.getAnnouncementById(groupId, announcementId);
             GroupAnnouncementResponse updatedAnnouncement = groupAnnouncementService.updateAnnouncement(groupId, announcementId, request, updaterId);
             if (updatedAnnouncement != null) {
+                groupAnnouncementReadService.afterUpdated(before, updatedAnnouncement, updaterId);
                 return ResponseEntity.ok(updatedAnnouncement);
             } else {
                 // 根据实际业务逻辑，这里可能是 notFound 或 forbidden
@@ -181,6 +193,7 @@ public class GroupAnnouncementController {
         }
         try {
             groupAnnouncementService.deleteAnnouncement(groupId, announcementId, deleterId);
+            groupAnnouncementReadService.afterDeleted(groupId, announcementId, deleterId);
             return ResponseEntity.ok().build();
         }
         catch (PersistenceException e) {
@@ -216,12 +229,62 @@ public class GroupAnnouncementController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorCodeUtil.getErrorOutput("403", "你没有此权限"));
         }
         try {
+            GroupAnnouncementResponse before = groupAnnouncementService.getAnnouncementById(groupId, announcementId);
             groupAnnouncementService.pinAnnouncement(groupId, announcementId, pinStatus, operatorId);
+            GroupAnnouncementResponse after = groupAnnouncementService.getAnnouncementById(groupId, announcementId);
+            if (after != null) {
+                groupAnnouncementReadService.afterUpdated(before, after, operatorId);
+            }
             return ResponseEntity.ok().build();
         }
         catch (PersistenceException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ErrorCodeUtil.getErrorOutput("500", "服务器内部错误"));
         }
+    }
 
+    /**
+     * 成员确认已读。重复确认返回当前状态，不改第一次的已读时间。
+     */
+    @PostMapping("/{announcementId}/read")
+    public ResponseEntity<?> markAnnouncementRead(
+            @RequestHeader("Authorization") String token,
+            @PathVariable String groupId,
+            @PathVariable String announcementId) {
+        String userId = jwtUtil.getUserIDFromToken(token);
+        if (!groupMemberService.isGroupMember(groupId, userId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorCodeUtil.getErrorOutput("403", "你没有该权限"));
+        }
+        GroupAnnouncementResponse announcement = groupAnnouncementService.getAnnouncementById(groupId, announcementId);
+        if (announcement == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ErrorCodeUtil.getErrorOutput("404", "公告不存在"));
+        }
+        try {
+            groupAnnouncementReadService.markRead(groupId, announcementId, userId);
+            groupAnnouncementReadService.attach(groupId, userId, List.of(announcement));
+            return ResponseEntity.ok(announcement);
+        } catch (PersistenceException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ErrorCodeUtil.getErrorOutput("500", "服务器内部错误"));
+        }
+    }
+
+    /**
+     * 已读/未读名单，仅群主和管理员。
+     */
+    @GetMapping("/{announcementId}/reads")
+    public ResponseEntity<?> listAnnouncementReads(
+            @RequestHeader("Authorization") String token,
+            @PathVariable String groupId,
+            @PathVariable String announcementId) {
+        String userId = jwtUtil.getUserIDFromToken(token);
+        if (!groupMemberService.isGroupMember(groupId, userId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorCodeUtil.getErrorOutput("403", "你没有该权限"));
+        }
+        if (!groupService.isUserAdminOrOwner(groupId, userId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorCodeUtil.getErrorOutput("403", "只有群主或管理员可以查看已读名单"));
+        }
+        if (groupAnnouncementService.getAnnouncementById(groupId, announcementId) == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ErrorCodeUtil.getErrorOutput("404", "公告不存在"));
+        }
+        return ResponseEntity.ok(groupAnnouncementReadService.listReads(groupId, announcementId, userId));
     }
 }

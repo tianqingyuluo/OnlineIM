@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.pojo.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -59,4 +60,18 @@ public class GroupAnnouncementResponse {
      */
     @JsonProperty("updated_at")
     private String updatedAt;
+
+    /** 当前用户是否已确认阅读 */
+    @JsonProperty("read_by_me")
+    private Boolean readByMe;
+
+    /** 已读人数（仅群主/管理员返回） */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonProperty("read_count")
+    private Integer readCount;
+
+    /** 未读人数（仅群主/管理员返回，只计当前在群成员） */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonProperty("unread_count")
+    private Integer unreadCount;
 } 

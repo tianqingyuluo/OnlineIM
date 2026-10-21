@@ -118,6 +118,19 @@ class GroupMessageSenderTest {
     }
 
     @Test
+    void managersCanMentionEveryone() {
+        when(groupMemberService.isAdminOrOwner("grp_1", "usr_sender")).thenReturn(true);
+
+        assertTrue(sender.publishMessage(session,
+                "{\"group_id\":\"grp_1\",\"message_type\":\"text\",\"content\":\"@所有人\","
+                        + "\"client_message_id\":\"client_all\","
+                        + "\"at_users\":[\"all\",\"usr_receiver\",\"usr_outsider\"]}"));
+
+        verify(messageRepository).save(argThat(message ->
+                List.of("all", "usr_receiver").equals(message.getAtUsers())));
+    }
+
+    @Test
     void rejectsNonMember() {
         when(groupMemberService.isGroupMember("grp_1", "usr_sender")).thenReturn(false);
 

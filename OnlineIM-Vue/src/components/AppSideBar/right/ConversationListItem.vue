@@ -20,6 +20,15 @@ const unread = computed(() => formatUnread(props.conversation.unread_count ?? pr
 const preview = computed(() =>
   conversationPreviewText(props.conversation, props.currentUserId) || '无消息')
 const draftText = computed(() => (props.conversation.draft_preview || '').trim())
+/** 只有 @所有人时不重复显示 [有人@我]；另外还有单独 @我 时两个都显示 */
+const showPersonalMention = computed(() => {
+  if (!props.conversation.at_me) return false
+  if (!props.conversation.at_all) return true
+  const allCount = props.conversation.at_all_count || 0
+  const meCount = props.conversation.at_me_count || 0
+  return allCount === 0 || meCount > allCount
+})
+const hasMention = computed(() => !!props.conversation.at_all || showPersonalMention.value)
 </script>
 
 <template>
@@ -36,12 +45,14 @@ const draftText = computed(() => (props.conversation.draft_preview || '').trim()
       </div>
       <div class="flex items-center gap-2">
         <span class="min-w-0 flex-1 truncate text-[13px] text-gray-500" data-testid="conversation-preview">
-          <span v-if="conversation.at_me" class="text-red-500" data-testid="conversation-at-me">[有人@我] </span>
+          <span v-if="conversation.at_all" class="text-red-500" data-testid="conversation-at-all">[@所有人]</span>
+          <span v-if="showPersonalMention" class="text-red-500" data-testid="conversation-at-me">[有人@我]</span>
           <template v-if="draftText">
+            <template v-if="hasMention">{{ ' ' }}</template>
             <span class="text-red-500" data-testid="conversation-draft">[草稿]</span>
             {{ ' ' + draftText }}
           </template>
-          <template v-else>{{ preview }}</template>
+          <template v-else>{{ (hasMention ? ' ' : '') + preview }}</template>
         </span>
         <span
           v-if="unread"

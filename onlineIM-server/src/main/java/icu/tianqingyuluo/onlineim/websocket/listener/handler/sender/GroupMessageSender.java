@@ -111,9 +111,10 @@ public class GroupMessageSender implements MessageSenderHandler {
                     .map(UserBriefResponse::getUserId)
                     .filter(java.util.Objects::nonNull)
                     .toList();
-            // 只保留当前群成员（不含自己）的 @，非法项丢弃
+            // 只保留当前群成员（不含自己）的 @；@所有人（all）仅群主/管理员保留
             groupMessage.setAtUsers(MentionUtil.sanitize(
-                    request.getMessageType(), senderId, request.getAtUsers(), memberIds));
+                    request.getMessageType(), senderId, request.getAtUsers(), memberIds,
+                    groupMemberService.isAdminOrOwner(groupMessage.getGroupId(), senderId)));
             groupMessage.setTimestamp(new Date());
             groupMessage.setCreatedAt(new Date());
             groupMessage.setUpdatedAt(new Date());

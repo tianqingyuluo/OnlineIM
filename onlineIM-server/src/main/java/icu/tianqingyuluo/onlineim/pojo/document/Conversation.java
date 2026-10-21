@@ -47,6 +47,8 @@ public class Conversation {
         private String messageId;
         private String seqId;
         private String senderId;
+        /** true 表示这条“有人@我”来自 @所有人（at_users 含 all） */
+        private Boolean atAll;
     }
 
     /**

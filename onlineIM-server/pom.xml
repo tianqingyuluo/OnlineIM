@@ -196,7 +196,7 @@
 				<configuration>
 					<argLine>-javaagent:${settings.localRepository}/net/bytebuddy/byte-buddy-agent/${byte-buddy.version}/byte-buddy-agent-${byte-buddy.version}.jar</argLine>
 					<systemPropertyVariables>
-						<api.version>1.40</api.version>
+						<api.version>1.44</api.version>
 					</systemPropertyVariables>
 					<environmentVariables>
 						<TESTCONTAINERS_RYUK_DISABLED>true</TESTCONTAINERS_RYUK_DISABLED>

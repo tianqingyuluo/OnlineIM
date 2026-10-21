@@ -276,6 +276,9 @@ public class ConversationServiceImpl implements ConversationService {
 
         // @我 以读游标为准过滤，即使清理失败也不会在已读后继续显示
         var mentions = ConversationRecordService.unreadMentions(conversation.getPendingMentions(), readSeq);
+        var atAllMentions = mentions.stream()
+                .filter(mention -> mention != null && Boolean.TRUE.equals(mention.getAtAll()))
+                .toList();
 
         return ConversationResponse.builder()
                 .conversationID(conversationId)
@@ -286,6 +289,9 @@ public class ConversationServiceImpl implements ConversationService {
                 .atMe(!mentions.isEmpty())
                 .atMeCount(mentions.size())
                 .atMeMessageId(mentions.isEmpty() ? null : mentions.getFirst().getMessageId())
+                .atAll(!atAllMentions.isEmpty())
+                .atAllCount(atAllMentions.size())
+                .atAllMessageId(atAllMentions.isEmpty() ? null : atAllMentions.getFirst().getMessageId())
                 .deliveredSeq(deliveredSeq)
                 .readSeq(readSeq)
                 .latestSeq(latestSeq)

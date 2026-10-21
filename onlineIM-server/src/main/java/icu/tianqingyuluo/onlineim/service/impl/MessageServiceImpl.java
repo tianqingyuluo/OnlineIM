@@ -458,9 +458,10 @@ public class MessageServiceImpl implements MessageService {
             message.setSeqId(IdUtil.getSnowflakeNextIdStr());
 
             List<String> memberIds = groupReceiverIds(targetId);
-            // 只保留当前群成员（不含自己）的 @，非法项丢弃
+            // 只保留当前群成员（不含自己）的 @；@所有人（all）仅群主/管理员保留
             message.setAtUsers(MentionUtil.sanitize(
-                    request.getMessageType(), userId, request.getAtUserIds(), memberIds));
+                    request.getMessageType(), userId, request.getAtUserIds(), memberIds,
+                    groupMemberService.isAdminOrOwner(targetId, userId)));
 
             message.setTimestamp(new Date());
             message.setCreatedAt(new Date());

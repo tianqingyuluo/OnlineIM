@@ -51,8 +51,11 @@ import {
   filterMentionCandidates,
   findMentionQuery,
   insertMention,
+  MENTION_ALL_ID,
+  withMentionAll,
   type MentionCandidate,
 } from '@/utils/mention'
+import GroupAnnouncementBar from '@/components/MainPart/GroupAnnouncementBar.vue'
 
 const route = useRoute()
 const userStore = useUserStore()
@@ -169,7 +172,10 @@ const friendRemarks = computed<Record<string, string | undefined>>(() => {
   return map
 })
 const mentionCandidates = computed(() =>
-  buildMentionCandidates(groupMembers.value, currentUser.value?.user_id, friendRemarks.value))
+  withMentionAll(
+    buildMentionCandidates(groupMembers.value, currentUser.value?.user_id, friendRemarks.value),
+    currentGroup.value?.my_role,
+  ))
 const mentionOptions = computed(() =>
   mention.value ? filterMentionCandidates(mentionCandidates.value, mention.value.query) : [])
 const mentionOpen = computed(() => !!mention.value && mentionOptions.value.length > 0)
@@ -182,6 +188,7 @@ const mentionNames = computed<Record<string, string[]>>(() => {
     map[info.user_id] = [member.group_nickname, info.nickname, info.username]
       .filter((name): name is string => !!name && !!name.trim())
   }
+  map[MENTION_ALL_ID] = ['所有人']
   return map
 })
 
@@ -634,6 +641,8 @@ onBeforeUnmount(() => {
       </Transition>
     </div>
 
+    <GroupAnnouncementBar :group-id="groupId" :my-role="currentGroup.my_role" />
+
     <div ref="messageScrollRef" data-testid="message-scroll" class="flex-1 overflow-y-auto p-4" @scroll="handleScroll">
       <div v-if="historyStore.noMoreInfo" class="flex justify-center py-2 text-sm text-gray-500">没有更多信息</div>
       <div v-if="historyStore.groupMessages.length > 0" ref="messageListRef" class="space-y-4">
@@ -808,7 +817,12 @@ onBeforeUnmount(() => {
           @mouseenter="mentionIndex = index"
           @click="selectMention(candidate)"
         >
+          <span
+            v-if="candidate.user_id === 'all'"
+            class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs font-semibold text-amber-700"
+          >@</span>
           <img
+            v-else
             :src="candidate.avatar_url || '/images/default-avatar.png'"
             alt=""
             class="h-7 w-7 shrink-0 rounded-full object-cover"

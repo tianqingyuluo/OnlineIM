@@ -48,17 +48,23 @@ public class GroupAnnouncementServiceImpl implements GroupAnnouncementService {
     @Transactional
     public GroupAnnouncementResponse createAnnouncement(String groupId, GroupAnnouncementRequest request, String publisherId) {
         String id="ann_" + IdUtil.getSnowflakeNextIdStr();
-        if(request.getPin()==true){
-            groupAnnouncementMapper.cancelPin(groupId);
-            groupAnnouncementMapper.insert(id,groupId,publisherId,request);
+        if (request.getPin() == null) {
+            request.setPin(false);
         }
-        return groupAnnouncementMapper.getAnnouncementsByAnnouncementId(id,groupId);
+        if (Boolean.TRUE.equals(request.getPin())) {
+            groupAnnouncementMapper.cancelPin(groupId);
+        }
+        groupAnnouncementMapper.insert(id, groupId, publisherId, request);
+        return groupAnnouncementMapper.getAnnouncementsByAnnouncementId(id, groupId);
     }
 
     @Override
     public GroupAnnouncementResponse updateAnnouncement(String groupId, String announcementId, GroupAnnouncementRequest request, String updaterId) {
         if(groupAnnouncementMapper.isSelfAnnouncement(announcementId,groupId)==1){
-            if(request.getPin()==true)
+            if (request.getPin() == null) {
+                request.setPin(false);
+            }
+            if (Boolean.TRUE.equals(request.getPin()))
                 groupAnnouncementMapper.cancelPin(groupId);
             groupAnnouncementMapper.update(announcementId,request);
             return groupAnnouncementMapper.getAnnouncementsByAnnouncementId(announcementId,groupId);

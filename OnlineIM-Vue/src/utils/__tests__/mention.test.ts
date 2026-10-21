@@ -5,7 +5,9 @@ import {
   filterMentionCandidates,
   findMentionQuery,
   insertMention,
+  MENTION_ALL_ID,
   splitMentionSegments,
+  withMentionAll,
 } from '@/utils/mention'
 
 const members = [
@@ -64,5 +66,19 @@ describe('mention utils', () => {
     ])
     expect(splitMentionSegments('@张三 好', null, names)).toEqual([{ text: '@张三 好' }])
     expect(splitMentionSegments('@张三 好', ['usr_x'], names)).toEqual([{ text: '@张三 好' }])
+  })
+
+  it('puts @所有人 first only for owner and admin', () => {
+    const people = buildMentionCandidates(members, 'usr_me')
+    expect(withMentionAll(people, '0').some(c => c.user_id === MENTION_ALL_ID)).toBe(false)
+    expect(withMentionAll(people, '成员')[0].user_id).not.toBe(MENTION_ALL_ID)
+    expect(withMentionAll(people, '2')[0]).toMatchObject({ user_id: 'all', label: '所有人' })
+    expect(withMentionAll(people, '管理员')[0].user_id).toBe(MENTION_ALL_ID)
+    expect(filterMentionCandidates(withMentionAll(people, '1'), '所').map(c => c.user_id)).toEqual(['all'])
+    expect(collectAtUsers('@所有人 看一下', new Map([['all', '所有人']]))).toEqual(['all'])
+    expect(splitMentionSegments('@所有人 看一下', ['all'], {})).toEqual([
+      { text: '@所有人', userId: 'all' },
+      { text: ' 看一下' },
+    ])
   })
 })

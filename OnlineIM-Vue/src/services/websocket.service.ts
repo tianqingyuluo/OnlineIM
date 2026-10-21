@@ -25,6 +25,7 @@ import {
   OUTBOUND_QUEUE_LIMIT,
   computeBackoff,
 } from '@/utils/reconnect-utils';
+import { emitAnnouncementFrame, type AnnouncementFrameMessage } from '@/utils/announcement';
 
 export type { ConnectionState };
 
@@ -128,7 +129,7 @@ export class WebSocketService {
     socket.onmessage = (event) => {
       if (this.ws !== socket) return;
       try {
-        const frame = JSON.parse(String(event.data)) as { type?: unknown; message?: unknown; at_me?: unknown };
+        const frame = JSON.parse(String(event.data)) as { type?: unknown; message?: unknown; at_me?: unknown; at_all?: unknown };
         const type = typeof frame.type === 'string' ? frame.type : '';
         const payload = isJsonPayload(frame.message)
           ? frame.message
@@ -156,7 +157,11 @@ export class WebSocketService {
             void this.markOutboundSent(payload);
             break;
           case 'GROUP_MESSAGE_RESPONSE':
-            historyStore.handleGroupWebSocketMessage(payload as unknown as MessageResponse, frame.at_me === true);
+            historyStore.handleGroupWebSocketMessage(
+              payload as unknown as MessageResponse,
+              frame.at_me === true,
+              frame.at_all === true,
+            );
             void this.markOutboundSent(payload);
             break;
           case 'ERROR':
@@ -179,7 +184,15 @@ export class WebSocketService {
             void historyStore.handleMessageEdited(
               payload as unknown as MessageResponse,
               typeof frame.at_me === 'boolean' ? frame.at_me : undefined,
+              frame.at_all === true,
             );
+            break;
+          case 'GROUP_ANNOUNCEMENT':
+          case 'GROUP_ANNOUNCEMENT_READ':
+            emitAnnouncementFrame({
+              type,
+              message: payload as unknown as AnnouncementFrameMessage,
+            });
             break;
           case 'MESSAGE_RECALLED':
           case 'RECALL_MESSAGE_RESPONSE':

@@ -9,7 +9,7 @@ import { isChatRecordType } from '@/utils/chat-record'
 import { computed } from 'vue'
 import { isMediaMessageType } from '@/utils/media-message'
 import { canSaveAsEmoji, isStickerMessageType } from '@/utils/sticker-message'
-import { splitMentionSegments } from '@/utils/mention'
+import { MENTION_ALL_ID, splitMentionSegments } from '@/utils/mention'
 import { editedTitle } from '@/utils/message-edit'
 
 const props = withDefaults(defineProps<{
@@ -65,7 +65,15 @@ const canSaveEmoji = computed(() => !props.recalled && canSaveAsEmoji(props.mess
 const segments = computed(() =>
   splitMentionSegments(props.message, props.atUsers, props.mentionNames))
 const mentionsMe = computed(() =>
-  !!props.currentUserId && !!props.atUsers?.includes(props.currentUserId))
+  !!props.currentUserId && !!props.atUsers && (
+    props.atUsers.includes(props.currentUserId)
+    || (props.atUsers.includes(MENTION_ALL_ID) && !props.isSelf)
+  ))
+function segmentMentionsMe(userId?: string): boolean {
+  if (!userId) return false
+  if (userId === props.currentUserId) return true
+  return userId === MENTION_ALL_ID && !props.isSelf
+}
 
 const emit = defineEmits<{
   reply: []
@@ -152,11 +160,11 @@ async function copyMessage() {
         :data-mentions-me="mentionsMe ? 'true' : undefined"
       ><template v-for="(segment, index) in segments" :key="index"><span
         v-if="segment.userId"
-        :data-testid="segment.userId === currentUserId ? 'mention-me' : 'mention'"
+        :data-testid="segmentMentionsMe(segment.userId) ? 'mention-me' : 'mention'"
         :data-user-id="segment.userId"
         :class="[
           'rounded px-0.5 font-medium',
-          segment.userId === currentUserId ? 'bg-amber-100 text-amber-700' : 'text-blue-600',
+          segmentMentionsMe(segment.userId) ? 'bg-amber-100 text-amber-700' : 'text-blue-600',
         ]"
       >{{ segment.text }}</span><template v-else>{{ segment.text }}</template></template></div>
       <div

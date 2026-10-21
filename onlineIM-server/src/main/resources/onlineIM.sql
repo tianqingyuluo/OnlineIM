@@ -250,6 +250,17 @@ CREATE TABLE `group_announcements` (
                                        KEY `idx_publisher_id` (`publisher_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='群组公告表';
 
+CREATE TABLE `group_announcement_reads` (
+                                       `id` VARCHAR(143) NOT NULL COMMENT '记录ID，格式为：anr_+snowflake',
+                                       `announcement_id` VARCHAR(143) NOT NULL COMMENT '公告ID，格式为：ann_+snowflake',
+                                       `group_id` VARCHAR(143) NOT NULL COMMENT '群组ID，格式为：grp_+snowflake',
+                                       `user_id` VARCHAR(143) NOT NULL COMMENT '已读用户ID，格式为：usr_+snowflake',
+                                       `read_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '确认已读时间',
+                                       PRIMARY KEY (`id`),
+                                       UNIQUE KEY `uk_announcement_user` (`announcement_id`, `user_id`),
+                                       KEY `idx_group_user` (`group_id`, `user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='群公告已读';
+
 CREATE TABLE `group_members` (
                                  `id` VARCHAR(143) NOT NULL COMMENT '记录ID，格式为：mem_+UUID',
                                  `group_id` VARCHAR(143) NOT NULL COMMENT '群组ID，格式为：grp_+UUID',

@@ -36,4 +36,30 @@ class MentionUtilTest {
         assertEquals(MentionUtil.MAX_MENTIONS, result.size());
         assertEquals("usr_0", result.getFirst());
     }
+
+    @Test
+    void keepsAtAllForManagersWithoutUsingThePersonCap() {
+        List<String> members = new ArrayList<>(IntStream.range(0, 60).mapToObj(i -> "usr_" + i).toList());
+        members.add("usr_me");
+        List<String> requested = new ArrayList<>();
+        requested.add("all");
+        requested.add("usr_me");
+        requested.add("usr_outsider");
+        requested.addAll(members);
+
+        List<String> result = MentionUtil.sanitize("text", "usr_me", requested, members, true);
+
+        assertEquals(MentionUtil.MENTION_ALL, result.getFirst());
+        assertEquals(MentionUtil.MAX_MENTIONS + 1, result.size());
+        assertFalse(result.contains("usr_me"));
+        assertEquals(java.util.Set.copyOf(MentionUtil.notifiedUserIds("usr_me", result, members)).size(), members.size() - 1);
+    }
+
+    @Test
+    void dropsAtAllWhenTheSenderIsNotAManager() {
+        assertEquals(List.of("usr_b"), MentionUtil.sanitize("text", "usr_a",
+                List.of("all", "usr_b"), MEMBERS, false));
+        assertNull(MentionUtil.sanitize("text", "usr_a", List.of("all"), MEMBERS, false));
+        assertEquals(List.of("all"), MentionUtil.sanitize("text", "usr_a", List.of("all", "usr_a"), MEMBERS, true));
+    }
 }

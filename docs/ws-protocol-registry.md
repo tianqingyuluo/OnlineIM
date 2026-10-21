@@ -34,6 +34,8 @@
 | `SESSION_KICKED` | S→C | 控制·会话 | v1 | multi-device-login |
 | `ERROR` | S→C | 控制·错误 | v1 | — |
 | `DRAFT_UPDATED` | S→C | 业务·草稿 | v1 | draft-sync |
+| `GROUP_ANNOUNCEMENT` | S→C | 业务·群公告 | v1 | group-at-all-announce-read |
+| `GROUP_ANNOUNCEMENT_READ` | S→C | 业务·群公告已读 | v1 | group-at-all-announce-read |
 
 ## 引用回复协议
 
@@ -394,7 +396,7 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 
 ## 群聊 @提及
 
-登记任务：mention-at（Step 5）。@所有人 不在本次范围，见末尾预留说明。
+登记任务：mention-at（Step 5）。@所有人见本节末尾。
 
 ### 发送
 
@@ -406,15 +408,15 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
                "client_message_id": "c1", "at_users": ["usr_xiaoming"] } }
 ```
 
-服务端清洗（WS 与 HTTP 相同，`MentionUtil.sanitize`）：只对 `text` 消息生效；去重、去空、去掉发送者自己；只保留发送时的**当前**群成员；最多 50 个；无效 ID 静默剔除、不报错；清洗后为空则不存。私聊请求中的 `at_users` 一律忽略。客户端只提交文本中仍有 `@名字` 的成员，文本中的名字只用于显示，服务端以 `at_users` 为准。
+服务端清洗（WS 与 HTTP 相同，`MentionUtil.sanitize`）：只对 `text` 消息生效；去重、去空、去掉发送者自己；只保留发送时的**当前**群成员；最多 50 个；无效 ID 静默剔除、不报错；清洗后为空则不存。私聊请求中的 `at_users` 一律忽略。客户端只提交文本中仍有 `@名字` 的成员，文本中的名字只用于显示，服务端以 `at_users` 为准。保留值 `all` 表示 @所有人，不占 50 人额度，规则见下。
 
 ### 接收
 
 - 消息体（`GROUP_MESSAGE_RESPONSE.message`、HTTP 发送响应、历史 / 同步 / 上下文）带 `at_users`（清洗后的列表或 `null`）。
-- `GROUP_MESSAGE_RESPONSE` 帧按接收者增加**顶层** `at_me: boolean`（与 `type`、`message` 同级），表示该消息是否 @ 了这位接收者：
+- `GROUP_MESSAGE_RESPONSE` 与群聊 `MESSAGE_EDITED` 帧按接收者增加**顶层** `at_me: boolean`（与 `type`、`message` 同级），表示该消息是否 @ 了这位接收者（含 @所有人）。另有顶层 `at_all: boolean`，表示这条消息是否 @所有人：
 
 ```json
-{ "type": "GROUP_MESSAGE_RESPONSE", "message": { "message_id": "msg_1", "at_users": ["usr_me"], "...": "..." }, "at_me": true }
+{ "type": "GROUP_MESSAGE_RESPONSE", "message": { "message_id": "msg_1", "at_users": ["all"], "...": "..." }, "at_me": true, "at_all": true }
 ```
 
 ### 会话标记 `[有人@我]`
@@ -423,15 +425,72 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 
 | 字段 | 类型 | 语义 |
 |------|------|------|
-| `at_me` | boolean | 有 `seq_id` 大于自己已读游标的 @我 消息 |
+| `at_me` | boolean | 有 `seq_id` 大于自己已读游标的 @我 消息（含 @所有人） |
 | `at_me_count` | number | 未读 @我 条数 |
 | `at_me_message_id` | string/null | 最早一条未读 @我 消息，可用于跳转 |
+| `at_all` | boolean | 其中有未读的 @所有人 |
+| `at_all_count` | number | 未读 @所有人 条数 |
+| `at_all_message_id` | string/null | 最早一条未读 @所有人 消息 |
 
-清除：`READ_RECEIPT` 推进已读游标后移除 `seq_id ≤ read_seq` 的记录（响应计算本身也按游标过滤，裁剪失败也不会显示错误）；消息撤回后从所有成员记录中移除。Web 端在会话预览前显示红色 `[有人@我]`，收到 `at_me` 帧且未在查看该会话时实时打标，读到最新后实时清除并以服务端值校正。
+清除：`READ_RECEIPT` 推进已读游标后移除 `seq_id ≤ read_seq` 的记录（响应计算本身也按游标过滤，裁剪失败也不会显示错误）；消息撤回后从所有成员记录中移除。Web 端在会话预览前显示红色 `[有人@我]`；若未读里有 @所有人则显示 `[@所有人]`（只有 @所有人时不重复显示 `[有人@我]`，另外还有单独 @我 时两个都显示）。收到 `at_me` / `at_all` 帧且未在查看该会话时实时打标，读到最新后实时清除并以服务端值校正。
 
-### @所有人（预留）
+### @所有人
 
-本步不实现。预留位置：前端 `src/utils/mention.ts` 的 `MENTION_ALL_ID = 'all'`，服务端 `MentionUtil.sanitize`（当前把 `all` 当作非成员剔除）。后续加入权限 / 频次判断后在服务端展开为全体成员或单独标记。
+登记任务：v1-group-at-all-announce-read。复用 `at_users`，保留值 `all`（前端 `MENTION_ALL_ID`），**不**展开成成员 ID，因此不受 50 人上限，历史消息也不随退群改写。
+
+- 只有群主或管理员可以留下 `all`（`group_members.role <> 0`，或 `groups.owner_id`）。普通成员提交的 `all` 被静默丢弃，同一次请求里其他合法的 @单人保留，消息照常发送。编辑消息时按发送者**当前**身份重新清洗。
+- 除发送者外的每个当前成员都会记一条 `pendingMentions`（`atAll=true`），会话列表出现 `[@所有人]`。`at_me` 同时为 true，旧客户端仍显示 `[有人@我]`。
+- 本期没有频次限制。
+
+## 群公告已读
+
+登记任务：v1-group-at-all-announce-read。公告仍走原有 HTTP CRUD。成员确认阅读、名单和实时通知如下。已有库启动时会 `CREATE TABLE IF NOT EXISTS group_announcement_reads`（也写在 `onlineIM.sql`）。
+
+### 确认 `POST /api/v1/groups/{groupId}/announcements/{announcementId}/read`
+
+群成员调用。重复确认不改变第一次的 `read_at`，也不再推送。成功返回该公告（与列表项相同，`read_by_me: true`）。非成员 `403`，公告不存在 `404`。
+
+`GET /api/v1/groups/{groupId}/announcements` 与详情在原字段上增加：
+
+| 字段 | 谁能看到 | 语义 |
+|------|----------|------|
+| `read_by_me` | 所有成员 | 当前用户是否已确认 |
+| `read_count` | 群主/管理员 | 当前在群成员里已确认的人数 |
+| `unread_count` | 群主/管理员 | 当前在群成员里尚未确认的人数 |
+
+发布者在发布时记为自己已读。标题或正文变化后清空该公告的已读（操作者保持已读），只改置顶不清。未置顶的公告现在也会真正写入（原先 `pin=false` 时不会插入）。
+
+### 名单 `GET /api/v1/groups/{groupId}/announcements/{announcementId}/reads`
+
+仅群主/管理员。普通成员 `403`。
+
+```json
+{ "announcement_id": "ann_1", "group_id": "grp_1", "read_count": 1, "unread_count": 2,
+  "readers": [ { "user_id": "usr_a", "username": "a", "nickname": "甲", "avatar_url": "/a.png", "read_at": "2026-10-21 12:00:00" } ],
+  "unread_users": [ { "user_id": "usr_b", "username": "b", "nickname": "乙", "avatar_url": "/b.png" } ] }
+```
+
+名单只含当前 `status=1` 的成员。
+
+### 实时帧
+
+Redis Stream 类型与帧 `type` 同名。`GROUP_ANNOUNCEMENT` 发给全体在群成员；`GROUP_ANNOUNCEMENT_READ` 发给群主/管理员和确认者本人。人数只出现在群主/管理员的帧里。同一用户在本节点上的每条连接都会收到（与群消息、`MESSAGE_EDITED` 一样按连接扇出）。确认者的其他设备因此也能把公告标成已读。`GROUP_MESSAGE_RESPONSE` / `MESSAGE_EDITED` 上的 `at_all` 同样发到该成员的每条连接。
+
+```json
+{ "type": "GROUP_ANNOUNCEMENT",
+  "message": { "action": "published", "group_id": "grp_1", "announcement_id": "ann_1", "actor_id": "usr_admin",
+               "announcement": { "announcement_id": "ann_1", "title": "开会", "content": "...", "read_by_me": false } } }
+```
+
+`action`：`published`（新公告）、`updated`（标题或正文变了，除操作者外都要重新确认）、`pinned`（只改置顶）、`deleted`（无 `announcement`）。客户端把 `actor_id` 等于自己视为已读。
+
+```json
+{ "type": "GROUP_ANNOUNCEMENT_READ",
+  "message": { "group_id": "grp_1", "announcement_id": "ann_1", "user_id": "usr_b",
+               "nickname": "乙", "read_at": "2026-10-21 12:00:00", "read_count": 2, "unread_count": 1 } }
+```
+
+Web 端在未确认前于群聊顶部显示公告条，点开弹层后仍保留，直到点“我知道了”。
 
 ## 消息转发
 
@@ -868,7 +927,7 @@ WebSocket **每次**连接成功（含第一次连接和断线重连）后，客
 
 不使用 `user_timelines` 另存一份漏收记录：消息本来就在私聊 / 群聊集合里，按 seq 读取即可，因此也没有额外的清理任务。
 
-`conversations` 里的 `draft_preview` 与会话列表接口相同。客户端应用快照时采用这份草稿摘要，即使因为本地有更新的消息而保留了原来的预览和未读。在线状态不放进本帧：连接成功后仍由客户端查询 presence，变更继续用 `PRESENCE_UPDATE` 扇出到该用户的每条连接。用户有多条连接时，`OFFLINE_SYNC` 只发给发出 `SYNC_REQUEST` 的那一条。
+`conversations` 里的 `draft_preview`、`at_me`、`at_all`（及对应的 count / message_id）与会话列表接口相同。客户端应用快照时采用这份草稿摘要和 @ 标记，即使因为本地有更新的消息而保留了原来的预览和未读。快照之后本页才收到的 @我 / @所有人 仍保留。在线状态不放进本帧：连接成功后仍由客户端查询 presence，变更继续用 `PRESENCE_UPDATE` 扇出到该用户的每条连接。用户有多条连接时，`OFFLINE_SYNC` 只发给发出 `SYNC_REQUEST` 的那一条。
 
 ## 多端登录
 
@@ -909,7 +968,7 @@ WebSocket **每次**连接成功（含第一次连接和断线重连）后，客
 
 挤下线只关闭这一台设备上的连接。在线状态按连接计数：还有其他设备或标签页的连接时保持在线，最后一条连接断开才变为离线。
 
-被挤下线的客户端停止重连，也不再发送 `SYNC_REQUEST`。其他仍在线的设备各自在自己的连接上发送 `SYNC_REQUEST`，`OFFLINE_SYNC` 只回给发出请求的那一条。`DRAFT_UPDATED`、消息和已读回执则发到该用户每一条仍在线的连接。
+被挤下线的客户端停止重连，也不再发送 `SYNC_REQUEST`。其他仍在线的设备各自在自己的连接上发送 `SYNC_REQUEST`，`OFFLINE_SYNC` 只回给发出请求的那一条。`DRAFT_UPDATED`、消息、已读回执、`GROUP_ANNOUNCEMENT` 和 `GROUP_ANNOUNCEMENT_READ` 则发到该用户每一条仍在线的连接。群消息帧上的 `at_all` 也在每一条连接上。
 
 ### 设备列表
 

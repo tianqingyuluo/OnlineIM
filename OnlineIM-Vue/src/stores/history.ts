@@ -495,7 +495,7 @@ export const useHistoryStore = defineStore('history', {
       return message.delivery_state || 'sent';
     },
 
-    handleIncomingMessage(message: MessageResponse, isGroup: boolean, atMe?: boolean) {
+    handleIncomingMessage(message: MessageResponse, isGroup: boolean, atMe?: boolean, atAll?: boolean) {
       const normalized = normalizeMessage(message);
       const existing = this.findMessage(normalized.client_message_id, normalized.message_id);
       if (existing) {
@@ -505,7 +505,7 @@ export const useHistoryStore = defineStore('history', {
         // 否则会混进正在查看的聊天窗口
         this.processMessages([normalized], isGroup);
       }
-      onConversationMessage(normalized, this.activeConversationId, atMe);
+      onConversationMessage(normalized, this.activeConversationId, atMe, atAll);
       void dbService.putHistory([normalized])
         .then(() => this.sendDeliveredReceipts([normalized]))
         .catch(error => console.error('保存实时消息失败:', error));
@@ -664,9 +664,9 @@ export const useHistoryStore = defineStore('history', {
       this.handleIncomingMessage(message, false);
     },
 
-    /** atMe：GROUP_MESSAGE_RESPONSE 帧顶层的 at_me（该消息是否 @ 了当前用户） */
-    handleGroupWebSocketMessage(message: MessageResponse, atMe?: boolean) {
-      this.handleIncomingMessage(message, true, atMe);
+    /** atMe / atAll：GROUP_MESSAGE_RESPONSE 帧顶层字段 */
+    handleGroupWebSocketMessage(message: MessageResponse, atMe?: boolean, atAll?: boolean) {
+      this.handleIncomingMessage(message, true, atMe, atAll);
     },
 
     async jumpToMessage(conversationId: string, messageId: string): Promise<MessageResponse | null> {
@@ -698,28 +698,29 @@ export const useHistoryStore = defineStore('history', {
      * 更新已加载的消息、引用了它的回复（“原消息已编辑”）、正在回复它的输入框引用、会话预览与本地缓存。
      * 乱序到达的旧版本（content_revision 更小）被忽略。
      */
-    async handleMessageEdited(edited: MessageResponse, atMe?: boolean): Promise<void> {
+    async handleMessageEdited(edited: MessageResponse, atMe?: boolean, atAll?: boolean): Promise<void> {
       if (!edited?.message_id || !edited.conversation_id) return;
       const me = useUserStore().loggedInUser.user_id;
+      const mentioned = (ids?: string[] | null) => !!me && !!ids && (ids.includes(me) || ids.includes('all'));
       let mentionChanged = false;
       let applied = false;
       for (const message of this.messagesForConversation(edited.conversation_id)) {
         if (message.message_id === edited.message_id) {
           if (!isNewerRevision(edited.content_revision, message.content_revision)) continue;
-          const before = !!message.at_users?.includes(me);
+          const before = mentioned(message.at_users);
           message.content = edited.content;
           message.edited = true;
           message.edited_at = edited.edited_at ?? null;
           message.content_revision = edited.content_revision;
           if (edited.at_users !== undefined) message.at_users = edited.at_users;
-          mentionChanged = before !== !!message.at_users?.includes(me);
+          mentionChanged = before !== mentioned(message.at_users);
           applied = true;
         }
         if (message.reply_to?.message_id === edited.message_id && message.reply_to.state === 'active') {
           message.reply_to = { ...message.reply_to, state: 'edited' };
         }
       }
-      if (!applied && atMe !== undefined) mentionChanged = true;
+      if (!applied && (atMe || atAll)) mentionChanged = true;
       if (this.replyTarget?.reference.message_id === edited.message_id
         && this.replyTarget.reference.state === 'active') {
         this.replyTarget.reference = { ...this.replyTarget.reference, state: 'edited' };

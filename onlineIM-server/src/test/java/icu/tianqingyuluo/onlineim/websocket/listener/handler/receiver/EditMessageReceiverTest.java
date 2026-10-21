@@ -49,6 +49,8 @@ class EditMessageReceiverTest {
         assertEquals("MESSAGE_EDITED", myFrame.get("type").asText());
         assertFalse(myFrame.get("at_me").asBoolean());
         assertTrue(peerFrame.get("at_me").asBoolean());
+        assertFalse(myFrame.get("at_all").asBoolean());
+        assertFalse(peerFrame.get("at_all").asBoolean());
         assertEquals("新内容", peerFrame.get("message").get("content").asText());
         assertTrue(peerFrame.get("message").get("edited").asBoolean());
         assertEquals(2, peerFrame.get("message").get("content_revision").asInt());

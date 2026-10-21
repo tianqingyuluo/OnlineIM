@@ -58,7 +58,7 @@ resources/
 ├── application.properties            # Main config (HTTP 8080, WS 8081, MySQL, Redis, MyBatis)
 ├── application-oss-example.properties # OSS config template for 4 providers
 ├── db.properties                     # Externalized DB credentials (imported via spring.config.import)
-├── onlineIM.sql                      # MySQL schema (9 tables, InnoDB, utf8mb4_unicode_ci)
+├── onlineIM.sql                      # MySQL schema (10 tables, InnoDB, utf8mb4_unicode_ci)
 └── mapper/                           # MyBatis XML mappers (*.xml, namespace = interface FQN)
 ```
 

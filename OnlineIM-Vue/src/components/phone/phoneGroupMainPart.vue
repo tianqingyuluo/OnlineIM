@@ -16,6 +16,7 @@ import { GroupSettingService } from "@/services/groupsetting.service";
 import { useOtherStore } from "@/stores/otherStore.ts";
 import { dbService } from "@/utils/indexedDB";
 import type {MessageResponse} from "@/type/message.ts";
+import GroupAnnouncementBar from '@/components/MainPart/GroupAnnouncementBar.vue'
 
 // 菜单引用
 const menuRef = ref<HTMLElement | null>(null)
@@ -249,6 +250,8 @@ function toggleMenu() {
         </div>
       </Transition>
     </div>
+
+    <GroupAnnouncementBar :group-id="groupId" :my-role="currentGroup.my_role" />
 
     <!-- 主内容区 -->
     <div class="flex-1 overflow-y-auto p-4" @scroll="handleScroll">

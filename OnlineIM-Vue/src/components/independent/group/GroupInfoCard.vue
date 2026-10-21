@@ -340,6 +340,7 @@ onMounted(() => {
         <Announcement
             class="relative z-50 w-[80%] max-w-2xl m-auto"
             :groupId="group.group_id"
+            :myRole="group.my_role"
             @back="showAnnouncement = false"
         />
       </div>

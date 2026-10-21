@@ -75,7 +75,7 @@ Reference: `resources/mapper/UserMapper.xml`, `resources/mapper/GroupMapper.xml`
 
 ### Schema (`resources/onlineIM.sql`)
 
-- 9 tables, InnoDB, `utf8mb4_unicode_ci`.
+- 10 tables, InnoDB, `utf8mb4_unicode_ci`（含 `group_announcement_reads`，已有库由启动时 `CREATE TABLE IF NOT EXISTS` 补齐）.
 - Column names `snake_case`, Java properties `camelCase`.
 - ID columns `VARCHAR(143)`.
 - Status/type columns `TINYINT UNSIGNED`.

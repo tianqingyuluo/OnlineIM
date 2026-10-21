@@ -28,8 +28,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
-
 /**
  * 文本消息编辑（REST PUT /api/v1/messages/{id} 与 WebSocket EDIT_MESSAGE_REQUEST 共用）。
  *
@@ -166,9 +164,10 @@ public class MessageEditService {
         }
         List<String> memberIds = memberIds(message.getGroupId());
         List<String> previousAtUsers = message.getAtUsers() == null ? List.of() : message.getAtUsers();
+        boolean canMentionAll = groupMemberService.isAdminOrOwner(message.getGroupId(), message.getSenderId());
         List<String> atUsers = requestedAtUsers == null
-                ? MentionUtil.sanitize(message.getMessageType(), message.getSenderId(), previousAtUsers, memberIds)
-                : MentionUtil.sanitize(message.getMessageType(), message.getSenderId(), requestedAtUsers, memberIds);
+                ? MentionUtil.sanitize(message.getMessageType(), message.getSenderId(), previousAtUsers, memberIds, canMentionAll)
+                : MentionUtil.sanitize(message.getMessageType(), message.getSenderId(), requestedAtUsers, memberIds, canMentionAll);
         List<String> nextAtUsers = atUsers == null ? List.of() : atUsers;
         if (content.equals(message.getContent()) && new LinkedHashSet<>(nextAtUsers).equals(new LinkedHashSet<>(previousAtUsers))) {
             return messageService.convertGroupMessageToResponse(message);
@@ -200,12 +199,9 @@ public class MessageEditService {
         message.setEditHistory(history);
         message.setAtUsers(atUsers);
 
-        Set<String> removed = new LinkedHashSet<>(previousAtUsers);
-        removed.removeAll(nextAtUsers);
-        Set<String> added = new LinkedHashSet<>(nextAtUsers);
-        added.removeAll(previousAtUsers);
-        if (!removed.isEmpty() || !added.isEmpty()) {
-            conversationRecords.onMentionsEdited(message, removed, added);
+        if (!new LinkedHashSet<>(previousAtUsers).equals(new LinkedHashSet<>(nextAtUsers))) {
+            // all 与具体用户不能做差集，按当前列表整表重写
+            conversationRecords.replaceMentions(message, memberIds);
         }
         conversationRecords.onMessageEdited(message.getGroupId(), message.getId(), message.getMessageType(), content);
 

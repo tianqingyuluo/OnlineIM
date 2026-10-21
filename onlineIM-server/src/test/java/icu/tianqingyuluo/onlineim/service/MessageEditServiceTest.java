@@ -22,7 +22,6 @@ import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.http.HttpStatus;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
@@ -205,7 +204,6 @@ class MessageEditServiceTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void groupEditReplacesMentionsAndNotifiesMembers() {
         GroupMessage message = groupMessage(List.of(PEER));
         MessageEditRequest request = MessageEditRequest.builder()
@@ -215,11 +213,7 @@ class MessageEditServiceTest {
 
         assertEquals(List.of(OTHER), response.getMentionedUserIds());
         assertEquals(List.of(PEER), message.getEditHistory().getFirst().getAtUsers());
-        ArgumentCaptor<Collection<String>> removed = ArgumentCaptor.forClass(Collection.class);
-        ArgumentCaptor<Collection<String>> added = ArgumentCaptor.forClass(Collection.class);
-        verify(records).onMentionsEdited(eq(message), removed.capture(), added.capture());
-        assertEquals(List.of(PEER), new ArrayList<>(removed.getValue()));
-        assertEquals(List.of(OTHER), new ArrayList<>(added.getValue()));
+        verify(records).replaceMentions(eq(message), any());
         verify(records).onMessageEdited(GROUP, "msg_g", "text", "@o 找你");
         verify(redis).publishGroupMessage(eq("EDIT_MESSAGE"), eq(ME), anyString(), eq(List.of(ME, PEER, OTHER)));
     }
@@ -229,7 +223,26 @@ class MessageEditServiceTest {
         groupMessage(List.of(PEER));
         MessageResponse response = service.edit("msg_g", request("@peer 改一下"), ME);
         assertEquals(List.of(PEER), response.getMentionedUserIds());
-        verify(records, never()).onMentionsEdited(any(), any(), any());
+        verify(records, never()).replaceMentions(any(), any());
+    }
+
+    @Test
+    void groupEditKeepsAtAllOnlyForManagers() {
+        when(groupMemberService.isAdminOrOwner(GROUP, ME)).thenReturn(true);
+        GroupMessage message = groupMessage(List.of(PEER));
+        MessageEditRequest request = MessageEditRequest.builder()
+                .content("@所有人 看一下").atUsers(List.of("all", OTHER, "usr_stranger")).build();
+
+        MessageResponse response = service.edit("msg_g", request, ME);
+
+        assertEquals(List.of("all", OTHER), response.getMentionedUserIds());
+        verify(records).replaceMentions(eq(message), any());
+
+        when(groupMemberService.isAdminOrOwner(GROUP, ME)).thenReturn(false);
+        groupMessage(List.of("all", PEER));
+        MessageResponse stripped = service.edit("msg_g", MessageEditRequest.builder()
+                .content("@所有人").atUsers(List.of("all", PEER)).build(), ME);
+        assertEquals(List.of(PEER), stripped.getMentionedUserIds());
     }
 
     @Test

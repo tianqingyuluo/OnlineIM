@@ -49,4 +49,38 @@ describe('mention rendering', () => {
     await wrapper.setProps({ conversation: { ...conversation, at_me: false } as never })
     expect(wrapper.find('[data-testid="conversation-at-me"]').exists()).toBe(false)
   })
+
+  it('shows [@所有人] and keeps [有人@我] only when there is also a personal mention', async () => {
+    const { default: Item } = await import('@/components/AppSideBar/right/ConversationListItem.vue')
+    const conversation = {
+      conversation_id: 'grp_1',
+      type: 'group',
+      target_info: { id: 'grp_1', name: 'G' },
+      last_message: { message_id: 'm1', content_preview: '@所有人 开会', timestamp: '2026-10-21 08:09:00', is_recalled: false },
+      unread_count: 1,
+      last_activity_time: '2026-10-21 08:09:00',
+      at_me: true,
+      at_me_count: 1,
+      at_all: true,
+      at_all_count: 1,
+    }
+    const wrapper = mount(Item, { props: { conversation: conversation as never } })
+    expect(wrapper.get('[data-testid="conversation-at-all"]').text()).toBe('[@所有人]')
+    expect(wrapper.find('[data-testid="conversation-at-me"]').exists()).toBe(false)
+    await wrapper.setProps({ conversation: { ...conversation, at_me_count: 2 } as never })
+    expect(wrapper.get('[data-testid="conversation-at-me"]').text()).toBe('[有人@我]')
+  })
+
+  it('highlights @所有人 for other people', async () => {
+    const { default: UserTextArea } = await import('@/components/MainPart/UserTextArea.vue')
+    const wrapper = mount(UserTextArea, {
+      props: {
+        message: '@所有人 开会',
+        atUsers: ['all'],
+        mentionNames: {},
+        currentUserId: 'usr_me',
+      },
+    })
+    expect(wrapper.get('[data-testid="mention-me"]').text()).toBe('@所有人')
+  })
 })

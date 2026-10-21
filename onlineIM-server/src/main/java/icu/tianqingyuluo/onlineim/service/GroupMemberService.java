@@ -89,4 +89,7 @@ public interface GroupMemberService {
     boolean transferOwnership(String groupId, String memberId, String operatorId);
 
     boolean isGroupMember(String groupId, String userIDFromToken);
+
+    /** 群主或管理员（成员 role 不为 0，或 groups.owner_id）。用于 @所有人等管理操作。 */
+    boolean isAdminOrOwner(String groupId, String userId);
 }

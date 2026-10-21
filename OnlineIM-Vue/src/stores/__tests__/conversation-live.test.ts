@@ -143,6 +143,20 @@ describe('conversation list live updates', () => {
     expect(g1().at_me_count).toBe(0)
   })
 
+  it('flags [@所有人] for every member except the sender', async () => {
+    const { list, live } = await setup([conv('grp_1')])
+    const g1 = () => list.conversations.find(c => c.conversation_id === 'grp_1')!
+    live.onConversationMessage(msg('own_all', 'grp_1', 'usr_me', { at_users: ['all'] }) as never, null, false, true)
+    expect(g1().at_all).toBeFalsy()
+    live.onConversationMessage(msg('all', 'grp_1', 'usr_peer', { at_users: ['all'] }) as never, null)
+    expect(g1().at_all).toBe(true)
+    expect(g1().at_me).toBe(true)
+    expect(g1().at_all_count).toBe(1)
+    live.onConversationMessage(msg('person', 'grp_1', 'usr_peer', { at_users: ['usr_me'] }) as never, null, true, false)
+    expect(g1().at_me_count).toBe(2)
+    expect(g1().at_all_count).toBe(1)
+  })
+
   it('recall by someone else lowers my unread count once, only when I had not read it', async () => {
     const { list, live } = await setup([
       conv('conv_a', { unread_count: 2, read_seq: '10', last_message: { message_id: 'm2', content_preview: 'hi', timestamp: '2026-10-21 22:00:00', is_recalled: false } }),
@@ -220,6 +234,39 @@ describe('conversation list live updates', () => {
     expect(a.draft_preview).toBeNull()
     expect(a.last_message.content_preview).toBe('新')
     expect(a.unread_count).toBe(2)
+  })
+
+  it('keeps [@所有人] from the offline snapshot, and a newer live mention', async () => {
+    const { list, live } = await setup([conv('grp_1', { latest_seq: '30', unread_count: 1 })])
+    live.applyOfflineConversations([
+      conv('grp_1', {
+        unread_count: 2,
+        latest_seq: '20',
+        at_me: true,
+        at_me_count: 1,
+        at_all: true,
+        at_all_count: 1,
+        at_all_message_id: 'g_all',
+      }),
+    ], null)
+    const g1 = () => list.conversations[0]
+    expect(g1().at_all).toBe(true)
+    expect(g1().at_me).toBe(true)
+    expect(g1().at_all_message_id).toBe('g_all')
+    expect(g1().unread_count).toBe(2)
+
+    live.onConversationMessage(msg('live_all', 'grp_1', 'usr_peer', { at_users: ['all'], seq_id: '31' }) as never, null, true, true)
+    live.applyOfflineConversations([
+      conv('grp_1', { unread_count: 0, latest_seq: '20', at_me: false, at_all: false }),
+    ], null)
+    expect(g1().at_all).toBe(true)
+    expect(g1().at_me).toBe(true)
+
+    live.applyOfflineConversations([
+      conv('grp_1', { unread_count: 0, latest_seq: '40', at_me: false, at_all: false, at_me_count: 0, at_all_count: 0 }),
+    ], null)
+    expect(g1().at_all).toBe(false)
+    expect(g1().at_me).toBeFalsy()
   })
 
   it('does not raise unread for the conversation currently on screen', async () => {

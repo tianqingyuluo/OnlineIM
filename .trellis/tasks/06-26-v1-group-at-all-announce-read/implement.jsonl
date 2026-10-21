@@ -1,1 +1,5 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "MySQL 表与实体约定，公告已读落在 MySQL"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "构造器注入、服务分层与测试命令"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Vue 组件、vitest 与导入约定"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "at_users 与公告已读从库到 WS 再到会话列表"}
+{"file": "docs/ws-protocol-registry.md", "reason": "新增 at_all 与公告帧必须登记"}

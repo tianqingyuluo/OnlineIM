@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import icu.tianqingyuluo.onlineim.pojo.document.GroupMessage;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageResponse;
 import icu.tianqingyuluo.onlineim.service.MessageService;
+import icu.tianqingyuluo.onlineim.util.MentionUtil;
 import icu.tianqingyuluo.onlineim.websocket.event.WebSocketMessageEvent;
 import icu.tianqingyuluo.onlineim.websocket.registry.LocalSessionRegistry;
 import icu.tianqingyuluo.onlineim.websocket.registry.SessionDelivery;
@@ -20,7 +21,7 @@ import java.util.Map;
  * 群聊消息处理器：把 Redis Stream 中已落库的群消息（GROUP_MESSAGE）推送给本节点在线的群成员。
  *
  * <p>消息的落库、@提及清洗（只保留当前群成员）都在发送端完成；这里只负责投递。
- * 每个接收者的帧额外带顶层 {@code at_me}，表示该消息是否 @ 了这位接收者。</p>
+ * 每个接收者的帧额外带顶层 {@code at_me}（是否 @ 了这位接收者，含 @所有人）和 {@code at_all}。</p>
  */
 @Slf4j
 @Component
@@ -60,6 +61,7 @@ public class GroupMessageReceiver implements MessageReceiverHandler {
 
             MessageResponse messageResponse = messageService.convertGroupMessageToResponse(groupMessage);
             List<String> atUsers = groupMessage.getAtUsers() == null ? List.of() : groupMessage.getAtUsers();
+            boolean atAll = MentionUtil.mentionsAll(atUsers);
 
             // 每个成员的全部在线设备都收到，包括发送者自己的其他设备（发送端按 client_message_id 合并）
             for (String memberId : event.getReceiverIDs()) {
@@ -70,12 +72,13 @@ public class GroupMessageReceiver implements MessageReceiverHandler {
                 if (sessions.isEmpty()) {
                     continue;
                 }
-                boolean atMe = atUsers.contains(memberId);
+                boolean atMe = atAll || atUsers.contains(memberId);
                 for (WebSocketSession memberSession : sessions) {
                     Map<String, Object> response = new LinkedHashMap<>();
                     response.put("type", "GROUP_MESSAGE_RESPONSE");
                     response.put("message", messageResponse);
                     response.put("at_me", atMe);
+                    response.put("at_all", atAll);
                     memberSession.sendMessage(objectMapper.writeValueAsString(response));
                 }
                 log.debug("已向群组成员 {} 的 {} 台设备发送新消息", memberId, sessions.size());

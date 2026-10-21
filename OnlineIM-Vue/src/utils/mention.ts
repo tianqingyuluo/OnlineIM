@@ -5,12 +5,20 @@
  *   这样其他成员看到的文本与发送者无关。
  * - 发送时 at_users 只保留文本里仍然存在 `@名字` 的成员（删掉文字即取消提及）。
  * - 服务端会再做一次清洗（只保留当前群成员、去掉自己、最多 50 个）。
- * - @所有人 尚未实现：以后可在候选列表顶部加入一个 user_id 为 MENTION_ALL_ID 的条目，
- *   服务端 MentionUtil 中同样预留了位置。
+ * - @所有人：user_id 为 MENTION_ALL_ID。只有群主/管理员的候选列表里有这一项，
+ *   服务端会再校验一次，普通成员提交的 all 会被丢掉。
  */
 
 export const MENTION_ALL_ID = 'all'
+export const MENTION_ALL_LABEL = '所有人'
 export const MAX_MENTION_QUERY = 32
+
+/** 群主/管理员。接口可能给 0/1/2，也可能是中文或英文角色名。 */
+export function isGroupManager(role?: string | null): boolean {
+  const value = (role ?? '').trim().toLowerCase()
+  return value === '1' || value === '2' || value === 'admin' || value === 'owner'
+    || role === '管理员' || role === '群主'
+}
 
 export interface MentionCandidate {
   user_id: string
@@ -62,6 +70,14 @@ export function buildMentionCandidates(
     })
   }
   return result
+}
+
+/** 群主/管理员的候选列表顶部加“所有人”；普通成员不加。 */
+export function withMentionAll(candidates: MentionCandidate[], role?: string | null): MentionCandidate[] {
+  if (!isGroupManager(role) || candidates.some(candidate => candidate.user_id === MENTION_ALL_ID)) {
+    return candidates
+  }
+  return [{ user_id: MENTION_ALL_ID, label: MENTION_ALL_LABEL, username: 'all', role: 'all' }, ...candidates]
 }
 
 export interface MentionQuery {
@@ -149,8 +165,11 @@ export function splitMentionSegments(
 ): MentionSegment[] {
   if (!content || !atUsers?.length) return [{ text: content }]
   const tokens: { token: string; userId: string }[] = []
+  const nameBook = atUsers.includes(MENTION_ALL_ID)
+    ? { ...names, [MENTION_ALL_ID]: names[MENTION_ALL_ID]?.length ? names[MENTION_ALL_ID] : [MENTION_ALL_LABEL] }
+    : names
   for (const userId of atUsers) {
-    for (const name of names[userId] || []) {
+    for (const name of nameBook[userId] || []) {
       const label = clean(name).replace(/\s+/gu, '')
       if (label) tokens.push({ token: `@${label}`, userId })
     }

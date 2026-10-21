@@ -186,6 +186,25 @@ class ConversationRecordServiceIntegrationTest {
         assertEquals("msg_x24", record(GRP, C).getPendingMentions().getLast().getMessageId());
     }
 
+    @Test
+    void atAllMentionsEveryOtherMemberAndCanBeRewritten() {
+        records.ensureGroupMembers(GRP, List.of(A, B, C));
+        GroupMessage everyone = groupText("msg_all", "1000000000000000301", List.of("all", B));
+        records.onGroupMessage(everyone, List.of(A, B, C));
+
+        assertNull(record(GRP, A).getPendingMentions(), "发送者自己没有 @我");
+        assertEquals(Boolean.TRUE, record(GRP, B).getPendingMentions().getFirst().getAtAll());
+        assertEquals(Boolean.TRUE, record(GRP, C).getPendingMentions().getFirst().getAtAll());
+        assertEquals(1, record(GRP, B).getPendingMentions().size());
+
+        everyone.setAtUsers(List.of(B));
+        records.replaceMentions(everyone, List.of(A, B, C));
+        assertEquals(List.of("msg_all"), record(GRP, B).getPendingMentions().stream()
+                .map(Conversation.PendingMention::getMessageId).toList());
+        assertNull(record(GRP, B).getPendingMentions().getFirst().getAtAll());
+        assertTrue(record(GRP, C).getPendingMentions() == null || record(GRP, C).getPendingMentions().isEmpty());
+    }
+
     private static GroupMessage groupText(String id, String seq, List<String> atUsers) {
         GroupMessage message = new GroupMessage();
         message.setId(id);

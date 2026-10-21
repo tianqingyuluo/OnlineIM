@@ -63,6 +63,20 @@ public class ConversationResponse {
     private String atMeMessageId;
 
     /**
+     * 是否有未读的 @所有人。为 true 时客户端优先显示“[@所有人]”；at_me 同时为 true，旧客户端仍显示“[有人@我]”。
+     */
+    @JsonProperty("at_all")
+    private Boolean atAll;
+
+    /** 未读的 @所有人 条数 */
+    @JsonProperty("at_all_count")
+    private Integer atAllCount;
+
+    /** 最早一条未读 @所有人 的消息 ID */
+    @JsonProperty("at_all_message_id")
+    private String atAllMessageId;
+
+    /**
      * 当前用户已送达的最新消息序列号
      */
     @JsonProperty("delivered_seq")

@@ -4,7 +4,7 @@
     <div class="announcement-list">
       <div class="header">
         <h2>群公告</h2>
-        <button class="btn-add" @click="showCreateForm = true">+ 新建公告</button>
+        <button v-if="isManager" class="btn-add" @click="showCreateForm = true">+ 新建公告</button>
       </div>
 
       <div v-if="loading" class="loading">加载中...</div>
@@ -21,7 +21,7 @@
           <div class="announcement-header">
             <span class="title">{{ announcement.title }}</span>
             <span v-if="announcement.pinned" class="pinned-badge">置顶</span>
-            <div class="actions">
+            <div v-if="isManager" class="actions">
               <button
                   class="btn-action"
                   @click.stop="togglePin(announcement)"
@@ -52,6 +52,10 @@
               {{ announcement.publisher_info.nickname || announcement.publisher_info.username }}
             </span>
             <span class="time">{{ formatTime(announcement.updated_at) }}</span>
+            <span v-if="isManager && announcement.read_count != null" class="time" data-testid="announcement-list-counts">
+              已读 {{ announcement.read_count }} · 未读 {{ announcement.unread_count ?? 0 }}
+            </span>
+            <span v-else-if="announcement.read_by_me" class="time">已读</span>
           </div>
         </div>
       </div>
@@ -72,7 +76,18 @@
           <span>更新时间: {{ formatTime(selectedAnnouncement.updated_at) }}</span>
         </div>
         <div class="actions">
-          <button class="btn-edit" @click="isEditing = true">编辑</button>
+          <button v-if="isManager" class="btn-edit" @click="isEditing = true">编辑</button>
+          <button
+            v-if="selectedAnnouncement && !selectedAnnouncement.read_by_me"
+            class="btn-edit"
+            data-testid="announcement-detail-confirm"
+            @click="confirmRead(selectedAnnouncement)"
+          >我知道了</button>
+          <button v-if="isManager" class="btn-edit" @click="showReads(selectedAnnouncement)">已读名单</button>
+        </div>
+        <div v-if="readDetail" class="meta" data-testid="announcement-detail-reads">
+          <span>已读 {{ readDetail.read_count }}：{{ namesOf(readDetail.readers) }}</span>
+          <span>未读 {{ readDetail.unread_count }}：{{ namesOf(readDetail.unread_users) }}</span>
         </div>
       </div>
 
@@ -120,9 +135,12 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, computed, onMounted } from 'vue';
+import { defineComponent, ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { groupAnnouncementService } from '@/services/announcement.service.ts';
-import type { GroupAnnouncement, GroupAnnouncementRequest } from '@/type/groupAnnouncement';
+import type { GroupAnnouncement, GroupAnnouncementReads, GroupAnnouncementRequest } from '@/type/groupAnnouncement';
+import { isGroupManager } from '@/utils/mention';
+import { applyAnnouncementFrame, onAnnouncementFrame } from '@/utils/announcement';
+import { useUserStore } from '@/stores/user';
 
 export default defineComponent({
   name: 'GroupAnnouncement',
@@ -130,6 +148,10 @@ export default defineComponent({
     groupId: {
       type: String,
       required: true
+    },
+    myRole: {
+      type: String,
+      default: ''
     }
   },
   setup(props, { emit }) { // 添加 emit 参数
@@ -139,6 +161,9 @@ export default defineComponent({
     const isEditing = ref(false);
     const showCreateForm = ref(false);
     const error = ref<string | null>(null);
+    const readDetail = ref<GroupAnnouncementReads | null>(null);
+    const isManager = computed(() => isGroupManager(props.myRole));
+    const userStore = useUserStore();
 
     const formData = ref<GroupAnnouncementRequest>({
       title: '',
@@ -175,6 +200,33 @@ export default defineComponent({
       selectedAnnouncement.value = announcement;
       isEditing.value = false;
       showCreateForm.value = false;
+      readDetail.value = null;
+    };
+
+    const namesOf = (people: { nickname?: string; username?: string; user_id: string }[] | undefined) =>
+      (people || []).map(person => person.nickname || person.username || person.user_id).join('、') || '无';
+
+    const confirmRead = async (announcement: GroupAnnouncement) => {
+      try {
+        const updated = await groupAnnouncementService.markAnnouncementRead(props.groupId, announcement.announcement_id);
+        const next = { ...announcement, ...updated, read_by_me: true };
+        const index = announcements.value.findIndex(item => item.announcement_id === announcement.announcement_id);
+        if (index >= 0) announcements.value.splice(index, 1, next);
+        selectedAnnouncement.value = next;
+      } catch (err) {
+        error.value = '确认已读失败';
+        console.error(err);
+      }
+    };
+
+    const showReads = async (announcement: GroupAnnouncement | null) => {
+      if (!announcement) return;
+      try {
+        readDetail.value = await groupAnnouncementService.getAnnouncementReads(props.groupId, announcement.announcement_id);
+      } catch (err) {
+        error.value = '已读名单加载失败';
+        console.error(err);
+      }
     };
 
     // 关闭详情面板
@@ -273,7 +325,8 @@ export default defineComponent({
       try {
         await groupAnnouncementService.pinnedAnnouncement(
             props.groupId,
-            announcement.announcement_id
+            announcement.announcement_id,
+            !announcement.pinned,
         );
 
         const updatedAnnouncement = {
@@ -309,9 +362,25 @@ export default defineComponent({
       return new Date(timeString).toLocaleString();
     };
 
+    const stopFrames = onAnnouncementFrame((frame) => {
+      if (frame.message?.group_id && frame.message.group_id !== props.groupId) return;
+      const applied = applyAnnouncementFrame(announcements.value, frame, userStore.loggedInUser?.user_id);
+      announcements.value = applied.items;
+      if (selectedAnnouncement.value) {
+        const fresh = announcements.value.find(item => item.announcement_id === selectedAnnouncement.value?.announcement_id);
+        if (fresh) selectedAnnouncement.value = fresh;
+        else selectedAnnouncement.value = null;
+      }
+      if (frame.type === 'GROUP_ANNOUNCEMENT_READ' && isManager.value && readDetail.value
+        && readDetail.value.announcement_id === frame.message?.announcement_id) {
+        void showReads(selectedAnnouncement.value);
+      }
+    });
+
     onMounted(() => {
       loadAnnouncements();
     });
+    onBeforeUnmount(stopFrames);
 
     const goBack = () => {
       emit('back'); // 发射 'back' 事件
@@ -335,7 +404,12 @@ export default defineComponent({
       togglePin,
       truncatedContent,
       formatTime,
-      goBack // 暴露 goBack 方法
+      goBack,
+      isManager,
+      confirmRead,
+      showReads,
+      readDetail,
+      namesOf,
     };
   }
 });
