@@ -16,7 +16,7 @@
   "base_branch": "v1",
   "worktree_path": null,
   "commit": null,
-  "pr_url": null,
+  "pr_url": "https://github.com/tianqingyuluo/OnlineIM/pull/13",
   "subtasks": [],
   "children": [],
   "parent": "06-26-v1-release",
