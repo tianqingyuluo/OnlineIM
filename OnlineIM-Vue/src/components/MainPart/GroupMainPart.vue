@@ -76,11 +76,18 @@ function handleScroll(event: Event) {
   }
 }
 
+const loadError = ref('')
+
 async function loadConversation() {
+  loadError.value = ''
   try {
     const [groupInfo, groupSettings, conversationInfo] = await Promise.all([
       groupService.getGroupInfo(groupId.value),
-      GroupSettingService.getGroupSetting(groupId.value),
+      // 群设置只影响管理入口等附加信息，读取失败不应让整个聊天窗口卡在“加载中”
+      GroupSettingService.getGroupSetting(groupId.value).catch((error) => {
+        console.error('获取群设置失败:', error)
+        return null
+      }),
       conversationService.getConversationById(groupId.value),
     ])
     currentGroup.value = groupInfo
@@ -93,6 +100,7 @@ async function loadConversation() {
     installMessageObserver()
   } catch (error) {
     console.error('初始化群聊失败:', error)
+    loadError.value = '会话加载失败，可能已无权访问或网络异常'
   }
 }
 
@@ -225,6 +233,7 @@ onBeforeUnmount(() => {
   if (historyStore.replyTarget?.conversationId === groupId.value) {
     historyStore.cancelReplyTarget()
   }
+  historyStore.leaveConversation(groupId.value)
 })
 </script>
 
@@ -354,7 +363,13 @@ onBeforeUnmount(() => {
       <Button class="absolute bottom-4 right-4" @click="handleSendClick">发送</Button>
     </div>
   </div>
-  <div v-else class="flex items-center justify-center h-full">加载中...</div>
+  <div v-else class="flex flex-col items-center justify-center h-full gap-3 text-gray-500" data-testid="chat-loading">
+    <template v-if="loadError">
+      <span data-testid="chat-load-error">{{ loadError }}</span>
+      <Button variant="outline" size="sm" @click="loadConversation">重试</Button>
+    </template>
+    <template v-else>加载中...</template>
+  </div>
 </template>
 
 <style scoped>

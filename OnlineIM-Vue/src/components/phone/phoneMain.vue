@@ -3,6 +3,7 @@ import {  onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user.ts'
 import { useListStore } from '@/stores/list.ts'
+import { websocketService } from '@/services/websocket.service'
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { MessageCircleMore,Users,UserRoundPlus,User } from "lucide-vue-next"
 import PhoneUserThings from "@/components/phone/phoneUserThings.vue";
@@ -59,6 +60,8 @@ onMounted(async () => {
   try {
     await userStore.fetchUserData()
     await listStore.fetchUserData()
+    // 与桌面版 Main.vue 一致：刷新/直接打开页面后也要建立 WebSocket，否则收不到实时消息
+    websocketService.connect()
   } catch (err) {
     console.error('获取用户信息失败:', err)
   }

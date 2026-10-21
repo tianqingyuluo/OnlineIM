@@ -42,8 +42,11 @@ const conversationId = computed(() => {
   const id = route.params.id
   return Array.isArray(id) ? id[0] : id
 })
+// 对方 ID 以会话详情为准；直接打开/刷新聊天地址时侧栏列表可能还没加载，不能只依赖列表
 const targetUserId = computed(() =>
-  listStore.conversations.find(item => item.conversation_id === conversationId.value)?.target_info.id || '',
+  conversation.value?.target_info?.id
+  || listStore.conversations.find(item => item.conversation_id === conversationId.value)?.target_info.id
+  || '',
 )
 
 const deliveryLabels: Record<string, string> = {
@@ -77,10 +80,14 @@ function handleScroll(event: Event) {
   }
 }
 
+const loadError = ref('')
+
 async function loadConversation() {
+  loadError.value = ''
   try {
     const id = conversationId.value
     conversation.value = await conversationService.getConversationById(id)
+    if (!targetUserId.value) throw new Error('会话缺少对方信息')
     currentUser.value = await userService.getUserById(targetUserId.value)
     await historyStore.init()
     await historyStore.loadInitialHistory(userStore.loggedInUser.user_id, id, false)
@@ -89,6 +96,7 @@ async function loadConversation() {
     installMessageObserver()
   } catch (error) {
     console.error('初始化私聊失败:', error)
+    loadError.value = '会话加载失败，可能已无权访问或网络异常'
   }
 }
 
@@ -217,6 +225,7 @@ onBeforeUnmount(() => {
   if (historyStore.replyTarget?.conversationId === conversationId.value) {
     historyStore.cancelReplyTarget()
   }
+  historyStore.leaveConversation(conversationId.value)
 })
 </script>
 
@@ -313,7 +322,13 @@ onBeforeUnmount(() => {
       <Button class="absolute bottom-4 right-4" @click="handleSendClick">发送</Button>
     </div>
   </div>
-  <div v-else class="flex items-center justify-center h-full">加载中...</div>
+  <div v-else class="flex flex-col items-center justify-center h-full gap-3 text-gray-500" data-testid="chat-loading">
+    <template v-if="loadError">
+      <span data-testid="chat-load-error">{{ loadError }}</span>
+      <Button variant="outline" size="sm" @click="loadConversation">重试</Button>
+    </template>
+    <template v-else>加载中...</template>
+  </div>
 </template>
 
 <style scoped>
