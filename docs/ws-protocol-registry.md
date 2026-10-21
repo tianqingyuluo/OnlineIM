@@ -794,7 +794,7 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 }
 ```
 
-删除时 `cleared` 为 `true`，`content` / `draft_preview` / `reply_to` 为 `null`。同一服务实例当前只登记该用户的一条连接（既有注册表）；另一台设备若没占到这条连接，重新打开会话、刷新或切回页面时用 GET 恢复。
+删除时 `cleared` 为 `true`，`content` / `draft_preview` / `reply_to` 为 `null`。本节点上该用户的每条连接都会收到（与在线状态相同，多标签页一起更新）。另一台服务实例上的连接，以及刷新或切回页面时，用 GET 恢复。
 
 ### Web 端
 

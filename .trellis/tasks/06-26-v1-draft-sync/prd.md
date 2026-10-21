@@ -37,13 +37,13 @@
 - **E2 引用不可用（旅程 6）**：回复目标不存在或已撤回 → 文本仍保存，`reply_to` 为空。
 - **E3 后写覆盖与去重（旅程 3、6）**：第二次不同内容覆盖第一次；内容、引用和 @ 都没变则不写库、不推送。
 - **E4 清除（旅程 4）**：空白 `PUT` 或 `DELETE` 删掉草稿并推 `cleared: true`；本来就没有则不推送。
-- **E5 多端帧（旅程 3）**：`DRAFT_UPDATED` 只发给草稿主人本节点上的连接，帧体带 `conversation_id` 和内容。
+- **E5 多端帧（旅程 3）**：`DRAFT_UPDATED` 只发给草稿主人，并扇出到本节点上该用户的每条连接，帧体带 `conversation_id` 和内容。
 - **U1 输入框（旅程 1、4、5）**：停止输入 500ms 后 `PUT`；清空后 `DELETE`；打开会话 `GET` 并填回文本、回复和 @。编辑期间不上传编辑原文，取消后草稿还在。本地有未保存文字时，远程推送只改列表、不改输入框。
 - **U2 列表（旅程 2）**：有 `draft_preview` 时显示 `[草稿]` 加摘要，不再显示最后一条消息；同时 `at_me` 时 `[有人@我]` 仍在。桌面侧栏和手机列表用同一个组件。
 
 ## 测试范围
 
-- **后端单元**：`DraftPreviewTest`（空白折叠、按 code point 截断）；`DraftServiceTest`（保存并推送、引用不可用仍保存文本、空白删除、相同内容不重写、后写覆盖、非成员 / 超长、好友无记录也可存、群 @ 清洗、私聊忽略 @、列表摘要、推送失败不回滚）；`DraftUpdatedReceiverTest`（推给本人连接、本节点不在线则跳过）；`ConversationDraftControllerTest`（snake_case、用登录用户）；`ConversationServiceImplTest`（列表带上 `draft_preview`）；`ConversationIdUtilTest`（从私聊 id 解析对方）。
+- **后端单元**：`DraftPreviewTest`（空白折叠、按 code point 截断）；`DraftServiceTest`（保存并推送、引用不可用仍保存文本、空白删除、相同内容不重写、后写覆盖、非成员 / 超长、好友无记录也可存、群 @ 清洗、私聊忽略 @、列表摘要、推送失败不回滚）；`DraftUpdatedReceiverTest`（推给本人的每条连接、本节点不在线则跳过）；`ConversationDraftControllerTest`（snake_case、用登录用户）；`ConversationServiceImplTest`（列表带上 `draft_preview`）；`ConversationIdUtilTest`（从私聊 id 解析对方）。
 - **前端单元（vitest）**：`draft` 摘要与签名；`useConversationDraft`（恢复、防抖保存、清空删除、编辑态不上传、脏输入不被远程覆盖、干净时应用远程草稿并更新列表）；`conversation.service` 的三个草稿路径；`websocket` 把 `DRAFT_UPDATED` 交给草稿总线；会话列表 `[草稿]` / `[有人@我]`；`useMessageEdit` 暂存并恢复回复目标。
 - **手工**：见 PR 描述。不在本环境起 Docker 全栈。
 

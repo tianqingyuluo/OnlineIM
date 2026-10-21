@@ -9,17 +9,19 @@ import icu.tianqingyuluo.onlineim.websocket.session.WebSocketSession;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class DraftUpdatedReceiverTest {
 
     @Test
-    void pushesDraftFrameToTheOwnersConnection() throws Exception {
+    void pushesDraftFrameToEveryLocalConnection() throws Exception {
         LocalSessionRegistry registry = mock(LocalSessionRegistry.class);
-        WebSocketSession session = mock(WebSocketSession.class);
-        when(session.isActive()).thenReturn(true);
-        when(registry.getByUserId("usr_me")).thenReturn(session);
+        WebSocketSession phone = mock(WebSocketSession.class);
+        WebSocketSession desktop = mock(WebSocketSession.class);
+        when(registry.getSessionsByUserId("usr_me")).thenReturn(List.of(phone, desktop));
         ObjectMapper mapper = new ObjectMapper();
         DraftUpdatedReceiver receiver = new DraftUpdatedReceiver(mapper, registry);
 
@@ -30,7 +32,8 @@ class DraftUpdatedReceiverTest {
                 .build()));
 
         ArgumentCaptor<String> frame = ArgumentCaptor.forClass(String.class);
-        verify(session).sendMessage(frame.capture());
+        verify(phone).sendMessage(frame.capture());
+        verify(desktop).sendMessage(frame.getValue());
         JsonNode node = mapper.readTree(frame.getValue());
         assertEquals("DRAFT_UPDATED", node.get("type").asText());
         assertEquals("hi", node.get("message").get("content").asText());
@@ -40,6 +43,7 @@ class DraftUpdatedReceiverTest {
     @Test
     void skipsWhenTheOwnerIsOfflineOnThisNode() {
         LocalSessionRegistry registry = mock(LocalSessionRegistry.class);
+        when(registry.getSessionsByUserId("usr_me")).thenReturn(List.of());
         DraftUpdatedReceiver receiver = new DraftUpdatedReceiver(new ObjectMapper(), registry);
 
         assertTrue(receiver.handleMessage(WebSocketMessageEvent.builder()
@@ -47,6 +51,6 @@ class DraftUpdatedReceiverTest {
                 .senderID("usr_me")
                 .message("{\"conversation_id\":\"conv_1\",\"cleared\":true}")
                 .build()));
-        verify(registry).getByUserId("usr_me");
+        verify(registry).getSessionsByUserId("usr_me");
     }
 }
