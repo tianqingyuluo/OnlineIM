@@ -18,8 +18,10 @@ import icu.tianqingyuluo.onlineim.util.SeqIdComparator;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -127,14 +129,26 @@ public class ConversationRecordService {
         try {
             Conversation.LastMessage last = lastMessage(message.getId(), message.getMessageType(),
                     message.getContent(), message.getTimestamp(), message.getSenderId());
+            Map<String, Conversation> existing = loadRecords(message.getConversationId(),
+                    List.of(message.getSenderId(), message.getReceiverId()));
             BulkOperations bulk = mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, Conversation.class);
-            bulk.upsert(byRecordId(message.getConversationId(), message.getSenderId()),
-                    newMessageUpdate(message.getConversationId(), TYPE_PRIVATE, message.getSenderId(),
-                            message.getReceiverId(), last, false));
-            bulk.upsert(byRecordId(message.getConversationId(), message.getReceiverId()),
-                    newMessageUpdate(message.getConversationId(), TYPE_PRIVATE, message.getReceiverId(),
-                            message.getSenderId(), last, true));
-            bulk.execute();
+            int writes = 0;
+            // 同一条消息重复投递（重试、重复消费）不再给接收方未读 +1
+            if (!alreadyApplied(existing.get(message.getSenderId()), message.getId())) {
+                bulk.upsert(byRecordId(message.getConversationId(), message.getSenderId()),
+                        newMessageUpdate(message.getConversationId(), TYPE_PRIVATE, message.getSenderId(),
+                                message.getReceiverId(), last, false));
+                writes++;
+            }
+            if (!alreadyApplied(existing.get(message.getReceiverId()), message.getId())) {
+                bulk.upsert(byRecordId(message.getConversationId(), message.getReceiverId()),
+                        newMessageUpdate(message.getConversationId(), TYPE_PRIVATE, message.getReceiverId(),
+                                message.getSenderId(), last, true));
+                writes++;
+            }
+            if (writes > 0) {
+                bulk.execute();
+            }
         } catch (RuntimeException ex) {
             log.warn("更新私聊会话记录失败: conversationId={}, error={}", message.getConversationId(), ex.getMessage());
         }
@@ -154,9 +168,15 @@ public class ConversationRecordService {
         try {
             Conversation.LastMessage last = lastMessage(message.getId(), message.getMessageType(),
                     message.getContent(), message.getTimestamp(), message.getSenderId());
+            Map<String, Conversation> existing = loadRecords(message.getGroupId(), members);
             BulkOperations bulk = mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, Conversation.class);
             Set<String> mentioned = distinct(message.getAtUsers());
+            int writes = 0;
             for (String userId : members) {
+                // 这条消息已经是该成员记录的最后一条：重试不再 +1，也不再追加 @我
+                if (alreadyApplied(existing.get(userId), message.getId())) {
+                    continue;
+                }
                 Update update = newMessageUpdate(message.getGroupId(), TYPE_GROUP, userId, message.getGroupId(), last,
                         !userId.equals(message.getSenderId()));
                 if (mentioned.contains(userId) && !userId.equals(message.getSenderId())) {
@@ -169,8 +189,11 @@ public class ConversationRecordService {
                                     .build());
                 }
                 bulk.upsert(byRecordId(message.getGroupId(), userId), update);
+                writes++;
             }
-            bulk.execute();
+            if (writes > 0) {
+                bulk.execute();
+            }
         } catch (RuntimeException ex) {
             log.warn("更新群会话记录失败: groupId={}, error={}", message.getGroupId(), ex.getMessage());
         }
@@ -406,6 +429,33 @@ public class ConversationRecordService {
 
     private Query byRecordId(String conversationId, String userId) {
         return Query.query(Criteria.where("_id").is(recordId(conversationId, userId)));
+    }
+
+    /** 这条消息是否已经写进该成员的最后一条预览。重复投递时用来避免未读和 @我 被加两次。 */
+    private static boolean alreadyApplied(Conversation record, String messageId) {
+        return messageId != null && record != null && record.getLastMessage() != null
+                && messageId.equals(record.getLastMessage().getMessageId());
+    }
+
+    private Map<String, Conversation> loadRecords(String conversationId, Collection<String> userIds) {
+        List<String> ids = new ArrayList<>();
+        if (userIds != null) {
+            for (String userId : userIds) {
+                if (userId != null && !userId.isBlank()) {
+                    ids.add(recordId(conversationId, userId));
+                }
+            }
+        }
+        Map<String, Conversation> result = new HashMap<>();
+        if (ids.isEmpty()) {
+            return result;
+        }
+        for (Conversation record : mongoTemplate.find(Query.query(Criteria.where("_id").in(ids)), Conversation.class)) {
+            if (record != null && record.getUserId() != null) {
+                result.put(record.getUserId(), record);
+            }
+        }
+        return result;
     }
 
     private Set<String> distinct(Collection<String> ids) {

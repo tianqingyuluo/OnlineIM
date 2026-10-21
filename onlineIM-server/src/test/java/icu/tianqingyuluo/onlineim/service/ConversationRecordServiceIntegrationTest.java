@@ -145,8 +145,9 @@ class ConversationRecordServiceIntegrationTest {
         records.onGroupMessage(message, List.of(A, B, C));
 
         assertEquals(0, record(GRP, A).getUnreadCount());
-        assertEquals(2, record(GRP, B).getUnreadCount());
-        assertEquals(2, record(GRP, C).getUnreadCount());
+        // 同一条群消息重复投递只计一次未读
+        assertEquals(1, record(GRP, B).getUnreadCount());
+        assertEquals(1, record(GRP, C).getUnreadCount());
         assertEquals("[图片]", record(GRP, C).getLastMessage().getContent());
         assertTrue(record(GRP, B).getTop());
         assertFalse(record(GRP, C).getTop());
@@ -159,8 +160,10 @@ class ConversationRecordServiceIntegrationTest {
         GroupMessage second = groupText("msg_m2", "1000000000000000102", List.of(B, C));
         GroupMessage plain = groupText("msg_m3", "1000000000000000103", null);
         records.onGroupMessage(first, List.of(A, B, C));
+        records.onGroupMessage(first, List.of(A, B, C));
         records.onGroupMessage(second, List.of(A, B, C));
         records.onGroupMessage(plain, List.of(A, B, C));
+        assertEquals(3, record(GRP, B).getUnreadCount(), "重复投递同一条消息不重复增加未读");
 
         assertEquals(List.of("msg_m1", "msg_m2"),
                 record(GRP, B).getPendingMentions().stream().map(Conversation.PendingMention::getMessageId).toList());
@@ -326,6 +329,16 @@ class ConversationRecordServiceIntegrationTest {
         assertEquals("[语音]", ConversationRecordService.preview("voice", "x"));
         assertEquals(ConversationRecordService.PREVIEW_MAX_LENGTH,
                 ConversationRecordService.preview("text", "字".repeat(300)).length());
+    }
+
+    @Test
+    void duplicatePrivateMessageDoesNotIncrementUnreadTwice() {
+        PrivateMessage message = privateMessage("msg_dup", A, B, "once");
+        records.onPrivateMessage(message);
+        records.onPrivateMessage(message);
+        assertEquals(0, record(PRIV, A).getUnreadCount());
+        assertEquals(1, record(PRIV, B).getUnreadCount());
+        assertEquals("once", record(PRIV, B).getLastMessage().getContent());
     }
 
     private PrivateMessage privateMessage(String id, String sender, String receiver, String content) {

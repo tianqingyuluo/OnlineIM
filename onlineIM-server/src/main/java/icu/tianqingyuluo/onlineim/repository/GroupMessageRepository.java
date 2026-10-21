@@ -94,4 +94,26 @@ public interface GroupMessageRepository extends MongoRepository<GroupMessage, St
     GroupMessage findByGroupIdAndSeqId(String groupId, String seqId);
 
     GroupMessage findTopByGroupIdOrderBySeqIdDesc(String groupId);
+
+    /**
+     * seq 大于给定游标的最新消息（数值序降序，最多 51 条，供上线补齐判断是否截断）。
+     */
+    @Aggregation(pipeline = {
+            "{ '$match': { 'groupId': ?0, '$expr': { '$gt': [ { '$toDecimal': '$seqId' }, { '$toDecimal': ?1 } ] } } }",
+            "{ '$addFields': { '__numericSeqId': { '$toDecimal': '$seqId' } } }",
+            "{ '$sort': { '__numericSeqId': -1 } }",
+            "{ '$limit': 51 }",
+            "{ '$project': { '__numericSeqId': 0 } }"
+    })
+    List<GroupMessage> findNewestAfterSeqId(String groupId, String seqId);
+
+    /**
+     * 客户端已经见过（seq 不超过游标）、但之后被编辑或撤回的群消息，按更新时间取最近 30 条。
+     */
+    @Aggregation(pipeline = {
+            "{ '$match': { 'groupId': ?0, '$or': [ { 'status': 3 }, { 'editedAt': { '$type': 'date' } } ], '$expr': { '$lte': [ { '$toDecimal': '$seqId' }, { '$toDecimal': ?1 } ] } } }",
+            "{ '$sort': { 'updatedAt': -1 } }",
+            "{ '$limit': 30 }"
+    })
+    List<GroupMessage> findRevisionsAtOrBeforeSeq(String groupId, String seqId);
 }
