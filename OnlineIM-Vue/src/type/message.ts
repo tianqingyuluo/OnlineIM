@@ -155,3 +155,41 @@ export interface MessageEditedFrame {
     message: MessageResponse;
     at_me?: boolean;
 }
+
+/** 消息搜索：片段内命中的位置（UTF-16 下标） */
+export interface SearchHighlight {
+    start: number;
+    length: number;
+}
+
+export interface MessageSearchConversation {
+    conversation_id: string;
+    type: 'private' | 'group';
+    /** 私聊为对方的备注或昵称，群聊为群名 */
+    name: string;
+    avatar_url?: string;
+}
+
+export interface MessageSearchItem {
+    message: MessageResponse;
+    conversation: MessageSearchConversation;
+    /** 命中片段（换行替换为空格，过长时首尾带“…”） */
+    snippet: string;
+    highlights: SearchHighlight[];
+}
+
+/** GET /api/v1/messages/search */
+export interface MessageSearchResponse {
+    keyword: string;
+    conversation_id: string | null;
+    results: MessageSearchItem[];
+    next_cursor: string | null;
+    has_more: boolean;
+}
+
+export interface MessageSearchParams {
+    q: string;
+    conversation_id?: string;
+    cursor?: string;
+    size?: number;
+}

@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { Ellipsis, CircleEllipsis, AlertCircle, Check, CheckCheck } from 'lucide-vue-next'
+import { Ellipsis, CircleEllipsis, AlertCircle, Check, CheckCheck, Search } from 'lucide-vue-next'
 import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, provide, reactive, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import ConversationSearchPanel from '@/components/search/ConversationSearchPanel.vue'
+import type { MessageSearchItem } from '@/type/message'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import Tools from '@/components/MainPart/tools.vue'
@@ -52,6 +54,11 @@ const currentGroup = ref<GroupResponse | null>(null)
 const currentGroupSettings = ref<GroupSetting | null>(null)
 const conversation = ref<Conversation | null>(null)
 const showMenu = ref(false)
+/** 会话内搜索面板 */
+const searchOpen = ref(false)
+/** 首屏历史已加载，可以执行 ?msg= 跳转 */
+const historyReady = ref(false)
+const router = useRouter()
 const menuRef = ref<HTMLElement | null>(null)
 const menuButtonRef = ref<HTMLElement | null>(null)
 const messageScrollRef = ref<HTMLElement | null>(null)
@@ -213,6 +220,7 @@ function moveMention(delta: number) {
 
 function toggleMenu() {
   showMenu.value = !showMenu.value
+  if (showMenu.value) searchOpen.value = false
 }
 
 function handleScroll(event: Event) {
@@ -226,6 +234,7 @@ const loadError = ref('')
 
 async function loadConversation() {
   loadError.value = ''
+  historyReady.value = false
   try {
     const [groupInfo, groupSettings, conversationInfo] = await Promise.all([
       groupService.getGroupInfo(groupId.value),
@@ -245,6 +254,8 @@ async function loadConversation() {
     await nextTick()
     scrollToBottom()
     installMessageObserver()
+    historyReady.value = true
+    await consumePendingJump()
   } catch (error) {
     console.error('初始化群聊失败:', error)
     loadError.value = '会话加载失败，可能已无权访问或网络异常'
@@ -361,21 +372,53 @@ function handleReply(message: MessageResponse) {
   if (historyStore.selectReplyTarget(message)) messageInputRef.value?.focus()
 }
 
-async function handleReplyNavigate(reference: ReplyReference) {
+/** 跳到会话里的某条消息并高亮：不在已加载列表中时从本地缓存或服务端上下文加载 */
+async function navigateToMessage(messageId: string, failText: string, highlightMs = 2000): Promise<boolean> {
   const container = messageScrollRef.value
   const previousScrollTop = container?.scrollTop
   try {
-    const target = await historyStore.jumpToMessage(groupId.value, reference.message_id)
+    const target = await historyStore.jumpToMessage(groupId.value, messageId)
     if (!target) throw new Error('message unavailable')
     await nextTick()
-    if (!container || !focusMessageElement(container, target.message_id)) {
+    if (!container || !focusMessageElement(container, target.message_id, highlightMs)) {
       throw new Error('message element unavailable')
     }
+    return true
   } catch (error) {
     if (container && previousScrollTop !== undefined) container.scrollTop = previousScrollTop
-    toast.error('原消息不可用')
+    toast.error(failText)
+    return false
   }
 }
+
+async function handleReplyNavigate(reference: ReplyReference) {
+  await navigateToMessage(reference.message_id, '原消息不可用')
+}
+
+function toggleSearch() {
+  searchOpen.value = !searchOpen.value
+  if (searchOpen.value) showMenu.value = false
+}
+
+/** 会话内搜索结果：关闭面板后跳到该消息 */
+async function handleSearchSelect(item: MessageSearchItem) {
+  searchOpen.value = false
+  await navigateToMessage(item.message.message_id, '该消息已不可用', 3000)
+}
+
+/** 全局搜索结果打开的地址带 ?msg=：首屏历史加载后跳到该消息，然后去掉参数（刷新不再重复跳转） */
+const pendingJumpId = computed(() => typeof route.query.msg === 'string' ? route.query.msg : '')
+async function consumePendingJump() {
+  const messageId = pendingJumpId.value
+  if (!messageId || !historyReady.value) return
+  await router.replace({ path: route.path, query: {} })
+  // 首屏加载后“滚到底部”还有一次 120ms 的补滚（useStickToBottom），等它结束再定位，避免被拉回底部
+  await new Promise(resolve => setTimeout(resolve, 200))
+  await navigateToMessage(messageId, '该消息已不可用', 3000)
+}
+watch(pendingJumpId, id => {
+  if (id) void consumePendingJump()
+})
 
 function toggleReaders(message: MessageResponse) {
   historyStore.toggleMessageReaders(message)
@@ -420,6 +463,7 @@ watch(groupId, (nextId, previousId) => {
   if (previousId && nextId !== previousId) {
     forward.cancelSelect()
     edit.reset()
+    searchOpen.value = false
     draft.value = ''
     pickedMentions.clear()
     mention.value = null
@@ -457,11 +501,27 @@ onBeforeUnmount(() => {
     <div class="flex items-center justify-between w-full p-4 border-b relative">
       <span class="text-lg font-semibold">{{ currentGroup.name }}</span>
       <div class="flex items-center gap-2">
+        <button
+          type="button"
+          data-testid="open-conversation-search"
+          aria-label="搜索聊天记录"
+          :aria-pressed="searchOpen"
+          :class="['flex h-8 w-8 items-center justify-center rounded-full hover:bg-gray-100', searchOpen ? 'bg-gray-100 text-gray-900' : 'text-gray-600']"
+          @click="toggleSearch"
+        >
+          <Search class="w-5 h-5" aria-hidden="true" />
+        </button>
         <Button variant="ghost" size="sm" @click="historyStore.markConversationReadToLatest(conversation.conversation_id)">
           全部标为已读
         </Button>
         <button ref="menuButtonRef" @click="toggleMenu"><Ellipsis class="w-5 h-5" /></button>
       </div>
+      <ConversationSearchPanel
+        :open="searchOpen"
+        :conversation-id="conversation.conversation_id"
+        @close="searchOpen = false"
+        @select="handleSearchSelect"
+      />
       <Transition name="slide">
         <div v-if="showMenu" ref="menuRef" class="absolute right-0 top-full w-80 bg-white shadow-lg z-50 h-[calc(100vh-60px)]">
           <GroupInfoCard

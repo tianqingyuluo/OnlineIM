@@ -6,6 +6,8 @@ import type {
     MessageForwardResponse,
     MessageHistoryResponse,
     MessageResponse,
+    MessageSearchParams,
+    MessageSearchResponse,
 } from '@/type/message.ts';
 import { dbService } from "@/utils/indexedDB.ts";
 import {useUserStore} from "@/stores/user.ts";
@@ -52,6 +54,11 @@ export const MessageService = {
     /** 编辑自己发送的文本消息（时间窗内），返回编辑后的消息 */
     async editMessage(messageId: string, request: MessageEditRequest): Promise<MessageResponse> {
         const response = await api.put<MessageResponse>(`/messages/${encodeURIComponent(messageId)}`, request);
+        return response.data;
+    },
+    /** 按关键字搜索文本消息：不带 conversation_id 为全局搜索，带上只搜该会话；next_cursor 翻页 */
+    async searchMessages(params: MessageSearchParams, signal?: AbortSignal): Promise<MessageSearchResponse> {
+        const response = await api.get<MessageSearchResponse>('/messages/search', { params, signal });
         return response.data;
     },
     //错误的put方法

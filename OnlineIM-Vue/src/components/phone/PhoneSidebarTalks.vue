@@ -15,6 +15,9 @@ import {useListStore} from '@/stores/list.ts'
 import {type Conversation} from "@/type/Conversation.ts";
 import router from "@/router";
 import ConversationListItem from "@/components/AppSideBar/right/ConversationListItem.vue";
+import MessageSearchResults from "@/components/search/MessageSearchResults.vue";
+import type { MessageSearchItem } from "@/type/message";
+import { searchResultLocation } from "@/utils/message-search";
 import { sortByActivity } from "@/stores/conversation-live";
 
 
@@ -42,6 +45,12 @@ function handleChatClick(conversation: Conversation) {
   void router.push(`/main/chat/${isGroup ? 'group' : 'private'}/${conversation.conversation_id}`)
 }
 import { useRoute } from 'vue-router'
+
+/** 点击聊天记录搜索结果：打开所属会话并跳到该消息 */
+function handleSearchSelect(item: MessageSearchItem) {
+  activeId.value = item.conversation?.conversation_id || item.message.conversation_id
+  void router.push(searchResultLocation(item))
+}
 import UserMainPart from '@/components/MainPart/UserMainPart.vue'
 import GroupMainPart from '@/components/MainPart/GroupMainPart.vue'
 
@@ -70,7 +79,8 @@ const chatId = computed(() => {
         <Input
             id="search"
             type="text"
-            placeholder="搜索"
+            placeholder="搜索会话或聊天记录"
+            data-testid="global-search-input"
             v-model="searchQuery"
             class="w-full pl-10 bg-white border-blue-100 focus:border-blue-100 focus:ring-0"
         />
@@ -91,6 +101,10 @@ const chatId = computed(() => {
                 <ConversationListItem :conversation="conversation" />
               </SidebarMenuButton>
             </SidebarMenuItem>
+            <div v-if="searchQuery.trim() && !conversations.length" class="flex justify-center py-3 text-sm text-gray-500">
+              没有找到对应会话
+            </div>
+            <MessageSearchResults :query="searchQuery" show-conversation @select="handleSearchSelect" />
           </SidebarMenu>
         </SidebarGroupContent>
       </SidebarGroup>
