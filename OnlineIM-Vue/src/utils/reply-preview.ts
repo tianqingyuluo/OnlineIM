@@ -1,4 +1,5 @@
 import type { MessageResponse, ReplyReference } from '@/type/message'
+import { parseMediaContent } from '@/utils/media-message'
 
 const MAX_PREVIEW_CODE_POINTS = 80
 
@@ -38,7 +39,11 @@ export function buildReplyReference(message: MessageResponse): ReplyReference | 
       || message.sender_info.username
       || message.sender_info.user_id,
     message_type: message.message_type,
-    preview_text: getReplyPreviewText(message.message_type, message.content),
+    preview_text: getReplyPreviewText(
+      message.message_type,
+      typeof message.content === 'string' ? message.content : '',
+      parseMediaContent(message.message_type, message.content)?.name,
+    ),
     state: 'active',
   }
 }

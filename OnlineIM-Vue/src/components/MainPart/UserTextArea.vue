@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import MessageActions from '@/components/MainPart/MessageActions.vue'
 import MessageReplyPreview from '@/components/MainPart/MessageReplyPreview.vue'
+import MediaMessage from '@/components/MainPart/MediaMessage.vue'
 import type { ReplyReference } from '@/type/message'
+import { computed } from 'vue'
+import { isMediaMessageType } from '@/utils/media-message'
 
 const props = withDefaults(defineProps<{
   message: string
@@ -9,12 +12,16 @@ const props = withDefaults(defineProps<{
   canReply?: boolean
   recalled?: boolean
   replyTo?: ReplyReference
+  messageType?: string
 }>(), {
   isSelf: false,
   canReply: true,
   recalled: false,
   replyTo: undefined,
+  messageType: 'text',
 })
+
+const isMedia = computed(() => isMediaMessageType(props.messageType))
 
 const emit = defineEmits<{
   reply: []
@@ -22,7 +29,7 @@ const emit = defineEmits<{
 }>()
 
 async function copyMessage() {
-  if (props.recalled || !props.message) return
+  if (props.recalled || !props.message || isMedia.value) return
   try {
     await navigator.clipboard.writeText(props.message)
   } catch (error) {
@@ -56,6 +63,11 @@ async function copyMessage() {
       >
         消息已撤回
       </div>
+      <MediaMessage
+        v-else-if="isMedia"
+        :message-type="messageType"
+        :content="message"
+      />
       <div
         v-else
         class="select-text whitespace-pre-wrap break-words text-[15px] leading-6 text-slate-800"

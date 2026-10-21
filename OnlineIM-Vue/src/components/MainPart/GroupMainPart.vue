@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import Tools from '@/components/MainPart/tools.vue'
 import UserTextArea from '@/components/MainPart/UserTextArea.vue'
+import type { ChatMedia, ChatMediaKind } from '@/utils/media-message'
 import GroupInfoCard from '@/components/independent/group/GroupInfoCard.vue'
 import GroupAvatarWithMenu from '@/components/independent/group/GroupAvatarWithMenu.vue'
 import { groupService } from '@/services/group.service'
@@ -118,6 +119,13 @@ function handleEmojiSelect(emoji: string) {
   textarea.value = `${textarea.value.slice(0, start)}${emoji}${textarea.value.slice(start)}`
   textarea.selectionStart = textarea.selectionEnd = start + emoji.length
   textarea.focus()
+}
+
+async function handleMediaUploaded(kind: ChatMediaKind, media: ChatMedia) {
+  if (!groupId.value) return
+  historyStore.sendMessage(groupId.value, groupId.value, kind, JSON.stringify(media), true)
+  await nextTick()
+  scrollToBottom()
 }
 
 async function handleSendClick() {
@@ -266,6 +274,7 @@ onBeforeUnmount(() => {
                 <span class="text-xs text-gray-500 mb-1">{{ message.sender_info.nickname || message.sender_info.username }}</span>
                 <UserTextArea
                   :message="message.content"
+                  :message-type="message.message_type"
                   :is-self="false"
                   :can-reply="!message.is_recalled && String(message.status) !== '3'"
                   :recalled="message.is_recalled || String(message.status) === '3'"
@@ -311,6 +320,7 @@ onBeforeUnmount(() => {
               </div>
               <UserTextArea
                 :message="message.content"
+                :message-type="message.message_type"
                 :is-self="true"
                 :can-reply="!message.is_recalled && String(message.status) !== '3'"
                 :recalled="message.is_recalled || String(message.status) === '3'"
@@ -327,7 +337,7 @@ onBeforeUnmount(() => {
       <div v-if="historyStore.isLoading" class="flex justify-center py-2 text-sm text-gray-500">加载中...</div>
     </div>
 
-    <Tools @select="handleEmojiSelect" />
+    <Tools @select="handleEmojiSelect" @uploaded="handleMediaUploaded" />
     <ReplyComposerBar
       v-if="historyStore.replyTarget?.conversationId === groupId"
       :reference="historyStore.replyTarget.reference"

@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import Tools from '@/components/MainPart/tools.vue'
 import UserTextArea from '@/components/MainPart/UserTextArea.vue'
+import type { ChatMedia, ChatMediaKind } from '@/utils/media-message'
 import FriendSettingsCard from '@/components/independent/friends/FriendSettingsCard.vue'
 import { userService } from '@/services/user.service'
 import type { User } from '@/type/User'
@@ -114,6 +115,13 @@ function handleEmojiSelect(emoji: string) {
   textarea.value = `${textarea.value.slice(0, start)}${emoji}${textarea.value.slice(start)}`
   textarea.selectionStart = textarea.selectionEnd = start + emoji.length
   textarea.focus()
+}
+
+async function handleMediaUploaded(kind: ChatMediaKind, media: ChatMedia) {
+  if (!conversation.value) return
+  historyStore.sendMessage(conversation.value.conversation_id, targetUserId.value, kind, JSON.stringify(media), false)
+  await nextTick()
+  scrollToBottom()
 }
 
 async function handleSendClick() {
@@ -248,6 +256,7 @@ onBeforeUnmount(() => {
               <img :src="currentUser.avatar_url" :alt="currentUser.username" class="w-10 h-10 rounded-full mr-2 object-cover" />
               <UserTextArea
                 :message="message.content"
+                :message-type="message.message_type"
                 :is-self="false"
                 :can-reply="!message.is_recalled && String(message.status) !== '3'"
                 :recalled="message.is_recalled || String(message.status) === '3'"
@@ -270,6 +279,7 @@ onBeforeUnmount(() => {
               </div>
               <UserTextArea
                 :message="message.content"
+                :message-type="message.message_type"
                 :is-self="true"
                 :can-reply="!message.is_recalled && String(message.status) !== '3'"
                 :recalled="message.is_recalled || String(message.status) === '3'"
@@ -286,7 +296,7 @@ onBeforeUnmount(() => {
       <div v-if="historyStore.isLoading" class="flex justify-center py-2 text-sm text-gray-500">加载中...</div>
     </div>
 
-    <Tools @select="handleEmojiSelect" />
+    <Tools @select="handleEmojiSelect" @uploaded="handleMediaUploaded" />
     <ReplyComposerBar
       v-if="historyStore.replyTarget?.conversationId === conversationId"
       :reference="historyStore.replyTarget.reference"
