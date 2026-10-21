@@ -372,4 +372,23 @@ describe('history store message receipt flow', () => {
     expect(store.readStates.conv_1.read_seq).toBe('0')
   })
 
+  it('stamps optimistic messages with the server time format and sends at_users only for groups', async () => {
+    const { useHistoryStore } = await import('@/stores/history')
+    const store = useHistoryStore()
+    store.sendMessage('grp_1', 'grp_1', 'text', '@bob hi', true, ['usr_bob'])
+    const group = store.groupMessages.at(-1)!
+    expect(group.timestamp).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
+    expect(group.at_users).toEqual(['usr_bob'])
+    expect(websocketMock.sendMessage).toHaveBeenLastCalledWith(expect.objectContaining({
+      type: 'GROUP_MESSAGE_REQUEST',
+      message: expect.objectContaining({ at_users: ['usr_bob'] }),
+    }))
+
+    store.sendMessage('conv_1', 'usr_peer', 'text', 'hi', false, ['usr_bob'])
+    const priv = store.chatMessages.at(-1)!
+    expect(priv.timestamp).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
+    expect(priv.at_users).toBeUndefined()
+    const lastFrame = websocketMock.sendMessage.mock.calls.at(-1)![0] as { message: Record<string, unknown> }
+    expect(lastFrame.message).not.toHaveProperty('at_users')
+  })
 })

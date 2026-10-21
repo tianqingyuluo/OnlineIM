@@ -30,7 +30,7 @@ const preview = computed(() => props.conversation.last_message?.content_preview 
       </div>
       <div class="flex items-center gap-2">
         <span class="min-w-0 flex-1 truncate text-[13px] text-gray-500" data-testid="conversation-preview">
-          <span v-if="conversation.is_at" class="text-red-500">[有人@我]</span>
+          <span v-if="conversation.at_me" class="text-red-500" data-testid="conversation-at-me">[有人@我]</span>
           {{ preview }}
         </span>
         <span

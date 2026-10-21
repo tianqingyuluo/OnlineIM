@@ -85,22 +85,38 @@ export function isViewingConversation(conversationId: string, activeConversation
   return typeof document === 'undefined' || document.visibilityState !== 'hidden'
 }
 
-/** 收到或发出一条消息 */
-export function onConversationMessage(message: MessageResponse, activeConversationId: string | null): void {
+/** 该消息是否 @ 了 userId（帧上的 at_me 优先，否则看 at_users） */
+export function mentionsUser(message: MessageResponse, userId: string | undefined, atMe?: boolean): boolean {
+  if (atMe !== undefined && atMe) return true
+  if (!userId || message.is_recalled || String(message.status) === '3') return false
+  return Array.isArray(message.at_users) && message.at_users.includes(userId)
+}
+
+/** 收到或发出一条消息；atMe 来自 GROUP_MESSAGE_RESPONSE 帧顶层字段 */
+export function onConversationMessage(
+  message: MessageResponse,
+  activeConversationId: string | null,
+  atMe?: boolean,
+): void {
   if (!message?.conversation_id) return
   const me = useUserStore().loggedInUser?.user_id
   const fromOther = !!message.sender_info?.user_id && message.sender_info.user_id !== me
-  const countUnread = fromOther
-    && !isViewingConversation(message.conversation_id, activeConversationId)
-    && !!message.message_id
-    && rememberCounted(message.message_id)
+  const viewing = isViewingConversation(message.conversation_id, activeConversationId)
+  const firstTime = !!message.message_id && rememberCounted(message.message_id)
+  const countUnread = fromOther && !viewing && firstTime
   const conversation = findConversation(message.conversation_id)
   if (!conversation) {
-    // 列表里还没有（第一次收到该会话的消息，或之前删除过会话）：向服务端取权威记录
+    // 列表里还没有（第一次收到该会话的消息，或之前删除过会话）：向服务端取权威记录（含 at_me）
     scheduleConversationRefresh(message.conversation_id, 0)
     return
   }
   applyMessageToConversation(conversation, message, { countUnread })
+  if (countUnread && mentionsUser(message, me, atMe)) {
+    // “[有人@我]”：直到读到该消息（已读推进后服务端清除，本地在 onConversationRead 清除）
+    conversation.at_me = true
+    conversation.at_me_count = (conversation.at_me_count || 0) + 1
+    conversation.at_me_message_id = conversation.at_me_message_id || message.message_id
+  }
 }
 
 /** 自己发出的消息收到 ACK：把预览里的本地 ID 换成服务端 ID，方便之后撤回时匹配 */
@@ -130,8 +146,15 @@ export function onConversationRead(conversationId: string, remaining = 0): void 
   if (conversation) {
     conversation.unread_count = Math.max(0, remaining)
     conversation.notreadednumber = conversation.unread_count
+    if (conversation.unread_count === 0) clearMention(conversation)
   }
   scheduleConversationRefresh(conversationId, 800)
+}
+
+export function clearMention(conversation: Conversation): void {
+  conversation.at_me = false
+  conversation.at_me_count = 0
+  conversation.at_me_message_id = undefined
 }
 
 export function scheduleConversationRefresh(conversationId: string, delay = 500): void {

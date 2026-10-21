@@ -25,6 +25,16 @@ import type { ReplyReference } from '@/type/message'
 import { focusMessageElement } from '@/utils/message-navigation'
 import { toast } from 'vue-sonner'
 import { useStickToBottom } from '@/composables/useStickToBottom'
+import { useListStore } from '@/stores/list'
+import type { GroupMemberAll } from '@/type/group'
+import {
+  buildMentionCandidates,
+  collectAtUsers,
+  filterMentionCandidates,
+  findMentionQuery,
+  insertMention,
+  type MentionCandidate,
+} from '@/utils/mention'
 
 const route = useRoute()
 const userStore = useUserStore()
@@ -39,6 +49,14 @@ const menuButtonRef = ref<HTMLElement | null>(null)
 const messageScrollRef = ref<HTMLElement | null>(null)
 const messageListRef = ref<HTMLElement | null>(null)
 const messageInputRef = ref<HTMLTextAreaElement | null>(null)
+const draft = ref('')
+const listStore = useListStore()
+const groupMembers = ref<GroupMemberAll[]>([])
+/** 本次草稿中通过选择器选中的成员：user_id → 插入的名字 */
+const pickedMentions = new Map<string, string>()
+const mention = ref<{ start: number; query: string } | null>(null)
+const mentionIndex = ref(0)
+const mentionListRef = ref<HTMLElement | null>(null)
 const visibleTimers = new Map<string, ReturnType<typeof setTimeout>>()
 let messageObserver: IntersectionObserver | null = null
 
@@ -72,6 +90,115 @@ function isOwn(message: MessageResponse): boolean {
 // 新消息到达时：自己发的总是滚到底部，别人的只在本来停在底部附近时滚动
 useStickToBottom(messageScrollRef, () => historyStore.groupMessages, isOwn)
 
+const friendRemarks = computed<Record<string, string | undefined>>(() => {
+  const map: Record<string, string | undefined> = {}
+  for (const friend of listStore.friends || []) {
+    const info = friend.friend_info
+    if (info?.user_id && info.remark) map[info.user_id] = info.remark
+  }
+  return map
+})
+const mentionCandidates = computed(() =>
+  buildMentionCandidates(groupMembers.value, currentUser.value?.user_id, friendRemarks.value))
+const mentionOptions = computed(() =>
+  mention.value ? filterMentionCandidates(mentionCandidates.value, mention.value.query) : [])
+const mentionOpen = computed(() => !!mention.value && mentionOptions.value.length > 0)
+/** 气泡高亮用：user_id → 可能出现在 @ 后面的名字（含自己） */
+const mentionNames = computed<Record<string, string[]>>(() => {
+  const map: Record<string, string[]> = {}
+  for (const member of groupMembers.value) {
+    const info = member.user_info
+    if (!info?.user_id) continue
+    map[info.user_id] = [member.group_nickname, info.nickname, info.username]
+      .filter((name): name is string => !!name && !!name.trim())
+  }
+  return map
+})
+
+async function loadMembers() {
+  const id = groupId.value
+  try {
+    const response = await groupService.getGroupMembers(id)
+    if (id === groupId.value) groupMembers.value = response?.members || []
+  } catch (error) {
+    console.error('获取群成员失败（@ 选择器不可用）:', error)
+    groupMembers.value = []
+  }
+}
+
+/** Textarea 组件的根元素就是原生 textarea（其暴露的 element 未绑定，取 $el） */
+function inputElement(): HTMLTextAreaElement | null {
+  const input = messageInputRef.value as unknown as { element?: HTMLTextAreaElement | null; $el?: Element } | null
+  const element = input?.element ?? input?.$el
+  return typeof HTMLTextAreaElement !== 'undefined' && element instanceof HTMLTextAreaElement ? element : null
+}
+
+function updateMentionQuery() {
+  const element = inputElement()
+  const caret = element?.selectionStart ?? draft.value.length
+  const next = findMentionQuery(draft.value, caret)
+  if (!next) {
+    mention.value = null
+    return
+  }
+  if (!mention.value || mention.value.start !== next.start || mention.value.query !== next.query) {
+    mentionIndex.value = 0
+  }
+  mention.value = next
+}
+
+function closeMention() {
+  mention.value = null
+}
+
+/** 失焦时稍后再关，避免手机上点选项前列表先消失 */
+function closeMentionSoon() {
+  setTimeout(() => {
+    if (document.activeElement !== inputElement()) closeMention()
+  }, 200)
+}
+
+async function selectMention(candidate: MentionCandidate) {
+  const current = mention.value
+  if (!current) return
+  const caret = current.start + 1 + current.query.length
+  const next = insertMention(draft.value, current.start, caret, candidate.label)
+  draft.value = next.text
+  pickedMentions.set(candidate.user_id, candidate.label)
+  mention.value = null
+  await nextTick()
+  const element = inputElement()
+  if (element) {
+    element.focus()
+    element.setSelectionRange(next.caret, next.caret)
+  }
+}
+
+/** 手机上不方便输入 @ 时，用按钮插入一个 @ 并打开成员列表 */
+async function openMentionPicker() {
+  const element = inputElement()
+  const caret = element?.selectionStart ?? draft.value.length
+  const prev = caret > 0 ? draft.value[caret - 1] : ''
+  const insert = prev && /[A-Za-z0-9]/u.test(prev) ? ' @' : '@'
+  draft.value = `${draft.value.slice(0, caret)}${insert}${draft.value.slice(caret)}`
+  await nextTick()
+  const at = caret + insert.length
+  element?.focus()
+  element?.setSelectionRange(at, at)
+  updateMentionQuery()
+}
+
+function moveMention(delta: number) {
+  const count = mentionOptions.value.length
+  if (!count) return
+  mentionIndex.value = (mentionIndex.value + delta + count) % count
+  void nextTick(() => {
+    mentionListRef.value
+      ?.querySelector<HTMLElement>(`[data-index="${mentionIndex.value}"]`)
+      ?.scrollIntoView({ block: 'nearest' })
+  })
+}
+
 function toggleMenu() {
   showMenu.value = !showMenu.value
 }
@@ -100,6 +227,7 @@ async function loadConversation() {
     currentGroup.value = groupInfo
     currentGroupSettings.value = groupSettings
     conversation.value = conversationInfo
+    void loadMembers()
     await historyStore.init()
     await historyStore.loadInitialHistory(userStore.loggedInUser.user_id, groupId.value, true)
     await nextTick()
@@ -117,6 +245,25 @@ function scrollToBottom() {
 }
 
 function handleKeyDown(event: KeyboardEvent) {
+  if (mentionOpen.value && !event.isComposing) {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      moveMention(event.key === 'ArrowDown' ? 1 : -1)
+      return
+    }
+    if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault()
+      const candidate = mentionOptions.value[mentionIndex.value]
+      if (candidate) void selectMention(candidate)
+      return
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeMention()
+      return
+    }
+  }
+  if (event.isComposing) return
   if (event.key === 'Escape') {
     historyStore.cancelReplyTarget()
     return
@@ -127,13 +274,13 @@ function handleKeyDown(event: KeyboardEvent) {
   }
 }
 
-function handleEmojiSelect(emoji: string) {
-  const textarea = messageInputRef.value
-  if (!textarea) return
-  const start = textarea.selectionStart || 0
-  textarea.value = `${textarea.value.slice(0, start)}${emoji}${textarea.value.slice(start)}`
-  textarea.selectionStart = textarea.selectionEnd = start + emoji.length
-  textarea.focus()
+async function handleEmojiSelect(emoji: string) {
+  const element = inputElement()
+  const start = element?.selectionStart ?? draft.value.length
+  draft.value = `${draft.value.slice(0, start)}${emoji}${draft.value.slice(start)}`
+  await nextTick()
+  element?.focus()
+  element?.setSelectionRange(start + emoji.length, start + emoji.length)
 }
 
 async function handleMediaUploaded(kind: ChatMediaKind, media: ChatMedia) {
@@ -157,10 +304,13 @@ function handleSaveEmoji(message: MessageResponse) {
 }
 
 async function handleSendClick() {
-  const content = messageInputRef.value?.value.trim()
+  const content = draft.value.trim()
   if (!content) return
-  historyStore.sendMessage(groupId.value, groupId.value, 'text', content, true)
-  if (messageInputRef.value) messageInputRef.value.value = ''
+  const atUsers = collectAtUsers(content, pickedMentions)
+  historyStore.sendMessage(groupId.value, groupId.value, 'text', content, true, atUsers)
+  draft.value = ''
+  pickedMentions.clear()
+  mention.value = null
   await nextTick()
   scrollToBottom()
 }
@@ -229,16 +379,21 @@ onMounted(() => {
 })
 
 watch(groupId, (nextId, previousId) => {
-  if (previousId && nextId !== previousId) void loadConversation()
+  if (previousId && nextId !== previousId) {
+    draft.value = ''
+    pickedMentions.clear()
+    mention.value = null
+    groupMembers.value = []
+    void loadConversation()
+  }
 })
 
-watch(() => historyStore.failedReplyDraft, async draft => {
-  if (!draft || draft.conversationId !== groupId.value) return
+watch(() => historyStore.failedReplyDraft, async draftItem => {
+  if (!draftItem || draftItem.conversationId !== groupId.value) return
   await nextTick()
-  const textarea = messageInputRef.value
-  if (!textarea || textarea.value.trim()) return
-  textarea.value = draft.content
-  textarea.focus()
+  if (draft.value.trim()) return
+  draft.value = draftItem.content
+  inputElement()?.focus()
   historyStore.consumeFailedReplyDraft()
 })
 
@@ -305,6 +460,9 @@ onBeforeUnmount(() => {
                   :message="message.content"
                   :message-type="message.message_type"
                   :is-self="false"
+                  :at-users="message.at_users"
+                  :mention-names="mentionNames"
+                  :current-user-id="currentUser.user_id"
                   :can-reply="!message.is_recalled && String(message.status) !== '3'"
                   :recalled="message.is_recalled || String(message.status) === '3'"
                   :reply-to="message.reply_to"
@@ -352,6 +510,9 @@ onBeforeUnmount(() => {
                 :message="message.content"
                 :message-type="message.message_type"
                 :is-self="true"
+                :at-users="message.at_users"
+                :mention-names="mentionNames"
+                :current-user-id="currentUser.user_id"
                 :can-reply="!message.is_recalled && String(message.status) !== '3'"
                 :recalled="message.is_recalled || String(message.status) === '3'"
                 :reply-to="message.reply_to"
@@ -375,13 +536,66 @@ onBeforeUnmount(() => {
       @cancel="historyStore.cancelReplyTarget()"
     />
     <div class="relative h-1/4 border-t">
+      <div
+        v-if="mentionOpen"
+        ref="mentionListRef"
+        data-testid="mention-picker"
+        role="listbox"
+        aria-label="选择要提醒的成员"
+        class="absolute bottom-full left-2 right-2 z-40 mb-1 max-h-60 overflow-y-auto rounded-lg border bg-white p-1 shadow-lg sm:right-auto sm:w-72"
+      >
+        <div class="px-2 py-1 text-xs text-gray-400">选择要提醒的人</div>
+        <button
+          v-for="(candidate, index) in mentionOptions"
+          :key="candidate.user_id"
+          type="button"
+          role="option"
+          data-testid="mention-option"
+          :data-user-id="candidate.user_id"
+          :data-index="index"
+          :aria-selected="index === mentionIndex"
+          :class="[
+            'flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm',
+            index === mentionIndex ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50',
+          ]"
+          @pointerdown.prevent
+          @mouseenter="mentionIndex = index"
+          @click="selectMention(candidate)"
+        >
+          <img
+            :src="candidate.avatar_url || '/images/default-avatar.png'"
+            alt=""
+            class="h-7 w-7 shrink-0 rounded-full object-cover"
+          />
+          <span class="min-w-0 flex-1 truncate">
+            {{ candidate.label }}
+            <span v-if="candidate.remark && candidate.remark !== candidate.label" class="text-xs text-gray-400">（{{ candidate.remark }}）</span>
+          </span>
+          <span v-if="candidate.username && candidate.username !== candidate.label" class="shrink-0 text-xs text-gray-400">{{ candidate.username }}</span>
+        </button>
+      </div>
       <Textarea
         ref="messageInputRef"
-        class="h-full w-full resize-none pr-20 rounded-none focus:ring-0 focus:shadow-none whitespace-pre-wrap"
+        v-model="draft"
+        data-testid="message-input"
+        class="h-full w-full resize-none pr-32 rounded-none focus:ring-0 focus:shadow-none whitespace-pre-wrap"
         style="outline: none; box-shadow: none; font-size: 24px; word-break: break-all"
-        placeholder="输入消息..."
+        placeholder="输入消息，@ 提醒成员..."
         @keydown="handleKeyDown"
+        @input="updateMentionQuery"
+        @click="updateMentionQuery"
+        @keyup="(event: KeyboardEvent) => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'Home' || event.key === 'End') updateMentionQuery() }"
+        @blur="closeMentionSoon"
       />
+      <button
+        type="button"
+        data-testid="mention-button"
+        aria-label="提醒成员"
+        title="@ 提醒成员"
+        class="absolute bottom-4 right-24 flex h-9 w-9 items-center justify-center rounded-full text-lg text-gray-500 hover:bg-gray-100"
+        @pointerdown.prevent
+        @click="openMentionPicker"
+      >@</button>
       <Button class="absolute bottom-4 right-4" @click="handleSendClick">发送</Button>
     </div>
   </div>

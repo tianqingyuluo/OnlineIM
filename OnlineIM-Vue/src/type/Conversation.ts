@@ -48,6 +48,10 @@ export interface Conversation {
     is_pinned?: boolean
     is_muted?: boolean
     last_activity_time: string
-    is_at?: boolean
+    /** 有未读的 @我 消息（服务端按已读游标计算） */
+    at_me?: boolean
+    at_me_count?: number
+    /** 最早一条未读 @我 消息 */
+    at_me_message_id?: string
     notreadednumber?: number
 }

@@ -352,7 +352,6 @@ async getGroupJoinRequestList() {
   },async setConversationFieldsToNull(conversationId: string) {
       const conversation = this.conversations.find(c => c.conversation_id === conversationId);
       if (conversation) {
-        conversation.is_at = undefined;
         conversation.notreadednumber = 0;
       }
     }

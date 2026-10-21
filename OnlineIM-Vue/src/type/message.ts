@@ -33,7 +33,8 @@ export interface MessageResponse {
     message_type: string;
     seq_id: string;
     content: string;
-    mentioned_user_ids?: string[];
+    /** 群聊 @提及 的成员 ID（服务端已清洗，仅文本消息） */
+    at_users?: string[] | null;
     status: number | string;
     delivery_state?: DeliveryState;
     timestamp: string;

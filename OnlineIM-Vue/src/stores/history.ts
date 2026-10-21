@@ -374,7 +374,7 @@ export const useHistoryStore = defineStore('history', {
         delivery_state: 'sending',
         is_recalled: false,
         client_message_id: clientId,
-        mentioned_user_ids: atUsers,
+        ...(isGroup && atUsers?.length ? { at_users: atUsers } : {}),
         reply_to: replyTo,
       };
       if (isGroup) this.groupMessages.push(tempMessage);
@@ -405,7 +405,7 @@ export const useHistoryStore = defineStore('history', {
             content,
             client_message_id: clientId,
             ...(replyTo ? { reply_to_message_id: replyTo.message_id } : {}),
-            ...(atUsers ? { at_users: atUsers } : {}),
+            ...(atUsers?.length ? { at_users: atUsers } : {}),
           }
         : {
             conversation_id: conversationId,
@@ -444,7 +444,7 @@ export const useHistoryStore = defineStore('history', {
         conversationId: message.conversation_id,
         receiverId,
         isGroup,
-        atUsers: message.mentioned_user_ids,
+        atUsers: message.at_users ?? undefined,
         replyTo: message.reply_to,
         attempts: 1,
         state: 'sending',
@@ -459,7 +459,7 @@ export const useHistoryStore = defineStore('history', {
       return message.delivery_state || 'sent';
     },
 
-    handleIncomingMessage(message: MessageResponse, isGroup: boolean) {
+    handleIncomingMessage(message: MessageResponse, isGroup: boolean, atMe?: boolean) {
       const normalized = normalizeMessage(message);
       const existing = this.findMessage(normalized.client_message_id, normalized.message_id);
       if (existing) {
@@ -469,7 +469,7 @@ export const useHistoryStore = defineStore('history', {
         // 否则会混进正在查看的聊天窗口
         this.processMessages([normalized], isGroup);
       }
-      onConversationMessage(normalized, this.activeConversationId);
+      onConversationMessage(normalized, this.activeConversationId, atMe);
       void dbService.putHistory([normalized])
         .then(() => this.sendDeliveredReceipts([normalized]))
         .catch(error => console.error('保存实时消息失败:', error));
@@ -628,8 +628,9 @@ export const useHistoryStore = defineStore('history', {
       this.handleIncomingMessage(message, false);
     },
 
-    handleGroupWebSocketMessage(message: MessageResponse) {
-      this.handleIncomingMessage(message, true);
+    /** atMe：GROUP_MESSAGE_RESPONSE 帧顶层的 at_me（该消息是否 @ 了当前用户） */
+    handleGroupWebSocketMessage(message: MessageResponse, atMe?: boolean) {
+      this.handleIncomingMessage(message, true, atMe);
     },
 
     async jumpToMessage(conversationId: string, messageId: string): Promise<MessageResponse | null> {

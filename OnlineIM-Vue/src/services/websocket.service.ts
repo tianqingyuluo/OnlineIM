@@ -113,7 +113,7 @@ export class WebSocketService {
     socket.onmessage = (event) => {
       if (this.ws !== socket) return;
       try {
-        const frame = JSON.parse(String(event.data)) as { type?: unknown; message?: unknown };
+        const frame = JSON.parse(String(event.data)) as { type?: unknown; message?: unknown; at_me?: unknown };
         const type = typeof frame.type === 'string' ? frame.type : '';
         const payload = isJsonPayload(frame.message)
           ? frame.message
@@ -141,7 +141,7 @@ export class WebSocketService {
             void this.markOutboundSent(payload);
             break;
           case 'GROUP_MESSAGE_RESPONSE':
-            historyStore.handleGroupWebSocketMessage(payload as unknown as MessageResponse);
+            historyStore.handleGroupWebSocketMessage(payload as unknown as MessageResponse, frame.at_me === true);
             void this.markOutboundSent(payload);
             break;
           case 'ERROR':

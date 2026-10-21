@@ -117,4 +117,29 @@ describe('conversation list live updates', () => {
     history.leaveConversation('conv_b')
     expect(history.activeConversationId).toBeNull()
   })
+
+  it('flags [有人@我] only for mentioned, unseen group messages and clears it on read', async () => {
+    const { list, live } = await setup([conv('grp_1'), conv('grp_2')])
+    const g1 = () => list.conversations.find(c => c.conversation_id === 'grp_1')!
+    live.onConversationMessage(msg('g_plain', 'grp_1', 'usr_peer') as never, null)
+    live.onConversationMessage(msg('g_other', 'grp_1', 'usr_peer', { at_users: ['usr_x'] }) as never, null)
+    expect(g1().at_me).toBeFalsy()
+    live.onConversationMessage(msg('g_own', 'grp_1', 'usr_me', { at_users: ['usr_me'] }) as never, null)
+    live.onConversationMessage(msg('g_view', 'grp_1', 'usr_peer', { at_users: ['usr_me'] }) as never, 'grp_1')
+    expect(g1().at_me).toBeFalsy()
+    live.onConversationMessage(msg('g_at', 'grp_1', 'usr_peer', { at_users: ['usr_x', 'usr_me'] }) as never, null)
+    live.onConversationMessage(msg('g_at', 'grp_1', 'usr_peer', { at_users: ['usr_me'] }) as never, null)
+    expect(g1().at_me).toBe(true)
+    expect(g1().at_me_count).toBe(1)
+    expect(g1().at_me_message_id).toBe('g_at')
+    // 帧上的 at_me 也能触发
+    live.onConversationMessage(msg('g2_at', 'grp_2', 'usr_peer') as never, null, true)
+    expect(list.conversations.find(c => c.conversation_id === 'grp_2')!.at_me).toBe(true)
+
+    live.onConversationRead('grp_1', 2)
+    expect(g1().at_me).toBe(true)
+    live.onConversationRead('grp_1', 0)
+    expect(g1().at_me).toBe(false)
+    expect(g1().at_me_count).toBe(0)
+  })
 })
