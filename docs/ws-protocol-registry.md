@@ -237,6 +237,7 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 | `seq_id` | string | 非负整数消息游标 |
 | `client_message_id` | string | 客户端幂等键 |
 | `reply_to` | object/null | 服务端生成的单层引用快照；状态契约见“引用回复协议” |
+| `at_users` | string[]/null | 群聊 @提及 的成员 ID（服务端清洗后）；见“群聊 @提及” |
 
 旧 `status` 字段保留，用于兼容历史撤回语义；新客户端优先使用 `delivery_state`。
 
@@ -375,6 +376,47 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 `ext` 为同样的字段。私聊/群聊 WS 与 `POST /api/v1/messages` 都支持；历史、同步、上下文返回同一 `content`，表情被删除后历史消息仍可显示。别人的表情不能直接转发，需先“添加到表情”。
 
 会话预览与引用预览均为 `[表情]`。Web 端表情消息不套气泡，按原比例显示（长边 ≤ 140px），GIF 自动播放；右键（手机长按）图片或表情消息可“添加到表情”。
+
+## 群聊 @提及
+
+登记任务：mention-at（Step 5）。@所有人 不在本次范围，见末尾预留说明。
+
+### 发送
+
+`GROUP_MESSAGE_REQUEST.message` 与 `POST /api/v1/messages/send`（群聊）增加可选 `at_users: string[]`（HTTP 兼容旧名 `atUserIds`）：
+
+```json
+{ "type": "GROUP_MESSAGE_REQUEST",
+  "message": { "group_id": "grp_xxx", "message_type": "text", "content": "@小明 看一下",
+               "client_message_id": "c1", "at_users": ["usr_xiaoming"] } }
+```
+
+服务端清洗（WS 与 HTTP 相同，`MentionUtil.sanitize`）：只对 `text` 消息生效；去重、去空、去掉发送者自己；只保留发送时的**当前**群成员；最多 50 个；无效 ID 静默剔除、不报错；清洗后为空则不存。私聊请求中的 `at_users` 一律忽略。客户端只提交文本中仍有 `@名字` 的成员，文本中的名字只用于显示，服务端以 `at_users` 为准。
+
+### 接收
+
+- 消息体（`GROUP_MESSAGE_RESPONSE.message`、HTTP 发送响应、历史 / 同步 / 上下文）带 `at_users`（清洗后的列表或 `null`）。
+- `GROUP_MESSAGE_RESPONSE` 帧按接收者增加**顶层** `at_me: boolean`（与 `type`、`message` 同级），表示该消息是否 @ 了这位接收者：
+
+```json
+{ "type": "GROUP_MESSAGE_RESPONSE", "message": { "message_id": "msg_1", "at_users": ["usr_me"], "...": "..." }, "at_me": true }
+```
+
+### 会话标记 `[有人@我]`
+
+服务端在被 @ 成员自己的会话记录上保存待读 @（`pendingMentions`，每条含 `messageId`、`seqId`、`senderId`，最多保留最近 20 条）。`GET /api/v1/conversations` 与 `GET /api/v1/conversations/{id}` 增加：
+
+| 字段 | 类型 | 语义 |
+|------|------|------|
+| `at_me` | boolean | 有 `seq_id` 大于自己已读游标的 @我 消息 |
+| `at_me_count` | number | 未读 @我 条数 |
+| `at_me_message_id` | string/null | 最早一条未读 @我 消息，可用于跳转 |
+
+清除：`READ_RECEIPT` 推进已读游标后移除 `seq_id ≤ read_seq` 的记录（响应计算本身也按游标过滤，裁剪失败也不会显示错误）；消息撤回后从所有成员记录中移除。Web 端在会话预览前显示红色 `[有人@我]`，收到 `at_me` 帧且未在查看该会话时实时打标，读到最新后实时清除并以服务端值校正。
+
+### @所有人（预留）
+
+本步不实现。预留位置：前端 `src/utils/mention.ts` 的 `MENTION_ALL_ID = 'all'`，服务端 `MentionUtil.sanitize`（当前把 `all` 当作非成员剔除）。后续加入权限 / 频次判断后在服务端展开为全体成员或单独标记。
 
 ## 撤回事件与引用联动
 
