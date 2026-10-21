@@ -20,6 +20,7 @@ import ReplyComposerBar from '@/components/MainPart/ReplyComposerBar.vue'
 import type { ReplyReference } from '@/type/message'
 import { focusMessageElement } from '@/utils/message-navigation'
 import { toast } from 'vue-sonner'
+import { useStickToBottom } from '@/composables/useStickToBottom'
 
 const route = useRoute()
 const userStore = useUserStore()
@@ -68,6 +69,9 @@ function stateLabel(message: MessageResponse): string {
 function isOwn(message: MessageResponse): boolean {
   return message.sender_info.user_id === userStore.loggedInUser.user_id
 }
+
+// 新消息到达时：自己发的总是滚到底部，别人的只在本来停在底部附近时滚动
+useStickToBottom(messageScrollRef, () => historyStore.chatMessages, isOwn)
 
 function toggleMenu() {
   showMenu.value = !showMenu.value
