@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.websocket.handler;
 
+import icu.tianqingyuluo.onlineim.service.JwtService;
 import icu.tianqingyuluo.onlineim.service.impl.UserDetailsServiceImpl;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
 import lombok.AllArgsConstructor;
@@ -19,10 +20,12 @@ public class WebSocketAuthenticator {
 
     private final JwtUtil jwtUtil;
     private final UserDetailsServiceImpl userDetailsService;
+    private final JwtService jwtService;
 
-    public WebSocketAuthenticator(JwtUtil jwtUtil, UserDetailsServiceImpl userDetailsService) {
+    public WebSocketAuthenticator(JwtUtil jwtUtil, UserDetailsServiceImpl userDetailsService, JwtService jwtService) {
         this.jwtUtil = jwtUtil;
         this.userDetailsService = userDetailsService;
+        this.jwtService = jwtService;
     }
 
     /**
@@ -46,6 +49,12 @@ public class WebSocketAuthenticator {
         }
 
         try {
+            // 与 HTTP 过滤器一致：登出、刷新或修改密码后作废的 token 不能再建立连接
+            if (jwtService.isBlockedToken(actualToken)) {
+                log.warn("WebSocket认证失败: token已失效");
+                return AuthResult.failure("token已经失效");
+            }
+
             // 从令牌中获取用户名
             String username = jwtUtil.getUsernameFromToken(actualToken);
             String userId = jwtUtil.getUserIDFromToken(actualToken);

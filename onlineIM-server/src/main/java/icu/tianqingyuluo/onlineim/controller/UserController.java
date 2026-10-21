@@ -4,6 +4,9 @@ import icu.tianqingyuluo.onlineim.pojo.dto.request.UserUpdateRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserResponse;
 import icu.tianqingyuluo.onlineim.service.FileStorageService;
+import icu.tianqingyuluo.onlineim.service.JwtService;
+import icu.tianqingyuluo.onlineim.websocket.registry.LocalSessionRegistry;
+import icu.tianqingyuluo.onlineim.websocket.session.WebSocketSession;
 import icu.tianqingyuluo.onlineim.service.UserService;
 import icu.tianqingyuluo.onlineim.service.impl.UserDetailsServiceImpl;
 import icu.tianqingyuluo.onlineim.storage.OSSAdapter;
@@ -41,9 +44,17 @@ public class UserController {
     @Value("${oss.default-bucket}")
     private String bucketName;
 
+    private final JwtService jwtService;
+
+    private final LocalSessionRegistry sessionRegistry;
+
     public UserController(UserDetailsServiceImpl userDetailsService,
                           UserService userService, JwtUtil jwtUtil,
-                          FileStorageService fileStorageService) {
+                          FileStorageService fileStorageService,
+                          JwtService jwtService,
+                          LocalSessionRegistry sessionRegistry) {
+        this.jwtService = jwtService;
+        this.sessionRegistry = sessionRegistry;
         this.userService = userService;
         this.jwtUtil = jwtUtil;
         this.fileStorageService = fileStorageService;
@@ -133,14 +144,27 @@ public class UserController {
         String username = jwtUtil.getUsernameFromToken(token);
         String newPassword = request.get("new_password");
         String oldPassword = request.get("old_password");
+        if (oldPassword == null || oldPassword.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "旧密码不能为空"));
+        }
+        if (newPassword == null || newPassword.length() < 6 || newPassword.length() > 20) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "新密码长度必须在6-20之间"));
+        }
 
         BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
         if (passwordEncoder.matches(oldPassword, userService.getPasswordByUsername(username))) {
-            // UNDO: 作废当前token
             userService.updatePasswordByUsername(username, passwordEncoder.encode(newPassword));
+            // 修改密码后作废该用户此前签发的全部 token（包括其他设备），并断开本节点上的 WebSocket 连接
+            String userId = jwtUtil.getUserIDFromToken(token);
+            jwtService.invalidateJWT(token);
+            jwtService.revokeAllTokensOfUser(userId);
+            WebSocketSession session = sessionRegistry.getByUserId(userId);
+            if (session != null) {
+                session.close();
+            }
             return ResponseEntity.ok().build();
         }
-        else return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "啊哦，发生了些小错误"));
+        else return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "旧密码错误"));
     }
     
     /**

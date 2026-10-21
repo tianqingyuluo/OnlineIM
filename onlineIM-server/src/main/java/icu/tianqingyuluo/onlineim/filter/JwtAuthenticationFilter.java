@@ -57,7 +57,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             // 检查黑名单
             if (jwtService.isBlockedToken(authorizationHeader)) {
                 log.warn("拦截黑名单中的token：{}", jwt);
-                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "token已经失效");
+                writeUnauthorized(response, "token已经失效");
                 return; // 中止请求
             }
 
@@ -65,7 +65,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 username = jwtUtil.getUsernameFromToken(authorizationHeader);
             } catch (Exception e) {
                 log.warn("收到无效token：{}", jwt);
-                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "无效Token");
+                writeUnauthorized(response, "无效Token");
                 return;
             }
         }
@@ -88,5 +88,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         // 继续过滤器链
         filterChain.doFilter(request, response);
+    }
+
+    /**
+     * 直接写出 401。sendError 会转发到 /error，而 /error 对未认证请求会被安全链改写成 403。
+     */
+    private static void writeUnauthorized(HttpServletResponse response, String message) throws IOException {
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setCharacterEncoding("UTF-8");
+        response.setContentType("application/json");
+        response.getWriter().write("{\"code\":\"401\",\"message\":\"" + message + "\"}");
     }
 }

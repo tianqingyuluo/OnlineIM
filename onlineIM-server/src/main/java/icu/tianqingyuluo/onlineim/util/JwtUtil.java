@@ -32,6 +32,7 @@ public class JwtUtil {
     private final Key secretKey;
     
     // 令牌有效期（毫秒）
+    static final String ISSUED_AT_MILLIS_CLAIM = "iat_ms";
     private static final long JWT_TOKEN_VALIDITY = 24 * 60 * 60 * 1000; // 24小时
 
     public JwtUtil(@Value("${jwt.secret:}") String secret) {
@@ -125,11 +126,15 @@ public class JwtUtil {
      * 生成令牌的核心方法
      */
     private String doGenerateToken(Map<String, Object> claims, String subject) {
+        long now = System.currentTimeMillis();
+        Map<String, Object> allClaims = new HashMap<>(claims);
+        // 毫秒精度的签发时间，用于“修改密码后作废此前签发的全部 token”（标准 iat 只有秒精度）
+        allClaims.put(ISSUED_AT_MILLIS_CLAIM, now);
         return Jwts.builder()
-                .setClaims(claims)
+                .setClaims(allClaims)
                 .setSubject(subject)
-                .setIssuedAt(new Date(System.currentTimeMillis()))
-                .setExpiration(new Date(System.currentTimeMillis() + JWT_TOKEN_VALIDITY))
+                .setIssuedAt(new Date(now))
+                .setExpiration(new Date(now + JWT_TOKEN_VALIDITY))
                 .signWith(secretKey)
                 .compact();
     }
@@ -140,6 +145,24 @@ public class JwtUtil {
     public Boolean validateToken(String token, UserDetails userDetails) {
         final String username = getUsernameFromToken(token);
         return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
+    }
+
+    /**
+     * 令牌签发时间（毫秒）。优先读取 iat_ms，旧令牌退回到秒精度的 iat；都没有时返回 0。
+     */
+    public long getIssuedAtMillis(String token) {
+        return getClaimFromToken(token, claims -> {
+            Object millis = claims.get(ISSUED_AT_MILLIS_CLAIM);
+            if (millis instanceof Number number) {
+                return number.longValue();
+            }
+            Date issuedAt = claims.getIssuedAt();
+            return issuedAt != null ? issuedAt.getTime() : 0L;
+        });
+    }
+
+    public static long getTokenValidityMillis() {
+        return JWT_TOKEN_VALIDITY;
     }
 
     public long getRemainingValidityTime(String token) {
