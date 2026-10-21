@@ -31,7 +31,7 @@ public class GroupMemberServiceImpl implements GroupMemberService {
     @Override
     public GroupMemberResponse getMemberDetail(String groupId, String memberId, String operatorId) {
         if(groupMapper.isUserMember(groupId,operatorId)){
-            return groupMemberMapper.getGroupMemberByMemberID(memberId);
+            return groupMemberMapper.getGroupMemberByMemberID(memberId, groupId);
         }
         else
             return null;
@@ -40,7 +40,7 @@ public class GroupMemberServiceImpl implements GroupMemberService {
     @Override
     public boolean removeMember(String groupId, String memberId, String operatorId) {
         if(groupMapper.isAdmin(groupId,operatorId)){
-            return groupMemberMapper.delete(memberId)==1;
+            return groupMemberMapper.delete(memberId, groupId)==1;
         }
         else
             return false;
@@ -50,7 +50,7 @@ public class GroupMemberServiceImpl implements GroupMemberService {
     public boolean setAdmin(String groupId, String memberId, String operatorId) {
         if(groupMapper.isGroupOwner(groupId,operatorId)){
             int role = 1;
-            return groupMemberMapper.updateRole(memberId,role) == 1;
+            return groupMemberMapper.updateRole(memberId, groupId, role) == 1;
         }
         else
             return false;
@@ -60,7 +60,7 @@ public class GroupMemberServiceImpl implements GroupMemberService {
     public boolean cancelAdmin(String groupId, String memberId, String operatorId) {
         if(groupMapper.isGroupOwner(groupId,operatorId)){
             int role=0;
-            return groupMemberMapper.updateRole(memberId,role)==1;
+            return groupMemberMapper.updateRole(memberId, groupId, role)==1;
         }
         else
             return false;
@@ -69,10 +69,10 @@ public class GroupMemberServiceImpl implements GroupMemberService {
     @Override
     public boolean updateMemberNickname(String groupId, String memberId, String nickname, String operatorId) {
         if(groupMapper.isAdmin(groupId,operatorId)){
-            return groupMemberMapper.updateNickname(memberId,nickname)==1;
+            return groupMemberMapper.updateNickname(memberId, groupId, nickname)==1;
         }
         else if(groupMapper.isUserMember(groupId,operatorId) && groupMemberMapper.isGroupMemberSelf(memberId,operatorId)){
-            return groupMemberMapper.updateNickname(memberId,nickname)==1;
+            return groupMemberMapper.updateNickname(memberId, groupId, nickname)==1;
         }
         else
             return false;
@@ -83,7 +83,7 @@ public class GroupMemberServiceImpl implements GroupMemberService {
         if(groupMapper.isAdmin(groupId,operatorId)){
             LocalDateTime now = LocalDateTime.now();
             LocalDateTime future = now.plusMinutes(duration);
-            return groupMemberMapper.updateMuteTime(memberId, future)==1;
+            return groupMemberMapper.updateMuteTime(memberId, groupId, future)==1;
         }
         else
             return false;
@@ -92,7 +92,7 @@ public class GroupMemberServiceImpl implements GroupMemberService {
     @Override
     public boolean unmuteMember(String groupId, String memberId, String operatorId) {
         if(groupMapper.isAdmin(groupId,operatorId)){
-            return groupMemberMapper.updateMuteTime(memberId, null)==1;
+            return groupMemberMapper.updateMuteTime(memberId, groupId, null)==1;
         }
         else
             return false;
@@ -104,7 +104,7 @@ public class GroupMemberServiceImpl implements GroupMemberService {
         if(groupMapper.isGroupOwner(groupId,operatorId)){
             int memberRole = 0;
             int ownerRole = 2;
-            return groupMemberMapper.updateRole(memberId,ownerRole)==1&&groupMemberMapper.updateOwnerRole(groupId,operatorId,memberRole)==1;
+            return groupMemberMapper.updateRole(memberId, groupId, ownerRole)==1&&groupMemberMapper.updateOwnerRole(groupId,operatorId,memberRole)==1;
         }
         else
             return false;

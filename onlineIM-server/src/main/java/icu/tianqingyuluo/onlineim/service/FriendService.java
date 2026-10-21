@@ -20,6 +20,12 @@ public interface FriendService {
     boolean existFriendByID(String friendId,String userid);
 
     /**
+     * 路径参数可以是当前用户自己的关系 id（rel_...），也可以是好友用户 id（usr_...）。
+     * 找不到属于该用户的关系时返回 null。
+     */
+    String resolveOwnedFriendshipId(String callerId, String friendOrRelationId);
+
+    /**
      * 双方 user_friends 记录都处于正常好友状态时返回 true。
      * 拉黑、删除或只有单向记录都不算好友。
      */

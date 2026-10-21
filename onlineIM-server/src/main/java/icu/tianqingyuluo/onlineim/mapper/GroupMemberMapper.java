@@ -18,7 +18,7 @@ public interface GroupMemberMapper {
     /**
      * 根据ID查询群成员
      */
-    GroupMemberResponse getGroupMemberByMemberID(String id);
+    GroupMemberResponse getGroupMemberByMemberID(@Param("id") String id, @Param("groupId") String groupId);
 
     /**
      * 根据群组成员ID和群组ID查询群成员
@@ -72,14 +72,14 @@ public interface GroupMemberMapper {
     /**
      * 更新群成员昵称
      */
-    @Update("UPDATE group_members SET nickname = #{nickname} WHERE id = #{id}")
-    int updateNickname(@Param("id") String id, @Param("nickname") String nickname);
+    @Update("UPDATE group_members SET nickname = #{nickname} WHERE id = #{id} AND group_id = #{groupId}")
+    int updateNickname(@Param("id") String id, @Param("groupId") String groupId, @Param("nickname") String nickname);
     
     /**
      * 更新群成员角色
      */
-    @Update("UPDATE group_members SET role = #{role} WHERE id = #{id}")
-    int updateRole(@Param("id") String id, @Param("role") int role);
+    @Update("UPDATE group_members SET role = #{role} WHERE id = #{id} AND group_id = #{groupId}")
+    int updateRole(@Param("id") String id, @Param("groupId") String groupId, @Param("role") int role);
 
     /**
      * 更新群成员角色
@@ -87,13 +87,13 @@ public interface GroupMemberMapper {
     @Update("UPDATE group_members SET role = #{role} WHERE group_id = #{groupId} AND user_id=#{userid}")
     int updateOwnerRole(@Param("groupId") String groupId,@Param("userid") String userid, @Param("role") int role);
 
-    @Update("UPDATE group_members SET role = 2 WHERE user_id=#{userid}")
-    void initGroupOwner(String userid);
+    @Update("UPDATE group_members SET role = 2 WHERE group_id = #{groupId} AND user_id=#{userid}")
+    void initGroupOwner(@Param("groupId") String groupId, @Param("userid") String userid);
     /**
      * 更新群成员禁言时间
      */
-    @Update("UPDATE group_members SET mute_end_time = #{muteEndTime} WHERE id = #{id}")
-    int updateMuteTime(@Param("id") String id, @Param("muteEndTime") LocalDateTime muteEndTime);
+    @Update("UPDATE group_members SET mute_end_time = #{muteEndTime} WHERE id = #{id} AND group_id = #{groupId}")
+    int updateMuteTime(@Param("id") String id, @Param("groupId") String groupId, @Param("muteEndTime") LocalDateTime muteEndTime);
     
     /**
      * 更新群成员状态
@@ -104,8 +104,11 @@ public interface GroupMemberMapper {
     /**
      * 删除群成员
      */
-    @Delete("DELETE FROM group_members WHERE id = #{id}")
-    int delete(String id);
+    @Delete("DELETE FROM group_members WHERE id = #{id} AND group_id = #{groupId}")
+    int delete(@Param("id") String id, @Param("groupId") String groupId);
+
+    @Delete("DELETE FROM group_members WHERE group_id = #{groupId} AND user_id = #{userId}")
+    int deleteByGroupAndUser(@Param("groupId") String groupId, @Param("userId") String userId);
     
     /**
      * 获取用户加入的所有群组的成员信息（XML实现连表查询）

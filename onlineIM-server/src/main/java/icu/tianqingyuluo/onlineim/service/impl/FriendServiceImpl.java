@@ -66,6 +66,21 @@ public class FriendServiceImpl implements FriendService {
     }
 
     @Override
+    public String resolveOwnedFriendshipId(String callerId, String friendOrRelationId) {
+        if (callerId == null || friendOrRelationId == null || callerId.isBlank() || friendOrRelationId.isBlank()) {
+            return null;
+        }
+        if (friendRequestResponseMapper.existFriendByID(friendOrRelationId, callerId)) {
+            return friendOrRelationId;
+        }
+        UserFriend relation = userFriendMapper.getByUserIdAndFriendId(callerId, friendOrRelationId);
+        if (relation == null || relation.getId() == null || relation.getId().isBlank()) {
+            return null;
+        }
+        return relation.getId();
+    }
+
+    @Override
     public boolean areFriends(String userId, String friendUserId) {
         if (userId == null || friendUserId == null || userId.isBlank() || friendUserId.isBlank()
                 || userId.equals(friendUserId)) {

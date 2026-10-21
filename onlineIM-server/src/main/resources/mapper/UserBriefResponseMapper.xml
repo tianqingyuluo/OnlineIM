@@ -54,6 +54,6 @@
         WHERE
             u1.username = #{username}
           AND
-            uf.status = 0;  -- 只查询拉黑的好友
+            uf.status = 2;  -- 2-已拉黑，0 是已删除
     </select>
 </mapper>

@@ -106,7 +106,7 @@ public interface MessageService {
      * @param seqId          客户端当前序列号
      * @return 需要撤回的消息序列号列表
      */
-    List<String> getRecallList(String conversationId, String seqId);
+    List<String> getRecallList(String conversationId, String seqId, String userId);
 
     /**
      * 存储群聊消息

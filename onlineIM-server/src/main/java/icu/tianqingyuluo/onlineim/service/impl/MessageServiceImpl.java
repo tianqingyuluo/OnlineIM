@@ -82,18 +82,18 @@ public class MessageServiceImpl implements MessageService {
 
     @Override
     public List<MessageResponse> getHistory(String conversationId, String seqId, Integer size, String userId) {
+        assertReadable(conversationId, userId);
         // 根据会话ID的前缀判断是群聊还是单聊
         if (conversationId.startsWith("grp_")) {
-            // 群聊消息
             return getGroupHistory(conversationId, seqId, size, userId);
         } else {
-            // 单聊消息
             return getPrivateHistory(conversationId, seqId, size, userId);
         }
     }
     
     @Override
     public List<MessageResponse> getPrivateHistory(String conversationId, String seqId, Integer size, String userId) {
+        assertReadable(conversationId, userId);
         List<PrivateMessage> messages;
         Pageable pageable = PageRequest.of(0, size, Sort.by(Sort.Direction.DESC, "timestamp"));
         
@@ -123,6 +123,7 @@ public class MessageServiceImpl implements MessageService {
 
     @Override
     public List<MessageResponse> getGroupHistory(String groupId, String seqId, Integer size, String userId) {
+        assertReadable(groupId, userId);
         List<GroupMessage> messages;
         Pageable pageable = PageRequest.of(0, size, Sort.by(Sort.Direction.DESC, "timestamp"));
         
@@ -222,12 +223,21 @@ public class MessageServiceImpl implements MessageService {
     }
 
     private void assertContextAccess(String conversationId, String userId) {
-        boolean allowed = conversationId != null && userId != null && (conversationId.startsWith("grp_")
-                ? groupMemberService.isGroupMember(conversationId, userId)
-                : conversationRepository.findByIdAndUserIDOrTargetId(conversationId, userId) != null);
-        if (!allowed) {
+        if (!canReadConversation(conversationId, userId)) {
             throw new MessageContextUnavailableException();
         }
+    }
+
+    private void assertReadable(String conversationId, String userId) {
+        if (!canReadConversation(conversationId, userId)) {
+            throw new ForbiddenException("无权访问该会话");
+        }
+    }
+
+    private boolean canReadConversation(String conversationId, String userId) {
+        return conversationId != null && userId != null && (conversationId.startsWith("grp_")
+                ? groupMemberService.isGroupMember(conversationId, userId)
+                : conversationRepository.findByIdAndUserIDOrTargetId(conversationId, userId) != null);
     }
 
     private MessageReplySnapshot createReplySnapshot(String conversationId, String messageId, String userId) {
@@ -330,6 +340,7 @@ public class MessageServiceImpl implements MessageService {
 
     @Override
     public List<MessageResponse> syncMessages(String conversationId, String seqId, String userId) {
+        assertReadable(conversationId, userId);
         // 根据会话ID的前缀判断是群聊还是单聊
         List<MessageResponse> messages = new ArrayList<>();
         String normalizedSeqId;
@@ -641,7 +652,8 @@ public class MessageServiceImpl implements MessageService {
     }
     
     @Override
-    public List<String> getRecallList(String conversationId, String seqId) {
+    public List<String> getRecallList(String conversationId, String seqId, String userId) {
+        assertReadable(conversationId, userId);
         // 查询指定会话中序列号大于客户端当前序列号的所有撤回记录
         List<RecallLog> recallLogs = recallLogRepository.findByConversationIdAndSeqIdGreaterThanOrderBySeqIdAsc(
                 conversationId, seqId);

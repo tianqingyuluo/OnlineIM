@@ -118,6 +118,8 @@ class MessageServiceImplTest {
                 .messageId("msg_target_2")
                 .state("active")
                 .build();
+        when(conversationRepository.findByIdAndUserIDOrTargetId("conv_1", "usr_me"))
+                .thenReturn(Conversation.builder().id("conv_1").userId("usr_me").targetId("usr_peer").build());
         when(privateMessageRepository.findByConversationIdOrderByTimestampDesc(eq("conv_1"), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(first, second)));
         when(messageReplyService.resolveBatchForResponses(
@@ -132,6 +134,16 @@ class MessageServiceImplTest {
         verify(messageReplyService).resolveBatchForResponses(
                 "conv_1", List.of(firstSnapshot, secondSnapshot));
         verify(messageReplyService, never()).resolveForResponse(eq("conv_1"), any());
+    }
+
+    @Test
+    void historyRejectsUserWhoIsNotInTheConversation() {
+        when(conversationRepository.findByIdAndUserIDOrTargetId("conv_1", "usr_stranger")).thenReturn(null);
+
+        assertThrows(ForbiddenException.class,
+                () -> service.getPrivateHistory("conv_1", null, 20, "usr_stranger"));
+
+        verifyNoInteractions(privateMessageRepository);
     }
 
     @Test

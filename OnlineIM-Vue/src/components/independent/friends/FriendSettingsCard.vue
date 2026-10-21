@@ -5,7 +5,6 @@ import { useListStore } from '@/stores/list';
 import type { Conversation } from '@/type/Conversation';
 import { conversationService } from '@/services/conversation.service';
 import { blacklistService } from '@/services/blacklist.service';
-import { friendsService } from '@/services/friends.service';
 
 // 修改 props，同时接收 conversation 和 userId
 const props = defineProps<{
@@ -69,17 +68,18 @@ const handleMutedChange = async (isMuted: boolean) => {
 const handleBlockedChange = async (isBlocked: boolean) => {
   try {
     if (isBlocked) {
-      // 确保 userId 是字符串类型，因为 addToBlacklist 接收 string
       await blacklistService.addToBlacklist(String(props.userId));
-      await friendsService.deleteFriend(String(props.userId));
-      // 同时从 listStore 的 friends 和 userGroups 中移除该好友
       listStore.friends = listStore.friends.filter(friend => friend.friend_info.user_id !== props.userId);
       listStore.userGroups.forEach(group => {
         group.friends = group.friends.filter(friend => friend.user_id !== props.userId);
       });
       settings.value.isBlocked = isBlocked;
-      const blacklistResponse = await blacklistService.getBlacklist();
-      listStore.blacklist = blacklistResponse.blacklist;
+      try {
+        const blacklistResponse = await blacklistService.getBlacklist();
+        listStore.blacklist = blacklistResponse.blacklist ?? [];
+      } catch {
+        // 黑名单为空时接口返回 404，本地列表保持本次拉黑结果
+      }
 
     } else {
 

@@ -19,7 +19,7 @@
             <result property="nickname" column="nickname"/>
             <result property="avatarUrl" column="avatar"/>
             <result property="remark" column="remark"/>
-            <result property="friendGroupID" column="friend_group_id"/>
+            <result property="friendGroupID" column="friendship_group_id"/>
             <result property="createdAt" column="friend_created_at"/>
         </collection>
     </resultMap>
@@ -36,12 +36,12 @@
             u.nickname,
             u.avatar,
             uf.remark,
-            uf.group_id as friend_group_id,
+            uf.group_id as friendship_group_id,
             uf.created_at as friend_created_at
         FROM
             friend_groups fgrp
                 LEFT JOIN
-            user_friends uf ON fgrp.id = uf.group_id
+            user_friends uf ON fgrp.id = uf.group_id AND uf.user_id = fgrp.user_id AND uf.status = 1
                 LEFT JOIN
             users u ON uf.friend_id = u.id
         WHERE
@@ -61,12 +61,12 @@
             u.nickname,
             u.avatar,
             uf.remark,
-            uf.group_id as friend_group_id,
+            uf.group_id as friendship_group_id,
             uf.created_at as friend_created_at
         FROM
             friend_groups fgrp
                 LEFT JOIN
-            user_friends uf ON fgrp.id = uf.group_id
+            user_friends uf ON fgrp.id = uf.group_id AND uf.user_id = fgrp.user_id AND uf.status = 1
                 LEFT JOIN
             users u ON uf.friend_id = u.id
         WHERE

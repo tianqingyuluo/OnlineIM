@@ -171,4 +171,19 @@ class PrivateMessageSenderTest {
         verify(messageRepository, never()).save(any());
         verifyNoInteractions(redisStreamService, frameSender);
     }
+
+    @Test
+    void rejectsNonFriendWhenConversationDoesNotExist() {
+        when(friendService.areFriends("usr_sender", "usr_stranger")).thenReturn(false);
+        when(conversationRepository.findByIdAndUserIDOrTargetId("conv_missing", "usr_sender"))
+                .thenReturn(null);
+
+        assertThrows(ForbiddenException.class, () -> sender.publishMessage(session,
+                "{\"conversation_id\":\"conv_missing\",\"receiver_id\":\"usr_stranger\","
+                        + "\"message_type\":\"text\",\"content\":\"hello\",\"client_message_id\":\"client_1\"}"));
+
+        verify(conversationRepository, never()).findByIdAndUserIDOrTargetId(any(), any());
+        verify(messageRepository, never()).save(any());
+        verifyNoInteractions(redisStreamService, frameSender);
+    }
 }

@@ -66,6 +66,8 @@
             group_settings gs ON g.id = gs.group_id
         WHERE
             gm.id = #{id}
+          AND
+            gm.group_id = #{groupId}
     </select>
 
     <!-- 获取用户加入的所有群组的成员信息 -->

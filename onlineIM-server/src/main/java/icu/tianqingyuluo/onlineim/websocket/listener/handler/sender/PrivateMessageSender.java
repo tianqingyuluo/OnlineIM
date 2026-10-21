@@ -60,15 +60,16 @@ public class PrivateMessageSender implements MessageSenderHandler {
         }
         try {
             PrivateMessageRequest request = objectMapper.readValue(message, PrivateMessageRequest.class);
-            if (isBlank(request.getConversationId()) || isBlank(request.getReceiverId())
-                    || isBlank(request.getMessageType()) || request.getContent() == null
-                    || isBlank(request.getClientMessageId())
-                    || session.getUserId().equals(request.getReceiverId())
-                    || !isConversationParticipant(request.getConversationId(), session.getUserId(), request.getReceiverId())) {
+            if (isBlank(request.getReceiverId()) || session.getUserId().equals(request.getReceiverId())) {
                 return false;
             }
             if (!friendService.areFriends(session.getUserId(), request.getReceiverId())) {
                 throw new ForbiddenException("你们还不是好友，无法发送私聊消息");
+            }
+            if (isBlank(request.getConversationId()) || isBlank(request.getMessageType())
+                    || request.getContent() == null || isBlank(request.getClientMessageId())
+                    || !isConversationParticipant(request.getConversationId(), session.getUserId(), request.getReceiverId())) {
+                return false;
             }
 
             String senderId = session.getUserId();

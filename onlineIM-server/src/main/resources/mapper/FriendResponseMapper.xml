@@ -6,16 +6,19 @@
 <mapper namespace="icu.tianqingyuluo.onlineim.mapper.FriendResponseMapper">
     <!-- 用户结果映射 -->
     <resultMap id="FriendResponseMap" type="icu.tianqingyuluo.onlineim.pojo.dto.response.FriendResponse">
-        <id property="friendshipID" column="id"/>
-        <result property="userID" column="id"/>
+        <id property="friendshipID" column="friendship_id"/>
+        <result property="userID" column="user_id"/>
+        <result property="username" column="username"/>
+        <result property="nickname" column="nickname"/>
         <result property="avatarUrl" column="avatar"/>
+        <result property="remark" column="remark"/>
         <result property="friendGroupID" column="group_id"/>
         <result property="createdAt" column="created_at"/>
     </resultMap>
     <select id="getFriendListByUsername" resultMap="FriendResponseMap">
         SELECT
-            uf.id
-            ,u2.id
+            uf.id AS friendship_id
+            ,u2.id AS user_id
             ,u2.username
             ,u2.nickname
             ,u2.avatar
@@ -35,8 +38,8 @@
     </select>
     <select id="getFriendByID" resultMap="FriendResponseMap">
         SELECT
-            uf.id,
-            u2.id,
+            uf.id AS friendship_id,
+            u2.id AS user_id,
             u2.username,
             u2.nickname,
             u2.avatar,

@@ -117,7 +117,7 @@ public class MessageController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ErrorCodeUtil.getErrorOutput("401", "权限不足"));
         }
         
-        List<String> recalls = messageService.getRecallList(conversationId, seqId);
+        List<String> recalls = messageService.getRecallList(conversationId, seqId, userId);
         Map<String, List<String>> result = new HashMap<>();
         result.put("recalls", recalls);
         return ResponseEntity.ok(result);

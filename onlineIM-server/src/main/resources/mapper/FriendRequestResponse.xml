@@ -6,12 +6,12 @@
 <mapper namespace="icu.tianqingyuluo.onlineim.mapper.FriendRequestResponseMapper">
     <!-- 用户结果映射 -->
     <resultMap id="FriendRequestResponseMap" type="icu.tianqingyuluo.onlineim.pojo.dto.response.FriendRequestResponse">
-        <id property="requestID" column="id"/>
+        <id property="requestID" column="request_id"/>
         <result property="message" column="req_message"/>
         <result property="status" column="req_status"/>
         <result property="createdAt" column="created_at"/>
         <association property="senderInfo" javaType="icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse">
-            <id property="userId" column="id"/>
+            <id property="userId" column="user_id"/>
             <result property="username" column="username"/>
             <result property="nickname" column="nickname"/>
             <result property="avatarUrl" column="avatar"/>
@@ -19,11 +19,11 @@
     </resultMap>
     <select id="getFriendRequestListByUserID" resultMap="FriendRequestResponseMap">
         SELECT
-            fr.id,
+            fr.id AS request_id,
             fr.message as req_message,
             fr.status as req_status,
             fr.created_at,
-            u.id,
+            u.id AS user_id,
             u.username,
             u.nickname,
             u.avatar
@@ -37,11 +37,11 @@
     </select>
     <select id="getSendFriendRequestListByUserID" resultMap="FriendRequestResponseMap">
         SELECT
-            fr.id,
+            fr.id AS request_id,
             fr.message as req_message,
             fr.status as req_status,
             fr.created_at,
-            u.id,
+            u.id AS user_id,
             u.username,
             u.nickname,
             u.avatar

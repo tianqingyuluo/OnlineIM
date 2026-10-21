@@ -95,8 +95,11 @@ public class FriendController {
      * @return 好友详情
      */
     @GetMapping("/{friendId}")
-    public ResponseEntity<?> getFriend(@PathVariable String friendId) {
-        // TODO: 实现获取好友详情逻辑
+    public ResponseEntity<?> getFriend(@RequestHeader("Authorization") String token, @PathVariable String friendId) {
+        String userid = jwtUtil.getUserIDFromToken(token);
+        if (!friendService.existFriendByID(friendId, userid)) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ErrorCodeUtil.getErrorOutput("404", "未找到该好友"));
+        }
         FriendResponse response = friendService.getByID(friendId);
         if(response==null){
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ErrorCodeUtil.getErrorOutput("404", "未找到该好友"));
@@ -168,13 +171,13 @@ public class FriendController {
     @PutMapping("/{friendId}/block")
     public ResponseEntity<Map<String, String>> blockFriend(@RequestHeader("Authorization") String token, @PathVariable String friendId) {
         // TODO: 实现拉黑好友逻辑
-        String userid = userService.getUserInfoByUsername((jwtUtil.getUsernameFromToken(token))).getUserId();
-
-        if (!friendService.existFriendByID(friendId, userid)) {
+        String userid = jwtUtil.getUserIDFromToken(token);
+        String relationId = friendService.resolveOwnedFriendshipId(userid, friendId);
+        if (relationId == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ErrorCodeUtil.getErrorOutput("404", "未找到该好友"));
         }
         try {
-            friendService.updateStatusByID(friendId, String.valueOf(FriendshipStatusEnum.BLOCKED.getValue()));
+            friendService.updateStatusByID(relationId, String.valueOf(FriendshipStatusEnum.BLOCKED.getValue()));
         }
         catch (PersistenceException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorCodeUtil.getErrorOutput("400", "啊哦，发生了些小错误"));
@@ -191,11 +194,12 @@ public class FriendController {
     public ResponseEntity<Map<String, String>> unblockFriend(@RequestHeader("Authorization") String token, @PathVariable String friendId) {
         // TODO: 实现取消拉黑好友逻辑
         String userid = jwtUtil.getUserIDFromToken(token);
-        if (!friendService.existFriendByID(friendId, userid)) {
+        String relationId = friendService.resolveOwnedFriendshipId(userid, friendId);
+        if (relationId == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ErrorCodeUtil.getErrorOutput("404", "未找到该好友"));
         }
         try {
-            friendService.updateStatusByID(friendId, String.valueOf(FriendshipStatusEnum.NORMAL.getValue()));
+            friendService.updateStatusByID(relationId, String.valueOf(FriendshipStatusEnum.NORMAL.getValue()));
         }
         catch (PersistenceException e) {
             log.error(e.getMessage());
@@ -219,7 +223,7 @@ public class FriendController {
             }
 
             Map<String,Object> response = new HashMap<>();
-            response.put("blasklist", userBriefResponses);
+            response.put("blacklist", userBriefResponses);
             response.put("total", userBriefResponses.size());
             return ResponseEntity.status(HttpStatus.OK).body(response);
         }

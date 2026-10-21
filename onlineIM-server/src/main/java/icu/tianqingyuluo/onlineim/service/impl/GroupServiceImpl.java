@@ -52,7 +52,7 @@ public class GroupServiceImpl implements GroupService {
         int current_members = request.getMemberIDs().size();
         groupMapper.insertGroup(gid,userID,request,current_members);
         groupMapper.insertGroupMember(gid,request.getMemberIDs());
-        groupMemberMapper.initGroupOwner(userID);
+        groupMemberMapper.initGroupOwner(gid, userID);
         groupSettingMapper.initSettings(sid,gid);
         return gid;
     }
@@ -232,7 +232,7 @@ public class GroupServiceImpl implements GroupService {
             }
 
             // 执行退出群组操作
-            int affectedRows = groupMemberMapper.delete(userId);
+            int affectedRows = groupMemberMapper.deleteByGroupAndUser(groupId, userId);
             groupMapper.updateMemberCount(groupId,-1);
 
             if (affectedRows == 0) {
