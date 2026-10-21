@@ -1,13 +1,11 @@
 package icu.tianqingyuluo.onlineim.storage.impl;
 
 import icu.tianqingyuluo.onlineim.storage.OSSAdapter;
-import icu.tianqingyuluo.onlineim.util.RealIPUtil;
 import io.minio.*;
 import io.minio.errors.*;
 import io.minio.http.Method;
 import io.minio.messages.DeleteError;
 import io.minio.messages.DeleteObject;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.InputStream;
@@ -24,6 +22,7 @@ public class MinIOAdapter implements OSSAdapter {
     private final MinioClient minioClient;
     private final String endpoint;
     private final String providerName;
+    private final String publicBaseUrl;
 
     /**
      * 构造函数
@@ -33,12 +32,20 @@ public class MinIOAdapter implements OSSAdapter {
      * @param secretKey 秘密密钥
      */
     public MinIOAdapter(String endpoint, String accessKey, String secretKey) {
-        this("MinIO", endpoint, accessKey, secretKey);
+        this(endpoint, accessKey, secretKey, null);
     }
 
-    protected MinIOAdapter(String providerName, String endpoint, String accessKey, String secretKey) {
+    /**
+     * @param publicBaseUrl 返回给客户端的文件 URL 前缀（如 http://localhost:8080），为空时返回相对路径 /{bucket}/{object}
+     */
+    public MinIOAdapter(String endpoint, String accessKey, String secretKey, String publicBaseUrl) {
+        this("MinIO", endpoint, accessKey, secretKey, publicBaseUrl);
+    }
+
+    protected MinIOAdapter(String providerName, String endpoint, String accessKey, String secretKey, String publicBaseUrl) {
         this.providerName = providerName;
         this.endpoint = endpoint;
+        this.publicBaseUrl = normalizeBaseUrl(publicBaseUrl);
         this.minioClient = MinioClient.builder()
                 .endpoint(endpoint)
                 .credentials(accessKey, secretKey)
@@ -184,9 +191,21 @@ public class MinIOAdapter implements OSSAdapter {
      * @param objectName 对象名称
      * @return 文件URL
      */
-    @SneakyThrows
-    private String getFileUrl(String bucketName, String objectName) {
-        return String.format("http://%s:8080/%s/%s", RealIPUtil.getRealLocalIP(), bucketName, objectName);
+    String getFileUrl(String bucketName, String objectName) {
+        // 过去这里拼的是后端所在机器/容器的网卡 IP，浏览器（尤其是容器部署时）访问不到；
+        // 现在由配置 oss.public-base-url 决定，留空则返回同源相对路径交给前端反向代理。
+        return publicBaseUrl + "/" + bucketName + "/" + objectName;
+    }
+
+    private static String normalizeBaseUrl(String baseUrl) {
+        if (baseUrl == null || baseUrl.isBlank()) {
+            return "";
+        }
+        String trimmed = baseUrl.strip();
+        while (trimmed.endsWith("/")) {
+            trimmed = trimmed.substring(0, trimmed.length() - 1);
+        }
+        return trimmed;
     }
 
 }

@@ -1,61 +1,85 @@
 package icu.tianqingyuluo.onlineim.controller;
 
 import icu.tianqingyuluo.onlineim.service.FileStorageService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.HandlerMapping;
+import org.springframework.util.AntPathMatcher;
 
 import java.io.InputStream;
+import java.time.Duration;
+import java.util.List;
 
+/**
+ * 对象存储文件代理：浏览器通过 /onlineim/{object} 读取默认存储桶里的头像、群头像和聊天文件，
+ * 不需要直接访问对象存储（RustFS/MinIO 通常只在内网可达）。
+ */
 @Slf4j
 @RestController
 public class FileProxyController {
 
-    private final FileStorageService fileStorageService;
+    /** 允许经代理公开读取的对象前缀（与 FileStorageService 的目录约定一致） */
+    static final List<String> PUBLIC_PREFIXES = List.of("avatars/", "groups/avatars/", "chats/");
 
-    public FileProxyController(FileStorageService fileStorageService) {
+    private final FileStorageService fileStorageService;
+    private final String bucket;
+    private final AntPathMatcher pathMatcher = new AntPathMatcher();
+
+    public FileProxyController(FileStorageService fileStorageService,
+                               @Value("${oss.default-bucket:onlineim}") String bucket) {
         this.fileStorageService = fileStorageService;
+        this.bucket = bucket;
     }
 
-    @GetMapping(value = "/onlineim/avatars/{userId}/{filename}")
-    public ResponseEntity<byte[]> avatar(@PathVariable String userId, @PathVariable String filename) {
-        String objectName = "avatars/" + userId + "/" + filename;
-        try (InputStream inputStream = fileStorageService.downloadFile("onlineim", objectName)) {
+    @GetMapping("/onlineim/**")
+    public ResponseEntity<byte[]> file(HttpServletRequest request) {
+        String pattern = (String) request.getAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE);
+        String path = (String) request.getAttribute(HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE);
+        String objectName = pathMatcher.extractPathWithinPattern(pattern, path);
+        if (!isPublicObject(objectName)) {
+            return ResponseEntity.notFound().build();
+        }
+        try (InputStream inputStream = fileStorageService.downloadFile(bucket, objectName)) {
             if (inputStream == null) {
-                log.warn("Avatar not found: {}", objectName);
+                log.warn("File not found: {}", objectName);
                 return ResponseEntity.notFound().build();
             }
             byte[] bytes = inputStream.readAllBytes();
-
-            HttpHeaders headers = new HttpHeaders();
-            String extension = "";
-            int i = filename.lastIndexOf('.');
-            if (i > 0 && i < filename.length() - 1) {
-                extension = filename.substring(i + 1).toLowerCase();
-            }
-
-            switch (extension) {
-                case "jpeg":
-                case "jpg":
-                    headers.setContentType(MediaType.IMAGE_JPEG);
-                    break;
-                case "png":
-                    headers.setContentType(MediaType.IMAGE_PNG);
-                    break;
-                case "gif":
-                    headers.setContentType(MediaType.IMAGE_GIF);
-                    break;
-                default:
-                    // Fallback for unknown types, or could return an error
-                    headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-                    break;
-            }
-            return new ResponseEntity<>(bytes, headers, HttpStatus.OK);
+            MediaType contentType = MediaTypeFactory.getMediaType(objectName)
+                    .orElse(MediaType.APPLICATION_OCTET_STREAM);
+            return ResponseEntity.ok()
+                    .contentType(contentType)
+                    .cacheControl(CacheControl.maxAge(Duration.ofDays(7)).cachePublic())
+                    .body(bytes);
         } catch (Exception e) {
-            log.error("Error retrieving avatar {}: {}", objectName, e.getMessage(), e);
+            if (isNotFound(e)) {
+                log.warn("File not found: {}", objectName);
+                return ResponseEntity.notFound().build();
+            }
+            log.error("Error retrieving file {}: {}", objectName, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
+    }
+
+    static boolean isPublicObject(String objectName) {
+        if (objectName == null || objectName.isBlank() || objectName.contains("..") || objectName.contains("\\")) {
+            return false;
+        }
+        return PUBLIC_PREFIXES.stream().anyMatch(objectName::startsWith);
+    }
+
+    private static boolean isNotFound(Throwable e) {
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            String message = t.getMessage();
+            if (message != null && (message.contains("NoSuchKey") || message.contains("does not exist")
+                    || message.contains("NoSuchBucket"))) {
+                return true;
+            }
+        }
+        return false;
     }
 }

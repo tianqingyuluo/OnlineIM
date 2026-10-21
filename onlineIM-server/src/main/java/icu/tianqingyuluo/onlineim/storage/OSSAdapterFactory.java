@@ -34,8 +34,15 @@ public class OSSAdapterFactory {
      * @return RustFS 适配器实例
      */
     public static OSSAdapter createRustFSAdapter(String endpoint, String accessKey, String secretKey) {
-        log.info("创建 RustFS 适配器: {}", endpoint);
-        return new RustFSAdapter(endpoint, accessKey, secretKey);
+        return createRustFSAdapter(endpoint, accessKey, secretKey, null);
+    }
+
+    /**
+     * 创建 RustFS 适配器，并指定返回给客户端的文件 URL 前缀
+     */
+    public static OSSAdapter createRustFSAdapter(String endpoint, String accessKey, String secretKey, String publicBaseUrl) {
+        log.info("创建 RustFS 适配器: {}, 公开 URL 前缀: {}", endpoint, publicBaseUrl);
+        return new RustFSAdapter(endpoint, accessKey, secretKey, publicBaseUrl);
     }
     
     /**
@@ -47,8 +54,15 @@ public class OSSAdapterFactory {
      * @return MinIO适配器实例
      */
     public static OSSAdapter createMinIOAdapter(String endpoint, String accessKey, String secretKey) {
-        log.info("创建MinIO适配器: {}", endpoint);
-        return new MinIOAdapter(endpoint, accessKey, secretKey);
+        return createMinIOAdapter(endpoint, accessKey, secretKey, null);
+    }
+
+    /**
+     * 创建MinIO适配器，并指定返回给客户端的文件 URL 前缀
+     */
+    public static OSSAdapter createMinIOAdapter(String endpoint, String accessKey, String secretKey, String publicBaseUrl) {
+        log.info("创建MinIO适配器: {}, 公开 URL 前缀: {}", endpoint, publicBaseUrl);
+        return new MinIOAdapter(endpoint, accessKey, secretKey, publicBaseUrl);
     }
     
     /**
@@ -129,11 +143,20 @@ public class OSSAdapterFactory {
      * @return OSS适配器实例
      */
     public static OSSAdapter createAdapter(OSSType type, String endpoint, String region, String accessKey, String secretKey, String cdnDomain) {
+        return createAdapter(type, endpoint, region, accessKey, secretKey, cdnDomain, null);
+    }
+
+    /**
+     * 根据OSS类型创建适配器
+     *
+     * @param publicBaseUrl RustFS / MinIO 返回给客户端的文件 URL 前缀；为空时返回同源相对路径
+     */
+    public static OSSAdapter createAdapter(OSSType type, String endpoint, String region, String accessKey, String secretKey, String cdnDomain, String publicBaseUrl) {
         switch (type) {
             case RUSTFS:
-                return createRustFSAdapter(endpoint, accessKey, secretKey);
+                return createRustFSAdapter(endpoint, accessKey, secretKey, publicBaseUrl);
             case MINIO:
-                return createMinIOAdapter(endpoint, accessKey, secretKey);
+                return createMinIOAdapter(endpoint, accessKey, secretKey, publicBaseUrl);
             case S3:
                 return createS3Adapter(endpoint, region, accessKey, secretKey);
             case ALIYUN:

@@ -54,6 +54,13 @@ public class OSSConfig {
     private String defaultBucket;
 
     /**
+     * 返回给客户端的文件 URL 前缀（RustFS / MinIO 适用），文件经后端 FileProxyController 的
+     * /{bucket}/... 路由读出。例如 http://localhost:8080；留空则返回同源相对路径 /{bucket}/{object}，
+     * 由前端所在的反向代理（如 nginx 的 /onlineim/）转发到后端。
+     */
+    private String publicBaseUrl;
+
+    /**
      * 创建OSS适配器Bean
      *
      * @return OSS适配器实例
@@ -70,6 +77,6 @@ public class OSSConfig {
             ossType = OSSAdapterFactory.OSSType.RUSTFS;
         }
 
-        return OSSAdapterFactory.createAdapter(ossType, endpoint, region, accessKey, secretKey, cdnDomain);
+        return OSSAdapterFactory.createAdapter(ossType, endpoint, region, accessKey, secretKey, cdnDomain, publicBaseUrl);
     }
 }

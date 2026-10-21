@@ -7,6 +7,10 @@ package icu.tianqingyuluo.onlineim.storage.impl;
 public class RustFSAdapter extends MinIOAdapter {
 
     public RustFSAdapter(String endpoint, String accessKey, String secretKey) {
-        super("RustFS", endpoint, accessKey, secretKey);
+        this(endpoint, accessKey, secretKey, null);
+    }
+
+    public RustFSAdapter(String endpoint, String accessKey, String secretKey, String publicBaseUrl) {
+        super("RustFS", endpoint, accessKey, secretKey, publicBaseUrl);
     }
 }
