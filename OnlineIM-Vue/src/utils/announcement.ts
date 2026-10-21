@@ -86,9 +86,13 @@ export function applyAnnouncementFrame(
     unread_count: incoming.unread_count ?? previous?.unread_count,
   }
   const exists = !!previous
+  // 一个群只有一条置顶：服务端置顶新公告时会悄悄取消旧的置顶，不单独推帧，这里同步取消
+  const base = merged.pinned
+    ? items.map(item => item.pinned && item.announcement_id !== merged.announcement_id ? { ...item, pinned: false } : item)
+    : items
   const next = exists
-    ? items.map(item => item.announcement_id === merged.announcement_id ? { ...item, ...merged } : item)
-    : [merged, ...items]
+    ? base.map(item => item.announcement_id === merged.announcement_id ? { ...item, ...merged } : item)
+    : [merged, ...base]
   const openPopup = !pinOnly && !mine && merged.read_by_me === false
   return { items: next, openPopup }
 }
