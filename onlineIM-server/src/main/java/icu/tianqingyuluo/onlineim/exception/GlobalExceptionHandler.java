@@ -7,10 +7,17 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.stream.Collectors;
 
@@ -92,10 +99,49 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
     }
 
+    /**
+     * Spring MVC 框架异常（路由不存在、方法不支持、媒体类型不支持、缺少参数等）都实现了
+     * {@link org.springframework.web.ErrorResponse}，按其自带的状态码返回，而不是统一 500。
+     */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneralException(Exception e) {
+        if (e instanceof MissingRequestHeaderException headerError
+                && "Authorization".equalsIgnoreCase(headerError.getHeaderName())) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ErrorResponse("401", "未登录或缺少 Authorization 请求头"));
+        }
+        if (e instanceof org.springframework.web.ErrorResponse frameworkError) {
+            int status = frameworkError.getStatusCode().value();
+            log.warn("请求无法处理({}): {}", status, e.getMessage());
+            return ResponseEntity.status(status)
+                    .headers(frameworkError.getHeaders())
+                    .body(new ErrorResponse(String.valueOf(status), frameworkErrorMessage(e, status)));
+        }
         log.error("发生错误: {}", e.getMessage(), e);
         ErrorResponse errorResponse = new ErrorResponse("500", "服务器内部错误");
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+    }
+
+    static String frameworkErrorMessage(Exception e, int status) {
+        if (e instanceof NoResourceFoundException || e instanceof NoHandlerFoundException) {
+            return "接口不存在";
+        }
+        if (e instanceof HttpRequestMethodNotSupportedException methodError) {
+            return "不支持的请求方法: " + methodError.getMethod();
+        }
+        if (e instanceof HttpMediaTypeNotSupportedException) {
+            return "不支持的 Content-Type";
+        }
+        if (e instanceof HttpMediaTypeNotAcceptableException) {
+            return "无法生成可接受的响应类型";
+        }
+        if (e instanceof MissingServletRequestParameterException paramError) {
+            return "缺少请求参数: " + paramError.getParameterName();
+        }
+        if (e instanceof MissingRequestHeaderException headerError) {
+            return "缺少请求头: " + headerError.getHeaderName();
+        }
+        HttpStatus httpStatus = HttpStatus.resolve(status);
+        return httpStatus != null ? httpStatus.getReasonPhrase() : "请求无法处理";
     }
 }
