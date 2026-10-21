@@ -1,1 +1,4 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/index.md", "reason": "后端分层、Mongo 文档与控制器约定"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Vue 服务、Pinia 与会话列表约定"}
+{"file": ".trellis/spec/guides/index.md", "reason": "跨层字段（草稿正文、摘要、引用、@）需前后端一致"}
+{"file": "docs/ws-protocol-registry.md", "reason": "新增草稿 HTTP 与 DRAFT_UPDATED 帧的登记处"}

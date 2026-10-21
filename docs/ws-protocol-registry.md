@@ -30,6 +30,7 @@
 | `HEARTBEAT_ACK` | S→C | 控制·心跳 | v1 | ws-heartbeat-reconnect |
 | `PRESENCE_UPDATE` | S→C | 业务·在线状态 | v1 | user-presence |
 | `ERROR` | S→C | 控制·错误 | v1 | — |
+| `DRAFT_UPDATED` | S→C | 业务·草稿 | v1 | draft-sync |
 
 ## 引用回复协议
 
@@ -256,6 +257,7 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 
 - `GET /api/v1/messages/{conversationId}/{messageId}/context?before=20&after=20`
 - `GET /api/v1/messages/search?q=关键字&conversation_id=可选&cursor=可选&size=20`（见下方“消息搜索”）
+- `GET /api/v1/conversations/{conversationId}/draft`、`PUT /api/v1/conversations/{conversationId}/draft`、`DELETE /api/v1/conversations/{conversationId}/draft`（见下方“草稿同步”）。会话列表与详情增加 `draft_preview`。
 - `DELETE /api/v1/messages/{messageId}`：撤回自己 2 分钟内发送的消息（见下方“撤回事件与引用联动”）
 - `PUT /api/v1/friends/{friendId}/group`：`friendId` 可以是好友关系 ID（`rel_`）或好友用户 ID（`usr_`）；`friend_group_id` 必须是自己的分组，否则 `404`
 
@@ -728,6 +730,80 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 - WebSocket 每次连上（含断线重连）都会把页面上已经展示过的其他人重新查一次，补上连接建立前或断线期间错过的推送。
 - 退出登录时先关闭 WebSocket，好友随即收到离线；不提示“网络离线”，下次登录按首次连接处理。
 
+## 草稿同步
+
+每个用户在每个会话里最多一份未发送草稿（文本，可带回复目标和群 @）。只存在服务端，按用户隔离；后一次保存覆盖前一次。不进消息历史，不产生未读。
+
+### HTTP
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/v1/conversations/{conversationId}/draft` | 读取自己的草稿。没有时 `204` |
+| PUT | `/api/v1/conversations/{conversationId}/draft` | 保存。`content` 去掉空白后为空则删除并 `204` |
+| DELETE | `/api/v1/conversations/{conversationId}/draft` | 删除。本来就没有也是 `204` |
+
+```json
+{
+  "content": "写了一半 @小明",
+  "reply_to_message_id": "msg_target",
+  "at_users": [{ "user_id": "usr_b", "name": "小明" }]
+}
+```
+
+- `content` 保留用户输入的空白，最长 5000 个 UTF-16 字符（与编辑上限一致），超出 `400 DRAFT_CONTENT_INVALID`。
+- `reply_to_message_id` 可选。目标不存在、已撤回或无权查看时**丢掉引用、仍保存文本**，不报错。服务端按发送消息的规则生成快照，响应里的 `reply_to` 与消息引用相同（含 `active` / `edited` / `recalled` / `unavailable`）。
+- `at_users` 只对群草稿有效，私聊忽略。`name` 是输入时插入的显示名（最多 64 个字符），用来在其他设备恢复 `@名字`。服务端只保留当前群成员、去掉自己、最多 50 人；无效项静默丢弃。
+- 不是该会话成员（已退群，或既没有私聊记录也不是好友）`403 NOT_CONVERSATION_MEMBER`。未登录 `401`。
+- 内容和引用、@ 都没变时不写库、不推送。
+
+响应（以及下面的推送）示例：
+
+```json
+{
+  "conversation_id": "conv_xxx",
+  "content": "写了一半 @小明",
+  "draft_preview": "写了一半 @小明",
+  "reply_to_message_id": "msg_target",
+  "reply_to": { "message_id": "msg_target", "state": "active", "preview_text": "原文" },
+  "at_users": [{ "user_id": "usr_b", "name": "小明" }],
+  "updated_at": 1710000000000
+}
+```
+
+`draft_preview` 把连续空白折成一个空格并去掉首尾空白，按 Unicode code point 最多 40 个，超出加 `…`。
+
+`GET /api/v1/conversations` 与 `GET /api/v1/conversations/{id}` 增加 `draft_preview`（没有草稿时为 `null`）。它不改变会话排序。
+
+### WebSocket `DRAFT_UPDATED`（S→C）
+
+保存或删除成功后，经 Redis Stream 推给**草稿主人自己**的在线连接（其他设备 / 标签页）。不推给会话里的其他人。
+
+```json
+{
+  "type": "DRAFT_UPDATED",
+  "message": {
+    "conversation_id": "conv_xxx",
+    "content": "写了一半",
+    "draft_preview": "写了一半",
+    "reply_to_message_id": null,
+    "reply_to": null,
+    "at_users": [],
+    "updated_at": 1710000000000,
+    "cleared": false
+  }
+}
+```
+
+删除时 `cleared` 为 `true`，`content` / `draft_preview` / `reply_to` 为 `null`。同一服务实例当前只登记该用户的一条连接（既有注册表）；另一台设备若没占到这条连接，重新打开会话、刷新或切回页面时用 GET 恢复。
+
+### Web 端
+
+- 私聊和群聊输入框停止输入约 0.5 秒后保存；发送成功或把输入清空后立即删除。图片 / 文件 / 语音 / 表情不进草稿。
+- 再次打开会话、刷新、或另一台设备收到 `DRAFT_UPDATED`（且本地没有更新的未保存输入）时，恢复文本、回复条和群 @。
+- 会话列表（桌面和手机共用同一行）有草稿时用红色 `[草稿]` 加摘要代替最后一条消息预览；若同时有人 @ 我，`[有人@我]` 仍留在前面。
+- 编辑消息时先把当前草稿（含回复目标；群聊还有 @）暂存，编辑的原文不写进草稿。保存或取消后恢复；切换会话时丢掉编辑态，服务端仍是编辑前的草稿。
+
+
 ## 控制帧详情
 
 ### HEARTBEAT（v1 必需帧）
@@ -758,3 +834,4 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 | `im.forward.max-merged-messages` | `100` | 合并转发的消息条数上限 |
 | `im.message.edit-window-seconds` | 同撤回时间窗（`120`） | 编辑时间窗（秒），≤0 不限制 |
 | `im.message.edit-max-length` | `5000` | 编辑后内容的长度上限（字符） |
+| `im.draft.max-length` | `5000` | 草稿正文长度上限（UTF-16 字符） |
