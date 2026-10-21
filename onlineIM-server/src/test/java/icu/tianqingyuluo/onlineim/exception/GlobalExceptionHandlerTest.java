@@ -52,4 +52,11 @@ class GlobalExceptionHandlerTest {
     void unexpectedErrorsStay500() {
         assertEquals(500, handler.handleGeneralException(new RuntimeException("boom")).getStatusCode().value());
     }
+
+    @Test
+    void recallErrorsUseTheirOwnStatusAndCode() {
+        ResponseEntity<ErrorResponse> response = handler.handleMessageRecall(MessageRecallException.windowExpired("2分钟"));
+        assertEquals(400, response.getStatusCode().value());
+        assertEquals(MessageRecallException.RECALL_WINDOW_EXPIRED, response.getBody().getCode());
+    }
 }

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import icu.tianqingyuluo.onlineim.exception.ForbiddenException;
+import icu.tianqingyuluo.onlineim.exception.MessageRecallException;
 import icu.tianqingyuluo.onlineim.exception.ReplyTargetUnavailableException;
 import icu.tianqingyuluo.onlineim.websocket.listener.handler.MessageTypeSenderRegistry;
 import icu.tianqingyuluo.onlineim.websocket.listener.handler.sender.MessageSenderHandler;
@@ -89,6 +90,12 @@ public class WebSocketMessageRouter {
         } catch (ForbiddenException e) {
             log.warn("消息被拒绝: userId={}, error={}", userId, e.getMessage());
             sendError(session, "403", e.getMessage(), clientMessageId);
+        } catch (MessageRecallException e) {
+            log.warn("撤回被拒绝: userId={}, error={}", userId, e.getMessage());
+            sendError(session, e.getCode(), e.getMessage(), clientMessageId);
+        } catch (IllegalArgumentException e) {
+            log.warn("请求参数错误: userId={}, error={}", userId, e.getMessage());
+            sendError(session, "400", e.getMessage(), clientMessageId);
         } catch (ReplyTargetUnavailableException e) {
             log.warn("引用目标不可用: userId={}, error={}", userId, e.getMessage());
             sendError(session, e.getCode(), e.getMessage(), clientMessageId);

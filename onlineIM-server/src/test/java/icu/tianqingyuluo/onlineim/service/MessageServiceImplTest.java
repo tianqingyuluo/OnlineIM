@@ -3,6 +3,7 @@ package icu.tianqingyuluo.onlineim.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import icu.tianqingyuluo.onlineim.exception.ForbiddenException;
 import icu.tianqingyuluo.onlineim.exception.MessageContextUnavailableException;
+import icu.tianqingyuluo.onlineim.exception.MessageRecallException;
 import icu.tianqingyuluo.onlineim.exception.ReplyTargetUnavailableException;
 import icu.tianqingyuluo.onlineim.pojo.document.Conversation;
 import icu.tianqingyuluo.onlineim.pojo.document.GroupMessage;
@@ -397,6 +398,81 @@ class MessageServiceImplTest {
 
         verify(groupMessageRepository, never()).save(any());
         verifyNoInteractions(redisStreamService);
+    }
+
+    @Test
+    void recallRejectsNonSenderWithForbidden() {
+        PrivateMessage message = privateMessage("msg_other", "100");
+        when(privateMessageRepository.findById("msg_other")).thenReturn(Optional.of(message));
+
+        assertThrows(ForbiddenException.class, () -> service.recallMessage("msg_other", "usr_me"));
+
+        verify(privateMessageRepository, never()).save(any());
+        verifyNoInteractions(redisStreamService);
+    }
+
+    @Test
+    void recallRejectsMessagesOutsideConfiguredWindow() {
+        ((MessageServiceImpl) service).setRecallWindowSeconds(120);
+        PrivateMessage message = privateMessage("msg_old", "100");
+        message.setSenderId("usr_me");
+        message.setTimestamp(new Date(System.currentTimeMillis() - 121_000));
+        when(privateMessageRepository.findById("msg_old")).thenReturn(Optional.of(message));
+
+        MessageRecallException error = assertThrows(MessageRecallException.class,
+                () -> service.recallMessage("msg_old", "usr_me"));
+
+        assertEquals(MessageRecallException.RECALL_WINDOW_EXPIRED, error.getCode());
+        assertEquals(400, error.getStatus().value());
+        assertEquals("消息发送已超过2分钟，无法撤回", error.getMessage());
+        verify(privateMessageRepository, never()).save(any());
+    }
+
+    @Test
+    void recallWindowCanBeDisabled() {
+        ((MessageServiceImpl) service).setRecallWindowSeconds(0);
+        PrivateMessage message = privateMessage("msg_old", "100");
+        message.setSenderId("usr_me");
+        message.setTimestamp(new Date(System.currentTimeMillis() - 3_600_000));
+        when(privateMessageRepository.findById("msg_old")).thenReturn(Optional.of(message));
+
+        service.recallMessage("msg_old", "usr_me");
+
+        verify(privateMessageRepository).save(message);
+    }
+
+    @Test
+    void recallRejectsMissingAndAlreadyRecalledMessages() {
+        MessageRecallException missing = assertThrows(MessageRecallException.class,
+                () -> service.recallMessage("msg_missing", "usr_me"));
+        assertEquals(404, missing.getStatus().value());
+
+        PrivateMessage message = privateMessage("msg_done", "100");
+        message.setSenderId("usr_me");
+        message.setStatus(3);
+        when(privateMessageRepository.findById("msg_done")).thenReturn(Optional.of(message));
+        MessageRecallException again = assertThrows(MessageRecallException.class,
+                () -> service.recallMessage("msg_done", "usr_me"));
+        assertEquals(409, again.getStatus().value());
+    }
+
+    @Test
+    void recallMarksMessageAndPublishesRealtimeNotificationToBothParticipants() throws Exception {
+        PrivateMessage message = privateMessage("msg_target", "100");
+        message.setSenderId("usr_me");
+        message.setReceiverId("usr_peer");
+        when(privateMessageRepository.findById("msg_target")).thenReturn(Optional.of(message));
+
+        service.recallMessage("msg_target", "usr_me");
+
+        assertEquals(3, message.getStatus());
+        ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
+        verify(redisStreamService).publishRecallLog(eq("RECALL_MESSAGE"), eq("usr_me"), payload.capture(),
+                eq(List.of("usr_me", "usr_peer")));
+        var json = new ObjectMapper().readTree(payload.getValue());
+        assertEquals("msg_target", json.get("message_id").asText());
+        assertEquals("conv_1", json.get("conversation_id").asText());
+        assertEquals("usr_me", json.get("recall_user_id").asText());
     }
 
     private PrivateMessage privateMessage(String id, String seqId) {

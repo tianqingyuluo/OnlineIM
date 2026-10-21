@@ -277,6 +277,8 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 }
 ```
 
+撤回请求 `RECALL_MESSAGE_REQUEST` 的 `message` 只需 `message_id`（可带 `conversation_id`、`client_message_id`）；操作者取自已认证连接，忽略客户端自报的 `operator_id`/`sender_id`。WebSocket 与 REST `DELETE /api/v1/messages/{messageId}` 共用同一套规则：只能撤回自己发送的消息（否则 `403`），不存在返回 `MESSAGE_NOT_FOUND`（REST 404），重复撤回返回 `MESSAGE_ALREADY_RECALLED`（REST 409），超过撤回时间窗返回 `RECALL_WINDOW_EXPIRED`（REST 400）。时间窗默认 120 秒，由 `im.message.recall-window-seconds` 配置，小于等于 0 表示不限制。WebSocket 失败时返回 `ERROR` 帧，`message.code` 为上述错误码并回带 `client_message_id`。撤回成功后（无论经 REST 还是 WebSocket）服务端经 Redis Stream 推送：撤回者收到 `RECALL_MESSAGE_RESPONSE`，私聊对方或其他群成员收到 `MESSAGE_RECALLED`。
+
 收到撤回事件后，客户端必须：将原消息改为撤回占位；将当前会话所有 `reply_to.message_id` 等于目标的引用改为 `recalled`；清空 `preview_text`；同步写回 IndexedDB。服务端同时批量清理 MongoDB 中的直接引用快照，并在历史/上下文响应时再次解析目标状态，保证错过实时事件的客户端刷新后也不会看到旧正文。
 
 ## 控制帧详情

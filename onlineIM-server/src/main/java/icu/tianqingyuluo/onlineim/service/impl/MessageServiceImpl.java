@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import icu.tianqingyuluo.onlineim.exception.ForbiddenException;
 import icu.tianqingyuluo.onlineim.exception.MessageContextUnavailableException;
+import icu.tianqingyuluo.onlineim.exception.MessageRecallException;
 import icu.tianqingyuluo.onlineim.pojo.document.Conversation;
 import icu.tianqingyuluo.onlineim.pojo.document.GroupMessage;
 import icu.tianqingyuluo.onlineim.pojo.document.MessageReplySnapshot;
@@ -29,6 +30,7 @@ import icu.tianqingyuluo.onlineim.service.UserService;
 import icu.tianqingyuluo.onlineim.util.ConversationIdUtil;
 import icu.tianqingyuluo.onlineim.util.SeqIdComparator;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -58,6 +60,7 @@ public class MessageServiceImpl implements MessageService {
     private final RedisStreamService redisStreamService;
     private final ObjectMapper objectMapper;
     private final FriendService friendService;
+    private long recallWindowSeconds = 120;
 
     @Autowired
     public MessageServiceImpl(PrivateMessageRepository privateMessageRepository,
@@ -248,70 +251,91 @@ public class MessageServiceImpl implements MessageService {
 
     @Override
     public boolean recallMessage(String messageId, String userId) {
-        // 检查是否为私聊消息
         PrivateMessage privateMessage = privateMessageRepository.findById(messageId).orElse(null);
         if (privateMessage != null) {
-            // 只有发送者才能撤回消息
-            if (!privateMessage.getSenderId().equals(userId)) {
-                return false;
-            }
-            
-            // 设置消息状态为已撤回(3)
+            assertRecallable(privateMessage.getSenderId(), privateMessage.getStatus(),
+                    privateMessage.getTimestamp() != null ? privateMessage.getTimestamp() : privateMessage.getCreatedAt(),
+                    userId);
             privateMessage.setStatus(3);
             privateMessage.setUpdatedAt(new Date());
             privateMessageRepository.save(privateMessage);
             messageReplyService.markTargetRecalled(privateMessage.getConversationId(), messageId);
-            
-            // 创建撤回日志记录
-            RecallLog recallLog = RecallLog.builder()
-                    .conversationId(privateMessage.getConversationId())
-                    .seqId(privateMessage.getSeqId())
-                    .messageId(messageId)
-                    .operatorId(userId)
-                    .recallTime(new Date())
-                    .build();
-            recallLogRepository.save(recallLog);
-            
-            // TODO: 使用redisEventPublisher向redis stream推送一个redisStreamEvent
-            // event中包装拟定包装了消息撤回通知
-            
+            saveRecallAndNotify(privateMessage.getConversationId(), privateMessage.getSeqId(), messageId, userId,
+                    List.of(privateMessage.getSenderId(), privateMessage.getReceiverId()));
             return true;
         }
-        
-        // 检查是否为群聊消息
+
         GroupMessage groupMessage = groupMessageRepository.findById(messageId).orElse(null);
         if (groupMessage != null) {
-            // 只有发送者才能撤回消息
-            if (!groupMessage.getSenderId().equals(userId)) {
-                return false;
-            }
-            
-            // 设置消息状态为已撤回(3)
+            assertRecallable(groupMessage.getSenderId(), groupMessage.getStatus(),
+                    groupMessage.getTimestamp() != null ? groupMessage.getTimestamp() : groupMessage.getCreatedAt(),
+                    userId);
             groupMessage.setStatus(3);
             groupMessage.setUpdatedAt(new Date());
             groupMessageRepository.save(groupMessage);
             messageReplyService.markTargetRecalled(groupMessage.getGroupId(), messageId);
-            
-            // 创建撤回日志记录
-            RecallLog recallLog = RecallLog.builder()
-                    .conversationId(groupMessage.getGroupId())
-                    .seqId(groupMessage.getSeqId())
-                    .messageId(messageId)
-                    .operatorId(userId)
-                    .recallTime(new Date())
-                    .build();
-            recallLogRepository.save(recallLog);
-            
-            // TODO: 使用redisEventPublisher向redis stream推送一个redisStreamEvent
-            // event中包装拟定包装了消息撤回通知
-            
+            saveRecallAndNotify(groupMessage.getGroupId(), groupMessage.getSeqId(), messageId, userId,
+                    groupReceiverIds(groupMessage.getGroupId()));
             return true;
         }
-        
-        return false;
+
+        throw MessageRecallException.notFound();
     }
 
-    // 已删除标记消息已读功能
+    /**
+     * 撤回规则（REST 与 WebSocket 共用）：只能撤回自己发送的、未撤回的、仍在撤回时间窗内的消息。
+     */
+    private void assertRecallable(String senderId, Integer status, Date sentAt, String userId) {
+        if (userId == null || !userId.equals(senderId)) {
+            throw new ForbiddenException("只能撤回自己发送的消息");
+        }
+        if (status != null && status == 3) {
+            throw MessageRecallException.alreadyRecalled();
+        }
+        if (sentAt != null && recallWindowSeconds > 0
+                && System.currentTimeMillis() - sentAt.getTime() > recallWindowSeconds * 1000L) {
+            throw MessageRecallException.windowExpired(describeWindow(recallWindowSeconds));
+        }
+    }
+
+    static String describeWindow(long seconds) {
+        return seconds % 60 == 0 ? (seconds / 60) + "分钟" : seconds + "秒";
+    }
+
+    private void saveRecallAndNotify(String conversationId, String seqId, String messageId, String userId,
+                                     List<String> receiverIds) {
+        Date now = new Date();
+        RecallLog recallLog = RecallLog.builder()
+                .conversationId(conversationId)
+                .seqId(seqId)
+                .messageId(messageId)
+                .operatorId(userId)
+                .recallTime(now)
+                .build();
+        recallLogRepository.save(recallLog);
+
+        // 通过 Redis Stream 实时通知：发送者收到 RECALL_MESSAGE_RESPONSE，其他人收到 MESSAGE_RECALLED
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("message_id", messageId);
+        payload.put("conversation_id", conversationId);
+        payload.put("recall_user_id", userId);
+        payload.put("seq_id", seqId);
+        payload.put("timestamp", now.getTime());
+        redisStreamService.publishRecallLog("RECALL_MESSAGE", userId, serializeMessage(payload),
+                receiverIds == null ? List.of() : receiverIds.stream().filter(Objects::nonNull).distinct().toList());
+    }
+
+    public long getRecallWindowSeconds() {
+        return recallWindowSeconds;
+    }
+
+    /**
+     * 撤回时间窗（秒），默认 120 秒（2 分钟），配置项 im.message.recall-window-seconds；小于等于 0 表示不限制
+     */
+    @Value("${im.message.recall-window-seconds:120}")
+    public void setRecallWindowSeconds(long recallWindowSeconds) {
+        this.recallWindowSeconds = recallWindowSeconds;
+    }
 
     @Override
     public Map<String, String> uploadFile(String userId, String type, MultipartFile file) {

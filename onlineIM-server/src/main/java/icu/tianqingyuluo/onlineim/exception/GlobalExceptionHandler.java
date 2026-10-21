@@ -99,6 +99,13 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
     }
 
+    @ExceptionHandler(MessageRecallException.class)
+    public ResponseEntity<ErrorResponse> handleMessageRecall(MessageRecallException e) {
+        log.warn("撤回被拒绝: {}", e.getMessage());
+        return ResponseEntity.status(e.getStatus())
+                .body(new ErrorResponse(e.getCode(), e.getMessage()));
+    }
+
     /**
      * Spring MVC 框架异常（路由不存在、方法不支持、媒体类型不支持、缺少参数等）都实现了
      * {@link org.springframework.web.ErrorResponse}，按其自带的状态码返回，而不是统一 500。
