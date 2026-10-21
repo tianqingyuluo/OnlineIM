@@ -20,11 +20,12 @@ public class GroupSettingServiceImpl implements GroupSettingService {
     }
     @Override
     public GroupSettingResponse getGroupSettings(String groupId, String operatorId) {
-        if(groupMapper.isAdmin(groupId,operatorId)){
+        // 读取对所有群成员开放：禁言、@全体、邀请、改群名片等开关都是成员端需要遵守/展示的行为规则，
+        // 不含管理员专属信息；修改仍然只允许管理员/群主。非成员返回 null（接口 404，不泄露群是否存在）。
+        if (groupMapper.isUserMember(groupId, operatorId)) {
             return groupSettingMapper.getByGroupId(groupId);
         }
-        else
-            return null;
+        return null;
     }
 
     @Override
