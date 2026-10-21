@@ -508,6 +508,56 @@ describe('history store message receipt flow', () => {
     }, { persist: false })
   })
 
+  it('只把和本地历史连续的补齐消息写进 IndexedDB；截断时一条都不缓存，正在看的会话按本地旧游标走 HTTP 补全', async () => {
+    const { useHistoryStore } = await import('@/stores/history')
+    const { useListStore } = await import('@/stores/list')
+    const { resetConversationLiveState } = await import('@/stores/conversation-live')
+    resetConversationLiveState()
+    const store = useHistoryStore()
+    useListStore().conversations = [] as never
+    const msg = (id: string, conversationId: string, seq: string) => ({
+      message_id: id,
+      conversation_id: conversationId,
+      sender_info: { user_id: 'usr_peer', nickname: '对方' },
+      message_type: 'text',
+      content: id,
+      seq_id: seq,
+      status: 1,
+      timestamp: '2026-10-21 22:05:00',
+      is_recalled: false,
+    }) as never
+    // conv_1 本地有历史（到 seq 10），conv_2 本地从没打开过
+    dbServiceMock.getLastHistorySeq.mockImplementation(async (_userId: string, conversationId: string) => (
+      conversationId === 'conv_1' ? '10' : null
+    ))
+    const cached = () => dbServiceMock.putHistory.mock.calls.flatMap(call => call[0].map((item: { message_id: string }) => item.message_id))
+
+    await store.applyOfflineSync({
+      conversations: [],
+      revisions: [],
+      messages: [msg('p11', 'conv_1', '11'), msg('q5', 'conv_2', '5')],
+      truncated: false,
+    })
+    expect(cached()).toEqual(['p11'])
+
+    dbServiceMock.putHistory.mockClear()
+    const syncMessages = vi.fn().mockResolvedValue([msg('p12', 'conv_1', '12'), msg('p13', 'conv_1', '13')])
+    Object.assign(messageServiceMock, { syncMessages })
+    store.activeConversationId = 'conv_1'
+    store.chatMessages = [msg('p10', 'conv_1', '10')] as never
+    await store.applyOfflineSync({
+      conversations: [],
+      revisions: [],
+      // 截断：只给了最新的 p13，p12 被截掉
+      messages: [msg('p13', 'conv_1', '13'), msg('q9', 'conv_2', '9')],
+      truncated: true,
+    })
+    expect(cached()).not.toContain('q9')
+    // 截断时不先把 p13 写进本地，HTTP 增量才会从本地的 seq 10 开始，把 p12 补回来
+    expect(syncMessages).toHaveBeenCalledWith('conv_1', '10')
+    expect(store.chatMessages.map(item => item.message_id)).toEqual(['p10', 'p12', 'p13'])
+  })
+
   it('applies an offline snapshot without counting its messages again', async () => {
     const { useHistoryStore } = await import('@/stores/history')
     const { useListStore } = await import('@/stores/list')

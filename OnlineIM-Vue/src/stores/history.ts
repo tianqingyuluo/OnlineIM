@@ -977,8 +977,9 @@ export const useHistoryStore = defineStore('history', {
       for (const revision of revisions) {
         await this.applySyncedRevision(revision);
       }
+      const cacheable = await this.cacheableSyncConversations(messages, Boolean(payload?.truncated));
       for (const message of messages) {
-        await this.absorbSyncedMessage(message);
+        await this.absorbSyncedMessage(message, { cache: cacheable.has(message?.conversation_id) });
       }
       applyOfflineConversations(payload?.conversations ?? [], this.activeConversationId);
       if (payload?.truncated) {
@@ -1047,7 +1048,29 @@ export const useHistoryStore = defineStore('history', {
       await this.handleMessageEdited(message);
     },
 
-    async absorbSyncedMessage(message: MessageResponse): Promise<void> {
+    /**
+     * 哪些会话的补齐消息可以写进 IndexedDB。本地历史按“连续 + 待补区间”分页读取：
+     * - 截断时（某会话只给了最新一段）写进去会在本地留下没有登记的空洞，往上翻会直接跳过被截掉的消息；
+     *   正在看的会话还会让 HTTP 增量从最新一条开始而补不回空洞。所以截断时一条都不缓存，
+     *   正在看的会话由 syncActiveConversation 按本地旧游标补全，其他会话打开时照旧从服务端分页。
+     * - 本地还没有这个会话的历史时也不缓存（否则打开后只能翻到这几条），打开时照旧从服务端拉。
+     */
+    async cacheableSyncConversations(messages: MessageResponse[], truncated: boolean): Promise<Set<string>> {
+      const result = new Set<string>();
+      if (truncated) return result;
+      const userId = useUserStore().loggedInUser?.user_id;
+      if (!userId) return result;
+      for (const conversationId of new Set(messages.map(message => message?.conversation_id).filter(Boolean))) {
+        try {
+          if (await dbService.getLastHistorySeq(userId, conversationId)) result.add(conversationId);
+        } catch (error) {
+          console.warn('读取本地消息游标失败:', error);
+        }
+      }
+      return result;
+    },
+
+    async absorbSyncedMessage(message: MessageResponse, options: { cache?: boolean } = {}): Promise<void> {
       if (!message?.message_id || !message.conversation_id) return;
       const normalized = normalizeMessage(message);
       const isGroup = normalized.conversation_id.startsWith('grp_')
@@ -1070,7 +1093,7 @@ export const useHistoryStore = defineStore('history', {
         this.processMessages([normalized], isGroup);
       }
       try {
-        await dbService.putHistory([normalized]);
+        if (options.cache !== false) await dbService.putHistory([normalized]);
         await this.sendDeliveredReceipts([normalized]);
       } catch (error) {
         console.error('保存补齐消息失败:', error);
