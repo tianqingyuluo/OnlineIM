@@ -254,6 +254,7 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 - `GET /api/v1/conversations/{conversationId}/messages/{messageId}/readers`
 
 - `GET /api/v1/messages/{conversationId}/{messageId}/context?before=20&after=20`
+- `GET /api/v1/messages/search?q=关键字&conversation_id=可选&cursor=可选&size=20`（见下方“消息搜索”）
 
 消息上下文接口使用认证主体校验私聊参与者或群成员身份，`before`、`after` 默认 20 且分别限制为 0-50。目标前后窗口按数值型 `seq_id` 排序，一次返回目标及相邻消息：
 
@@ -546,6 +547,70 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 
 - 自己的文本消息在时间窗内右键（手机长按）菜单有“编辑”（菜单打开时判断时间窗）。点击后原文放进输入框，上方显示“编辑消息”条，发送按钮变为“保存”；回车 / “保存”提交，Esc / ✕ 取消并恢复原来的草稿。群聊编辑时原 @ 成员保留，只要文本里还有对应的 `@名字`。
 - 编辑过的消息气泡右下显示“已编辑”（悬停显示编辑时间）；本地 IndexedDB 缓存同步更新。
+
+## 消息搜索
+
+按关键字搜索自己能看到的**文本**消息。只有 HTTP 接口，没有新增 WebSocket 帧。
+
+### 请求 `GET /api/v1/messages/search`
+
+| 参数 | 说明 |
+|------|------|
+| `q` | 关键字，去掉首尾空白后 1~50 个字符；按字面量匹配（`.`、`*`、`(` 等不是正则），忽略大小写，中文直接按子串匹配 |
+| `conversation_id` | 可选。给出时只搜这个会话；省略为全局搜索 |
+| `cursor` | 可选。上一页返回的 `next_cursor` |
+| `size` | 可选。每页条数，默认 20，限制在 1~50 |
+
+### 范围与权限
+
+- 只搜 `message_type = text` 的消息，按**当前内容**匹配（编辑过的按编辑后的内容，原文不可搜）；已撤回的消息不会出现。图片 / 文件 / 语音 / 表情 / 聊天记录本期不可搜。
+- 全局搜索覆盖当前用户会话列表里能看到的会话：自己未删除（`status != 0`）的私聊会话记录，以及仍是成员、且自己没有删除该群会话的群。删除（隐藏）的会话、已退出 / 被移出的群、别人之间的私聊都不会出现。
+- 指定 `conversation_id` 时权限与历史记录接口一致：私聊要有自己的会话记录（删除隐藏的会话仍可在会话内搜索），群聊要是当前成员；否则 `403`。
+- 群成员可以搜到入群前的消息（与历史记录接口一致，新成员可以翻看入群前的记录）。
+
+### 响应
+
+按时间倒序（同一毫秒按消息 ID 倒序），游标分页：
+
+```json
+{
+  "keyword": "爬山",
+  "conversation_id": null,
+  "results": [
+    {
+      "message": { "message_id": "msg_x", "conversation_id": "grp_x", "content": "明天去爬山吗", "...": "与历史接口相同" },
+      "conversation": { "conversation_id": "grp_x", "type": "group", "name": "周末小组", "avatar_url": "" },
+      "snippet": "明天去爬山吗",
+      "highlights": [{ "start": 3, "length": 2 }]
+    }
+  ],
+  "next_cursor": "1761066000000:msg_x",
+  "has_more": true
+}
+```
+
+- `conversation.name`：私聊为对方的备注或昵称，群聊为群名。
+- `snippet`：命中片段，换行替换为空格；内容较长时从第一个命中前 16 个字符开始截取最多 80 个字符，被截掉的一侧加 `…`。
+- `highlights`：片段内每个命中的位置（UTF-16 下标，与 JS 字符串一致），客户端按位置拆分渲染高亮，不需要也不应使用 HTML 拼接。
+- 没有更多时 `next_cursor` 为 `null`、`has_more` 为 `false`。
+
+### 错误
+
+| 情况 | REST |
+|------|------|
+| 关键字为空或超过 50 个字符 / 游标格式错误 | 400（`message` 为原因，例如“请输入搜索关键字”） |
+| 指定的会话无权访问（不是参与者 / 不是群成员） | 403 |
+| 未登录 | 401 |
+
+### 索引
+
+`private_messages` 建 `{conversationId: 1, messageType: 1, timestamp: -1, _id: -1}`（`idx_search_conversation_type_time_id`），`group_messages` 建 `{groupId: 1, messageType: 1, timestamp: -1, _id: -1}`（`idx_search_group_type_time_id`），启动时自动创建。查询先用索引圈定会话、类型并按时间倒序取页，再对 `content` 做转义后的不区分大小写正则过滤。中文没有分词，MongoDB text index 对中文效果差，v1 不使用；数据量变大后可换成 ngram / 外部搜索引擎，接口不变。
+
+### Web 端
+
+- **全局**：会话列表顶部的搜索框（“搜索会话或聊天记录”）输入后，先按名称过滤会话，下方“聊天记录”列出命中的消息（会话名 · 发送者、时间、高亮片段），停止输入 300ms 后搜索，“加载更多”翻页。点击结果打开所属会话（地址带 `?msg=<message_id>`），首屏加载后滚动到该消息并高亮，然后去掉地址参数。
+- **会话内**：聊天窗口右上角放大镜打开搜索面板，只搜当前会话；点击结果关闭面板并跳到该消息。
+- 跳转复用引用跳转：消息不在已加载列表时先查本地缓存，再用上下文接口加载前后各 20 条；消息已不可用时提示“该消息已不可用”。手机端同样可用（面板占满宽度）。
 
 ## 撤回事件与引用联动
 
