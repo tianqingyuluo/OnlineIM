@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Search, ChevronDown, ChevronRight } from "lucide-vue-next";
 import { useListStore } from '@/stores/list.ts'
 import { useRouter } from 'vue-router'
-import type { Friend } from '@/type/Friends.ts'
+import type { FriendInFriendGroup } from '@/type/Friends.ts'
 import AddGroupDialog from "@/components/AddGroupDialog.vue";
 import EditGroupDialog from "@/components/EditGroupDialog.vue";
 import PresenceLabel from "@/components/common/PresenceLabel.vue";
@@ -37,7 +37,7 @@ const showEditGroupDialog = ref(false);
 // 初始化所有分组为展开状态
 onMounted(() => {
   listStore.userGroups.forEach(group => {
-    expandedGroups.value[group.id] = true;
+    expandedGroups.value[group.group_id] = true;
   });
 });
 
@@ -87,16 +87,17 @@ function isGroupExpanded(groupId: string) {
 const emits = defineEmits(['userSelected'])
 const listStore = useListStore()
 
-const groupedFriends = computed(() => {
-  return listStore.groupedFriends.length > 0
-      ? listStore.groupedFriends
-      : groupAndSortFriends(listStore.friends, listStore.userGroups)
-})
+// 与桌面好友列表相同，直接用 listStore.userGroups（分组 + 组内好友）。
+// 之前读的 listStore.groupedFriends / groupAndSortFriends 都不存在，手机好友页渲染时报错、列表为空。
+const groupedFriends = computed(() => listStore.userGroups.map(group => ({
+  ...group,
+  friends: group.friends || [],
+})))
 
-function handleUserClick(user: Friend) {
-  activeItem.value = user.friend_info.user_id;
+function handleUserClick(user: FriendInFriendGroup) {
+  activeItem.value = user.user_id;
   emits('userSelected', user);
-  router.push(`/main/friends/${user.friend_info.user_id}`);
+  router.push(`/main/friends/${user.user_id}`);
 }
 import { useRoute } from 'vue-router'
 import UserPart from '@/views/userPart.vue'
@@ -137,20 +138,20 @@ const showUserProfile = computed(() => route.path.startsWith('/main/friends/'))
       <SidebarGroup>
         <SidebarGroupContent>
           <SidebarMenu>
-            <template v-for="group in groupedFriends" :key="group.group.id">
+            <template v-for="group in groupedFriends" :key="group.group_id">
               <div class="group-container">
-                <ContextMenu class="w-full" v-model:open="isGroupMenuOpen" @update:open="(open) => handleGroupMenuOpenChange(open, group.group.id)">
+                <ContextMenu class="w-full" v-model:open="isGroupMenuOpen" @update:open="(open) => handleGroupMenuOpenChange(open, group.group_id)">
                   <ContextMenuTrigger class="w-full">
                     <SidebarGroupLabel
                         ref="groupLabelRef"
-                        @click="toggleGroup(group.group.id)"
+                        @click="toggleGroup(group.group_id)"
                         class="cursor-pointer flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors font-bold"
-                        :class="[isGroupMenuOpen && currentGroupId === group.group.id ? 'bg-gray-100' : '']"
+                        :class="[isGroupMenuOpen && currentGroupId === group.group_id ? 'bg-gray-100' : '']"
                         style="font-size: 15px"
                     >
-                      {{ group.group.name }} ({{ group.friends.length }})
+                      {{ group.name }} ({{ group.friends.length }})
                       <ChevronDown
-                          v-if="isGroupExpanded(group.group.id)"
+                          v-if="isGroupExpanded(group.group_id)"
                           class="w-5 h-5 transition-transform duration-200"
                       />
                       <ChevronRight
@@ -177,28 +178,28 @@ const showUserProfile = computed(() => route.path.startsWith('/main/friends/'))
                     @before-leave="el => el.style.height = el.scrollHeight + 'px'"
                     @leave="el => el.style.height = 0"
                 >
-                  <div v-show="isGroupExpanded(group.group.id)" class="transition-all duration-300">
+                  <div v-show="isGroupExpanded(group.group_id)" class="transition-all duration-300">
                     <SidebarMenuItem
                         v-for="friend in group.friends"
-                        :key="friend.friend_info.user_id"
+                        :key="friend.user_id"
                     >
                       <SidebarMenuButton
                           as-child
-                          :isActive="activeItem === friend.friend_info.user_id"
+                          :isActive="activeItem === friend.user_id"
                           @click="handleUserClick(friend)"
                           class="data-[active=true]:bg-gray-100 data-[active=true]:text-black flex items-center w-full h-[80px] px-4 cursor-default hover:bg-gray-50 transition-colors"
                       >
                         <div class="flex items-center w-full">
                           <div class="w-[50px] h-[50px] rounded-full overflow-hidden mr-4 flex-shrink-0">
                             <img
-                                :src="friend.friend_info.avatar_url || '/default-avatar.png'"
-                                :alt="friend.friend_info.nickname"
+                                :src="friend.avatar_url || '/default-avatar.png'"
+                                :alt="friend.nickname"
                                 class="w-full h-full object-cover"
                             />
                           </div>
                           <div class="flex flex-col flex-grow space-y-1">
-                            <span class="text-[18px] font-bold">{{ friend.friend_info.remark || friend.friend_info.nickname }}</span>
-                            <PresenceLabel :user-id="friend.friend_info.user_id" />
+                            <span class="text-[18px] font-bold">{{ friend.remark || friend.nickname }}</span>
+                            <PresenceLabel :user-id="friend.user_id" />
                           </div>
                         </div>
                       </SidebarMenuButton>
