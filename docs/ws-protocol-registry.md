@@ -327,6 +327,55 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 
 会话预览 `[语音]`；引用预览 `[语音 00:12]`（无时长时 `[语音]`）。
 
+## 自定义表情消息
+
+每个用户有一份“我的表情”收藏（默认上限 100 个），通过 REST 管理；发送时以 `message_type=emoji` 引用收藏中的表情。`sticker` 作为同义类型接受（校验与 `emoji` 相同，按原样保存类型），新客户端统一发 `emoji`。
+
+### 管理接口 `/api/v1/emojis`
+
+| 方法 | 路径 | 说明 | 成功 |
+|------|------|------|------|
+| GET | `/api/v1/emojis` | 我的表情（按 `sort_order` 升序，新添加的在最前）及限制 | 200 |
+| POST | `/api/v1/emojis` | multipart：`file`，可选 `name`（默认取文件名去扩展名，≤32 字符） | 201 表情对象 |
+| POST | `/api/v1/emojis/from-message` | JSON `{conversation_id, message_id}`：把会话里的图片或表情消息收藏为自己的表情 | 201 表情对象 |
+| DELETE | `/api/v1/emojis/{emoji_id}` | 删除收藏（只能删自己的） | 204 |
+| PUT | `/api/v1/emojis/order` | JSON `{emoji_ids: [...]}`：完整的新顺序，必须恰好包含自己全部表情各一次 | 200 列表 |
+
+列表响应：
+
+```json
+{
+  "emojis": [
+    { "emoji_id": "emo_<32 hex>", "type": "emoji", "url": "/onlineim/chats/emojis/202610/<32 hex>.gif",
+      "name": "跳舞", "mime": "image/gif", "size": 48213, "width": 240, "height": 240, "animated": true,
+      "sort_order": -1792000000000, "created_at": "2026-10-21 23:50:00" }
+  ],
+  "total": 1, "max_count": 100, "max_size": 2097152, "max_dimension": 1024, "formats": ["png", "jpeg", "gif"]
+}
+```
+
+- 格式按文件内容识别（`im.emoji.formats`，默认 PNG/JPG/GIF），其他格式 `415`。
+- GIF 原样保存（动画保留），必须直接满足 `im.emoji.max-size`（默认 2MB，否则 `413`）、`im.emoji.max-dimension`（默认 1024×1024，否则 `400`）和 `im.emoji.max-frames`（默认 300，否则 `400`）。
+- PNG/JPG 源文件不超过 `im.emoji.max-source-size`（默认 10MB，否则 `413`）；宽高或大小超限时等比缩小到 1024 以内后保存（有透明通道存 PNG，否则 JPG），缩小后仍超过 `max-size` 返回 `413`。
+- 数量达到 `im.emoji.max-count`（默认 100）：`409`，`message` 为“表情数量已达上限（100 个），请先删除一些再添加”。同一用户重复添加同一张图（内容 SHA-256 相同）：`409`“这个表情已经在你的表情里了”。
+- 从消息收藏：必须是会话成员（私聊参与者 / 群成员），消息必须存在且未撤回，否则 `404`；只接受 `image` 和 `emoji`/`sticker` 消息（其他 `400`）。服务端从对象存储读出原图，按上面的规则校验后**复制**一份到收藏者名下，原发送者删除收藏不影响收藏者。表情消息只接受服务端生成的 `chats/emojis/...` 对象。
+- 删除只删收藏记录，对象存储中的文件保留，已发送的历史消息仍能显示。
+- 对象键 `chats/emojis/yyyyMM/<128 位随机十六进制>.<png|jpg|gif>`，经 `/onlineim/**` 代理公开读取。
+- 错误体统一 `{ "code": "<HTTP 状态>", "message": "<中文说明>" }`。
+
+### 发送
+
+`message_type=emoji`，`content` 为 `emoji_id` 字符串或含 `emoji_id` 的 JSON（客户端可附带其他字段用于本地乐观显示，服务端一律忽略）。服务端校验表情存在且属于发送者（否则 WS `ERROR code=400` / HTTP `400`，不落库），并把 `content` 替换为：
+
+```json
+{ "emoji_id": "emo_<32 hex>", "type": "emoji", "url": "/onlineim/chats/emojis/202610/<32 hex>.gif",
+  "name": "跳舞", "mime": "image/gif", "size": 48213, "width": 240, "height": 240, "animated": true }
+```
+
+`ext` 为同样的字段。私聊/群聊 WS 与 `POST /api/v1/messages` 都支持；历史、同步、上下文返回同一 `content`，表情被删除后历史消息仍可显示。别人的表情不能直接转发，需先“添加到表情”。
+
+会话预览与引用预览均为 `[表情]`。Web 端表情消息不套气泡，按原比例显示（长边 ≤ 140px），GIF 自动播放；右键（手机长按）图片或表情消息可“添加到表情”。
+
 ## 撤回事件与引用联动
 
 当前撤回发送方确认 `RECALL_MESSAGE_RESPONSE` 与接收方通知 `MESSAGE_RECALLED` 沿用既有顶层字段格式，而不是标准 `message` 信封；Web 客户端兼容两种解析方式。
