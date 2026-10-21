@@ -95,7 +95,9 @@ public class ReceiptServiceImpl implements ReceiptService {
                     request.getConversationId(), receiverId,
                     request.getConversationId().startsWith("grp_") ? "group" : "private", seqId);
             if (!changed || targets.isEmpty()) {
-                return changed;
+                // 回执是幂等的：重复或过期（seq 未前进）的合法回执视为成功，只是无需再广播；
+                // 返回 false 会让 WebSocket 路由给客户端回 MESSAGE_REJECTED，刷新/重进会话时弹“消息处理失败”。
+                return true;
             }
 
             ReceiptEventPayload payload = ReceiptEventPayload.builder()
@@ -139,7 +141,9 @@ public class ReceiptServiceImpl implements ReceiptService {
                     conversationId, readerId,
                     conversationId.startsWith("grp_") ? "group" : "private", readSeq);
             if (!changed || targets.isEmpty()) {
-                return changed;
+                // 回执是幂等的：重复或过期（seq 未前进）的合法回执视为成功，只是无需再广播；
+                // 返回 false 会让 WebSocket 路由给客户端回 MESSAGE_REJECTED，刷新/重进会话时弹“消息处理失败”。
+                return true;
             }
 
             ReceiptEventPayload payload = ReceiptEventPayload.builder()
