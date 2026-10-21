@@ -20,10 +20,15 @@ import {simpleMusicPlayer} from "@/utils/heiheihei.ts";
 // 使用 LoginService 的验证规则
 const formSchema = toTypedSchema(
     z.object({
-      username: z.string()
+      username: z.string({
+            required_error: LoginService.validationRules.username.messages.required
+          })
           .min(LoginService.validationRules.username.min, LoginService.validationRules.username.messages.min)
-          .max(LoginService.validationRules.username.max, LoginService.validationRules.username.messages.max),
-      password: z.string()
+          .max(LoginService.validationRules.username.max, LoginService.validationRules.username.messages.max)
+          .regex(LoginService.validationRules.username.pattern, LoginService.validationRules.username.messages.pattern),
+      password: z.string({
+            required_error: LoginService.validationRules.password.messages.required
+          })
           .min(LoginService.validationRules.password.min, LoginService.validationRules.password.messages.min)
           .max(LoginService.validationRules.password.max, LoginService.validationRules.password.messages.max)
     })

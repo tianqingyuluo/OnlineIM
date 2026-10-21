@@ -30,6 +30,10 @@ const formSchema = toTypedSchema(
           .max(
               RegisterService.validationRules.username.max,
               RegisterService.validationRules.username.messages.max
+          )
+          .regex(
+              RegisterService.validationRules.username.pattern,
+              RegisterService.validationRules.username.messages.pattern
           ),
       password: z.string({
         required_error: RegisterService.validationRules.password.messages.required
@@ -64,8 +68,12 @@ const { handleSubmit, setFieldError } = useForm({
 })
 
 const onSubmit = handleSubmit(async (values) => {
-  await RegisterService.register(values, { setFieldError })
-  await router.push('/login') // 注册成功后跳转到登录页
+  const registered = await RegisterService.register(values, {
+    setFieldError: (field, message) => setFieldError(field as 'username' | 'password' | 'confirmPassword', message)
+  })
+  if (registered) {
+    await router.push('/login')
+  }
 })
 </script>
 

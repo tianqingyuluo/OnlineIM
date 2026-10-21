@@ -59,9 +59,11 @@ async function handleSendMessage() {
     listStore.conversations.push(newConversation);
     router.push(`/main/chat/group/${newConversation.conversation_id}`);
     
-  } catch (error) {
+  } catch (error: any) {
     console.error('创建会话失败:', error);
-    toast.error('会话创建失败');
+    if (error?.status !== 400 && error?.status !== 403) {
+      toast.error(error?.message || '会话创建失败');
+    }
   }
 }
 </script>

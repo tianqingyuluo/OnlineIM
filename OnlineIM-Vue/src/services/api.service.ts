@@ -76,7 +76,7 @@ api.interceptors.response.use(
 
     const { status, data } = error.response;
     const errorCode = data?.code || `HTTP_${status}`;
-    const errorMessage = data?.message || error.message || '请求处理失败';
+    const errorMessage = readErrorMessage(data, error.message);
 
     // 统一错误格式
     const normalizedError = {
@@ -88,9 +88,13 @@ api.interceptors.response.use(
     };
 
 
+    if (status === 400 || status === 403) {
+      toast.error(errorMessage);
+    }
+
     switch (status) {
       // case 400:
-      //   // 不需要toast，由调用方处理字段级错误
+      //   // 已在上方用后端 message 提示
       //   break;
       //
       // case 401:
@@ -145,5 +149,15 @@ export const http = {
   patch: <T>(url: string, data?: any, config?: any) => api.patch<T>(url, data, config),
   delete: <T>(url: string, config?: any) => api.delete<T>(url, config),
 };
+
+function readErrorMessage(data: { message?: unknown; error?: unknown } | undefined, fallback?: string): string {
+  if (typeof data?.message === 'string' && data.message.trim()) {
+    return data.message;
+  }
+  if (typeof data?.error === 'string' && data.error.trim()) {
+    return data.error;
+  }
+  return fallback || '请求处理失败';
+}
 
 export default api;

@@ -9,19 +9,23 @@ import { UAParser } from 'ua-parser-js';
 export const LoginService = {
     validationRules: {
         username: {
-            min: 2,
-            max: 20,
+            min: 4,
+            max: 16,
+            pattern: /^[a-zA-Z0-9_]+$/,
             messages: {
-                min: '用户名至少2个字符',
-                max: '用户名不能超过20个字符'
+                min: '用户名长度必须在4-16之间',
+                max: '用户名长度必须在4-16之间',
+                pattern: '用户名只能包含字母、数字和下划线',
+                required: '用户名不能为空'
             }
         },
         password: {
             min: 6,
             max: 20,
             messages: {
-                min: '密码至少需要6位',
-                max: '密码不能超过20位'
+                min: '密码长度必须在6-20之间',
+                max: '密码长度必须在6-20之间',
+                required: '密码不能为空'
             }
         }
     },
@@ -70,6 +74,10 @@ export const LoginService = {
             }
             return response;
         } catch (error: any) {
+            if (error?.status === 400 || error?.status === 403) {
+                return;
+            }
+            toast.error(error?.message || '登录失败');
         }
     }
 };
