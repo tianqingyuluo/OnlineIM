@@ -238,6 +238,7 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 | `client_message_id` | string | 客户端幂等键 |
 | `reply_to` | object/null | 服务端生成的单层引用快照；状态契约见“引用回复协议” |
 | `at_users` | string[]/null | 群聊 @提及 的成员 ID（服务端清洗后）；见“群聊 @提及” |
+| `forwarded_from` | object/null | 逐条转发产生的消息：`{user_id, display_name}` 原作者；见“消息转发” |
 
 旧 `status` 字段保留，用于兼容历史撤回语义；新客户端优先使用 `delivery_state`。
 
@@ -373,7 +374,7 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
   "name": "跳舞", "mime": "image/gif", "size": 48213, "width": 240, "height": 240, "animated": true }
 ```
 
-`ext` 为同样的字段。私聊/群聊 WS 与 `POST /api/v1/messages` 都支持；历史、同步、上下文返回同一 `content`，表情被删除后历史消息仍可显示。别人的表情不能直接转发，需先“添加到表情”。
+`ext` 为同样的字段。私聊/群聊 WS 与 `POST /api/v1/messages` 都支持；历史、同步、上下文返回同一 `content`，表情被删除后历史消息仍可显示。直接发送别人的 `emoji_id` 会被拒绝，需先“添加到表情”；转发已有的表情消息不受此限（按引用复用，见“消息转发”）。
 
 会话预览与引用预览均为 `[表情]`。Web 端表情消息不套气泡，按原比例显示（长边 ≤ 140px），GIF 自动播放；右键（手机长按）图片或表情消息可“添加到表情”。
 
@@ -418,6 +419,72 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 
 本步不实现。预留位置：前端 `src/utils/mention.ts` 的 `MENTION_ALL_ID = 'all'`，服务端 `MentionUtil.sanitize`（当前把 `all` 当作非成员剔除）。后续加入权限 / 频次判断后在服务端展开为全体成员或单独标记。
 
+## 消息转发
+
+登记任务：v1-message-forward（Step 6）。转发走 HTTP，不新增 WS 帧类型：服务端为每个目标会话生成普通消息，接收方仍收到标准的 `PRIVATE_MESSAGE_RESPONSE` / `GROUP_MESSAGE_RESPONSE`。
+
+### 请求 `POST /api/v1/messages/forward`
+
+```json
+{ "source_conversation_id": "conv_xxx",
+  "message_ids": ["msg_1", "msg_2"],
+  "targets": ["usr_friend", "grp_xxx"],
+  "mode": "separate",
+  "client_request_id": "fwd_3f2c..." }
+```
+
+| 字段 | 说明 |
+|------|------|
+| `source_conversation_id` | 来源会话：私聊 `conv_…` 或群 `grp_…` |
+| `message_ids` | 来源消息 ID，去重后按 `seq_id` 排序转发 |
+| `targets` | 好友 `user_id` 或已加入的群 `group_id`，去重 |
+| `mode` | `separate`（逐条，默认）或 `merged`（合并为一条聊天记录） |
+| `client_request_id` | 可选幂等键（`[A-Za-z0-9_-]{1,64}`）。同一键重试返回已生成的消息，不重复投递；新消息的 `client_message_id` 为 `fwd:{client_request_id}:{target}:{原消息ID或merged}` |
+
+响应：
+
+```json
+{ "mode": "separate",
+  "results": [ { "target_id": "usr_friend", "conversation_id": "conv_yyy", "messages": [ { "message_id": "msg_9", "forwarded_from": { "user_id": "usr_a", "display_name": "小明" }, "...": "..." } ] } ] }
+```
+
+`messages` 与历史接口格式相同；客户端据此立即显示并更新会话列表。
+
+### 校验（整体校验，任一失败则不产生任何消息）
+
+| 情况 | 状态码 |
+|------|--------|
+| `mode` 不支持、消息或目标为空、超出上限（目标 > 9、逐条 > 30、合并 > 100）、转发给自己、目标前缀不是 `usr_`/`grp_`、消息类型不可转发、合并内容超过 512K 字符 | 400 |
+| 转发者不是来源会话参与者（群：当前成员；私聊：自己有该会话记录且是收发一方） | 403 |
+| 目标不是好友 / 不是自己所在的群 | 403 |
+| 某条消息不存在或不属于来源会话 | 404 |
+| 某条消息已撤回 | 409 |
+
+可转发类型：`text`、`image`、`file`、`voice`/`audio`、`video`、`emoji`/`sticker`、`chat_record`。
+
+### 内容
+
+- **逐条**：每条来源消息在每个目标里成为一条新消息，`message_type` 与 `content` 保持不变；发送者是转发者。媒体按引用复用（不复制对象）：`content` 中 `file_id` 对应的上传记录存在时由服务端重新生成元数据（`url`、尺寸、时长等），否则沿用源消息里服务端生成的内容；表情消息原样复用。不带引用（`reply_to`）与 @（`at_users`），转发到群不会 @ 任何人。
+- **溯源**：逐条转发的消息带 `forwarded_from: {user_id, display_name}`（原作者；转发链上保留最初作者）。来源会话 ID / 原消息 ID 只在服务端保存，不返回给目标会话。
+- **合并**：每个目标生成一条 `message_type: "chat_record"` 消息，`content` 为 JSON 字符串：
+
+```json
+{ "title": "小明和小红的聊天记录", "count": 2,
+  "items": [ { "sender_id": "usr_a", "sender_name": "小明", "sender_avatar": "/…", "message_type": "text",
+               "content": "你好", "timestamp": "2026-10-21T16:05:00.000Z", "forwarded_from": { "user_id": "…", "display_name": "…" } } ] }
+```
+
+  标题：私聊为“转发者和对方的聊天记录”，群聊为“群聊“群名”的聊天记录”。`items[].content` 与原消息 `content` 同格式（媒体已刷新元数据，可嵌套 `chat_record`）。`ext.record_count` 为条数。
+
+会话列表预览与引用预览：`chat_record` 为 `[聊天记录]`；逐条转发的预览与普通消息相同。
+
+### Web 端
+
+- 消息右键（手机长按）菜单：“转发”（单条，逐条方式）与“多选”。
+- 多选模式：点选消息（已撤回、发送中/失败的消息不可选），底栏“逐条转发 / 合并转发 / 取消”。
+- 目标选择器：好友（备注 / 昵称 / 用户名）与已加入的群，支持搜索与多选（最多 9 个）；手机全屏显示。
+- 逐条转发的消息气泡上方显示“转发自 原作者”；聊天记录显示为卡片（标题 + 前 3 条摘要 + 条数），点开查看全部内容，记录中的图片 / 文件 / 语音 / 表情 / 嵌套记录可正常查看。
+
 ## 撤回事件与引用联动
 
 当前撤回发送方确认 `RECALL_MESSAGE_RESPONSE` 与接收方通知 `MESSAGE_RECALLED` 沿用既有顶层字段格式，而不是标准 `message` 信封；Web 客户端兼容两种解析方式。
@@ -460,3 +527,6 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 |------|--------|------|
 | `websocket.heartbeat.interval` | `30s` | 心跳发送间隔 / 服务端清理间隔 |
 | `websocket.heartbeat.timeout` | `90s` | 心跳超时阈值（超过此时间无入站帧则判定死连接）|
+| `im.forward.max-targets` | `9` | 一次转发的目标会话上限 |
+| `im.forward.max-messages` | `30` | 逐条转发的消息条数上限 |
+| `im.forward.max-merged-messages` | `100` | 合并转发的消息条数上限 |
