@@ -11,6 +11,8 @@ import java.time.Duration;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class LocalSessionRegistryTest {
@@ -32,7 +34,7 @@ class LocalSessionRegistryTest {
         return WebSocketSession.builder()
                 .connectionId(connectionId)
                 .userId(userId)
-                .deviceId("dev_" + userId)
+                .deviceId("dev_" + connectionId)
                 .token("tok_" + userId)
                 .socket(mockSocket)
                 .build();
@@ -181,5 +183,68 @@ class LocalSessionRegistryTest {
         registry.register(createSession("conn_1", "usr_1"));
 
         assertFalse(registry.hasUserOnline(java.util.List.of("usr_2")));
+    }
+
+    @Test
+    void oneUserCanKeepASessionPerDevice() {
+        registry.register(session("conn_web", "usr_1", "web-1"));
+        registry.register(session("conn_phone", "usr_1", "phone-1"));
+
+        assertEquals(2, registry.getAllByUserId("usr_1").size());
+        assertEquals(2, registry.getOnlineCount());
+
+        registry.unregister("conn_web");
+
+        assertEquals(1, registry.getAllByUserId("usr_1").size());
+        assertEquals("conn_phone", registry.getByUserId("usr_1").getConnectionId());
+        assertNotNull(registry.getByConnectionId("conn_phone"));
+    }
+
+    @Test
+    void replacingTheSameDeviceDoesNotDropTheOtherDevice() {
+        WebSocketSession web = session("conn_web", "usr_1", "web-1");
+        registry.register(web);
+        registry.register(session("conn_phone", "usr_1", "phone-1"));
+        registry.register(session("conn_web_2", "usr_1", "web-1"));
+
+        assertEquals(2, registry.getOnlineCount());
+        assertNull(registry.getByConnectionId("conn_web"));
+        assertNotNull(registry.getByConnectionId("conn_web_2"));
+        assertNotNull(registry.getByConnectionId("conn_phone"));
+        verify(web.getSocket()).close((short) 4000, "replaced");
+    }
+
+    @Test
+    void kickingOneDeviceClosesOnlyThatDevicesConnections() {
+        java.util.List<String> removed = new java.util.ArrayList<>();
+        registry.addRemovalListener((userId, connectionId) -> removed.add(userId + ":" + connectionId));
+        WebSocketSession web = session("conn_web", "usr_1", "web-1");
+        WebSocketSession webAgain = session("conn_web_2", "usr_1", "web-1");
+        registry.register(web);
+        registry.register(session("conn_phone", "usr_1", "phone-1"));
+        // 同设备替换后只剩最新的网页连接；这里再挂一条同设备连接前，旧的已经被替换。
+        registry.register(webAgain);
+
+        assertTrue(registry.kickDevice("usr_1", "web-1", "{\"type\":\"SESSION_KICKED\"}"));
+
+        assertNull(registry.getByConnectionId("conn_web_2"));
+        assertNotNull(registry.getByConnectionId("conn_phone"));
+        assertTrue(registry.hasUserOnline(List.of("usr_1")));
+        assertTrue(removed.contains("usr_1:conn_web_2"));
+        assertFalse(removed.contains("usr_1:conn_phone"));
+        verify(webAgain.getSocket()).writeTextMessage(eq("{\"type\":\"SESSION_KICKED\"}"), any());
+    }
+
+    private WebSocketSession session(String connectionId, String userId, String deviceId) {
+        ServerWebSocket mockSocket = mock(ServerWebSocket.class);
+        when(mockSocket.isClosed()).thenReturn(false);
+        when(mockSocket.textHandlerID()).thenReturn("socket-" + connectionId);
+        return WebSocketSession.builder()
+                .connectionId(connectionId)
+                .userId(userId)
+                .deviceId(deviceId)
+                .token("tok")
+                .socket(mockSocket)
+                .build();
     }
 }

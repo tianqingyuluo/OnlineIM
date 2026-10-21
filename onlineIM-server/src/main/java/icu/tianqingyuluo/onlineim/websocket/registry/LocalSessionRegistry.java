@@ -12,41 +12,44 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * 本地WebSocket会话注册表
- * 管理当前服务实例上的所有WebSocket连接
- * 支持多层映射以便于快速查找会话
+ * 本地 WebSocket 会话注册表。
+ * 一个用户可以同时有多条连接。同一 deviceId 的新连接会替换旧连接（关闭码 4000），其他设备不受影响。
+ * 每摘掉一条连接都会通知监听器，在线状态只在该用户再没有连接时才变为离线。
  */
 @Slf4j
 @Component
 public class LocalSessionRegistry {
 
     /**
-     * connectionId -> WebSocketSession 映射
-     * connectionId为全局唯一ID，用于横向扩展时的路由
+     * connectionId -> WebSocketSession
      */
     private final ConcurrentMap<String, WebSocketSession> sessionMap = new ConcurrentHashMap<>();
 
     /**
-     * socketId -> connectionId 映射
-     * socketId是Vert.x WebSocket的内部标识
+     * socketId -> connectionId
      */
     private final ConcurrentMap<String, String> socketIdToConnectionId = new ConcurrentHashMap<>();
 
     /**
-     * userId -> connectionId 映射
-     * 指向该用户最近登记的一条连接，供仍按“一个用户一条连接”投递消息的路径使用
+     * userId -> connectionId
+     * 指向该用户最近登记的一条连接，供仍按“一个用户一条连接”查询的路径使用
      */
     private final ConcurrentMap<String, String> userIdToConnectionId = new ConcurrentHashMap<>();
 
     /**
-     * userId -> 该用户在本节点上的全部 connectionId。
-     * 多个标签页 / 设备各占一条；关掉其中一条不能把整个用户拆掉。
+     * userId -> 该用户在本节点上的全部 connectionId
      */
     private final ConcurrentMap<String, Set<String>> userConnections = new ConcurrentHashMap<>();
+
+    /**
+     * userId -> (deviceId -> 该设备当前的 connectionId)
+     * 同一设备只留最新的一条；不同设备可以同时在线。
+     */
+    private final ConcurrentMap<String, ConcurrentMap<String, Set<String>>> userDevices = new ConcurrentHashMap<>();
 
     private final List<SessionRemovalListener> removalListeners = new CopyOnWriteArrayList<>();
 
@@ -68,9 +71,6 @@ public class LocalSessionRegistry {
         log.info("心跳超时清理调度器已启动: 间隔={}, 超时阈值={}", heartbeatInterval, heartbeatTimeout);
     }
 
-    /**
-     * 定时清理超时和失效会话
-     */
     private void scheduledCleanup() {
         try {
             cleanupInactiveSessions(heartbeatTimeout.toMillis());
@@ -80,8 +80,7 @@ public class LocalSessionRegistry {
     }
 
     /**
-     * 注册WebSocket会话
-     * @param session WebSocket会话对象
+     * 注册 WebSocket 会话。同一 deviceId 的旧连接会被替换并关闭（关闭码 4000），不注销账号。
      */
     public void register(WebSocketSession session) {
         if (session == null || session.getConnectionId() == null) {
@@ -93,19 +92,44 @@ public class LocalSessionRegistry {
         String socketId = session.getSocketId();
         String userId = session.getUserId();
 
-        // 注册到各映射表
         sessionMap.put(connectionId, session);
-        
+
         if (socketId != null) {
             socketIdToConnectionId.put(socketId, connectionId);
         }
-        
+
         if (userId != null) {
             userConnections.computeIfAbsent(userId, key -> ConcurrentHashMap.newKeySet()).add(connectionId);
             userIdToConnectionId.put(userId, connectionId);
+            String deviceKey = deviceKey(session);
+            Set<String> deviceConnections = userDevices
+                    .computeIfAbsent(userId, key -> new ConcurrentHashMap<>())
+                    .computeIfAbsent(deviceKey, key -> ConcurrentHashMap.newKeySet());
+            List<String> replaced = new ArrayList<>();
+            for (String existing : deviceConnections) {
+                if (!existing.equals(connectionId)) {
+                    replaced.add(existing);
+                }
+            }
+            deviceConnections.add(connectionId);
+            for (String previous : replaced) {
+                deviceConnections.remove(previous);
+                replacePreviousConnection(previous);
+            }
         }
 
-        log.info("WebSocket会话已注册: connectionId={}, userId={}", connectionId, userId);
+        log.info("WebSocket会话已注册: connectionId={}, userId={}, deviceId={}",
+                connectionId, userId, session.getDeviceId());
+    }
+
+    private void replacePreviousConnection(String previousConnectionId) {
+        WebSocketSession previous = sessionMap.remove(previousConnectionId);
+        if (previous == null) {
+            return;
+        }
+        previous.close((short) 4000, "replaced");
+        detach(previous, true);
+        log.info("同设备旧连接已替换: connectionId={}, userId={}", previousConnectionId, previous.getUserId());
     }
 
     public void addRemovalListener(SessionRemovalListener listener) {
@@ -115,8 +139,7 @@ public class LocalSessionRegistry {
     }
 
     /**
-     * 通过connectionId注销会话
-     * @param connectionId 连接ID
+     * 通过 connectionId 注销会话。只移除这条连接，并通知在线状态。
      */
     public void unregister(String connectionId) {
         WebSocketSession session = sessionMap.remove(connectionId);
@@ -127,31 +150,27 @@ public class LocalSessionRegistry {
     }
 
     /**
-     * 通过socketId和userId注销会话
-     * @param socketId WebSocket内部标识
-     * @param userId 用户ID
+     * 通过 socketId 注销会话。找不到这条连接时不会清掉该用户的其他设备。
      */
     public void unregisterBySocketId(String socketId, String userId) {
-        String connectionId = socketIdToConnectionId.get(socketId);
+        String connectionId = socketId == null ? null : socketIdToConnectionId.get(socketId);
         if (connectionId != null) {
             unregister(connectionId);
-        } else if (userId != null) {
-            // 备用方案：通过userId查找并注销
-            String connId = userIdToConnectionId.get(userId);
-            if (connId != null) {
-                unregister(connId);
+            return;
+        }
+        if (userId == null || socketId == null) {
+            return;
+        }
+        for (WebSocketSession session : getSessionsByUserId(userId)) {
+            if (socketId.equals(session.getSocketId())) {
+                unregister(session.getConnectionId());
+                return;
             }
         }
     }
 
-    /**
-     * 通过connectionId获取会话
-     * @param connectionId 连接ID
-     * @return WebSocket会话，如果不存在或已失效则返回null
-     */
     public WebSocketSession getByConnectionId(String connectionId) {
         WebSocketSession session = sessionMap.get(connectionId);
-        // 验证会话是否有效
         if (session != null && session.isActive()) {
             return session;
         }
@@ -159,9 +178,7 @@ public class LocalSessionRegistry {
     }
 
     /**
-     * 通过userId获取会话
-     * @param userId 用户ID
-     * @return WebSocket会话，如果不存在或已失效则返回null
+     * 通过 userId 获取任意一条仍有效的会话。
      */
     public WebSocketSession getByUserId(String userId) {
         String connectionId = userIdToConnectionId.get(userId);
@@ -178,7 +195,7 @@ public class LocalSessionRegistry {
     }
 
     /**
-     * 该用户在本节点上的全部活跃连接。presence 推送要扇出到每个标签页。
+     * 该用户在本节点上的全部活跃连接。在线状态、草稿和消息都要扇出到每一条。
      */
     public List<WebSocketSession> getSessionsByUserId(String userId) {
         Set<String> connectionIds = userId == null ? null : userConnections.get(userId);
@@ -196,19 +213,54 @@ public class LocalSessionRegistry {
     }
 
     /**
-     * 通过userId获取connectionId
-     * @param userId 用户ID
-     * @return 连接ID，如果不存在则返回null
+     * 与 {@link #getSessionsByUserId} 相同。没有连接时返回空列表，不返回 null。
      */
-    public String getConnectionIdByUserId(String userId) {
-        return userIdToConnectionId.get(userId);
+    public List<WebSocketSession> getAllByUserId(String userId) {
+        return getSessionsByUserId(userId);
     }
 
     /**
-     * 检查用户列表中是否有用户在当前实例上有连接
-     * @param userIds 用户ID列表
-     * @return 是否有用户在线
+     * 向指定设备的全部连接发送挤下线帧并关闭（关闭码 4001）。
+     * 其他设备的连接保留，在线状态只在一条都不剩时才变为离线。
      */
+    public boolean kickDevice(String userId, String deviceId, String frameJson) {
+        List<WebSocketSession> targets = sessionsOfDevice(userId, deviceId);
+        if (targets.isEmpty()) {
+            return false;
+        }
+        for (WebSocketSession session : targets) {
+            if (session.isActive()) {
+                session.sendThenClose(frameJson, (short) 4001, "kicked");
+            }
+            unregister(session.getConnectionId());
+        }
+        return true;
+    }
+
+    /**
+     * 安静关闭某设备的全部连接（主动登出）。不发送挤下线文案。
+     */
+    public void closeDevice(String userId, String deviceId) {
+        for (WebSocketSession session : sessionsOfDevice(userId, deviceId)) {
+            unregister(session.getConnectionId());
+            session.close();
+        }
+    }
+
+    public WebSocketSession findByDevice(String userId, String deviceId) {
+        for (WebSocketSession session : sessionsOfDevice(userId, deviceId)) {
+            if (session.isActive()) {
+                return session;
+            }
+        }
+        return null;
+    }
+
+    public String getConnectionIdByUserId(String userId) {
+        WebSocketSession session = getByUserId(userId);
+        return session == null ? null : session.getConnectionId();
+    }
+
     public boolean hasUserOnline(List<String> userIds) {
         if (userIds == null || userIds.isEmpty()) {
             return false;
@@ -216,25 +268,16 @@ public class LocalSessionRegistry {
         return userIds.stream().anyMatch(userId -> getByUserId(userId) != null);
     }
 
-    /**
-     * 获取当前在线连接数
-     * @return 连接数量
-     */
     public int getOnlineCount() {
         return sessionMap.size();
     }
 
-    /**
-     * 清理所有失效的会话
-     * 判据：socket 已关闭（isActive==false）或 心跳超时（lastActiveAt 超过阈值）
-     */
     public void cleanupInactiveSessions() {
         cleanupInactiveSessions(heartbeatTimeout.toMillis());
     }
 
     /**
-     * 清理所有失效的会话
-     * @param timeoutMs 心跳超时阈值（毫秒）
+     * 清理失效会话。只摘掉超时的那条连接，保留同一用户的其他设备，并通知在线状态。
      */
     public void cleanupInactiveSessions(long timeoutMs) {
         sessionMap.entrySet().removeIf(entry -> {
@@ -244,18 +287,45 @@ public class LocalSessionRegistry {
 
             if (inactive || heartbeatTimeout) {
                 if (heartbeatTimeout && !inactive) {
-                    // 心跳超时但 socket 未关闭，主动 close
                     session.close();
                     log.info("心跳超时断连: connectionId={}, userId={}, lastActiveAt={}",
                             entry.getKey(), session.getUserId(), session.getLastActiveAt());
                 }
-
                 detach(session, true);
                 log.info("清理失效会话: connectionId={}, userId={}", entry.getKey(), session.getUserId());
                 return true;
             }
             return false;
         });
+    }
+
+    private List<WebSocketSession> sessionsOfDevice(String userId, String deviceId) {
+        if (userId == null || deviceId == null) {
+            return List.of();
+        }
+        ConcurrentMap<String, Set<String>> devices = userDevices.get(userId);
+        if (devices == null) {
+            return List.of();
+        }
+        Set<String> connectionIds = devices.get(deviceId);
+        if (connectionIds == null || connectionIds.isEmpty()) {
+            return List.of();
+        }
+        List<WebSocketSession> sessions = new ArrayList<>();
+        for (String connectionId : new ArrayList<>(connectionIds)) {
+            WebSocketSession session = sessionMap.get(connectionId);
+            if (session != null) {
+                sessions.add(session);
+            }
+        }
+        return sessions;
+    }
+
+    private static String deviceKey(WebSocketSession session) {
+        if (session.getDeviceId() != null && !session.getDeviceId().isBlank()) {
+            return session.getDeviceId();
+        }
+        return session.getConnectionId();
     }
 
     /**
@@ -280,6 +350,19 @@ public class LocalSessionRegistry {
                 }
             } else if (connectionId.equals(userIdToConnectionId.get(userId))) {
                 userIdToConnectionId.remove(userId);
+            }
+            ConcurrentMap<String, Set<String>> devices = userDevices.get(userId);
+            if (devices != null) {
+                Set<String> deviceConnections = devices.get(deviceKey(session));
+                if (deviceConnections != null) {
+                    deviceConnections.remove(connectionId);
+                    if (deviceConnections.isEmpty()) {
+                        devices.remove(deviceKey(session), deviceConnections);
+                    }
+                }
+                if (devices.isEmpty()) {
+                    userDevices.remove(userId, devices);
+                }
             }
         }
         if (notify && userId != null && connectionId != null) {

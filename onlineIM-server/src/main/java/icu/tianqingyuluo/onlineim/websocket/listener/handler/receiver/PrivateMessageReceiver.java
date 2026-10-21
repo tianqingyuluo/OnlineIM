@@ -5,6 +5,7 @@ import icu.tianqingyuluo.onlineim.pojo.document.PrivateMessage;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageResponse;
 import icu.tianqingyuluo.onlineim.service.MessageService;
 import icu.tianqingyuluo.onlineim.websocket.registry.LocalSessionRegistry;
+import icu.tianqingyuluo.onlineim.websocket.registry.SessionDelivery;
 import icu.tianqingyuluo.onlineim.websocket.session.WebSocketSession;
 import icu.tianqingyuluo.onlineim.websocket.event.WebSocketMessageEvent;
 import lombok.extern.slf4j.Slf4j;
@@ -82,18 +83,25 @@ public class PrivateMessageReceiver implements MessageReceiverHandler {
             response.put("type", "PRIVATE_MESSAGE_RESPONSE");
             response.put("message", messageResponse);
             
-            // 向接收者发送消息
-            WebSocketSession receiverSession = sessionRegistry.getByUserId(privateMessage.getReceiverId());
-            if (receiverSession != null && receiverSession.isActive()) {
-                String responseJson = objectMapper.writeValueAsString(response);
-                receiverSession.sendMessage(responseJson);
-                log.debug("已向接收者 {} 发送新消息", privateMessage.getReceiverId());
+            // 接收者的每一台在线设备都收到；发送者的其他设备也收到，这样自己发出的消息会出现在同时在线的另一端
+            String responseJson = objectMapper.writeValueAsString(response);
+            deliver(privateMessage.getReceiverId(), responseJson);
+            if (privateMessage.getSenderId() != null
+                    && !privateMessage.getSenderId().equals(privateMessage.getReceiverId())) {
+                deliver(privateMessage.getSenderId(), responseJson);
             }
+            log.debug("已向接收者 {} 及发送者的其他设备发送新消息", privateMessage.getReceiverId());
             
             return true;
         } catch (Exception e) {
             log.error("处理私聊消息异常: {}", e.getMessage(), e);
             return false;
+        }
+    }
+
+    private void deliver(String userId, String responseJson) {
+        for (WebSocketSession session : SessionDelivery.of(sessionRegistry, userId)) {
+            session.sendMessage(responseJson);
         }
     }
 }

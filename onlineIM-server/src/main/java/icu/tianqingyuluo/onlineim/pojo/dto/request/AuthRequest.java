@@ -28,4 +28,10 @@ public class AuthRequest {
 
     @JsonProperty("device_id")
     private String deviceId;
+
+    /**
+     * 设备类型：web / desktop / phone。缺省按 web。
+     */
+    @JsonProperty("device_type")
+    private String deviceType;
 }

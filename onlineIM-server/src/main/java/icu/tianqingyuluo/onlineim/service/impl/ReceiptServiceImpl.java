@@ -135,7 +135,11 @@ public class ReceiptServiceImpl implements ReceiptService {
             if (!isWithinLatestSeq(conversationId, readSeq)) {
                 return false;
             }
-            List<String> targets = readTargets(conversationId, readerId);
+            List<String> targets = new ArrayList<>(readTargets(conversationId, readerId));
+            // 阅读者自己的其他在线设备也要收到，才能同步未读和已读游标
+            if (!targets.contains(readerId)) {
+                targets.add(readerId);
+            }
 
             boolean changed = readStateService.advanceRead(
                     conversationId, readerId,

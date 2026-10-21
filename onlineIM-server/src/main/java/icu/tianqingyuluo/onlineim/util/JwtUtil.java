@@ -76,6 +76,13 @@ public class JwtUtil {
     }
 
     /**
+     * 设备类型 claim。旧令牌没有该字段时返回 null，由调用方按 web 处理。
+     */
+    public String getDeviceTypeFromToken(String token) {
+        return getClaimFromToken(token, claims -> claims.get("devicetype", String.class));
+    }
+
+    /**
      * 从令牌中获取过期日期
      */
     public Date getExpirationDateFromToken(String token) {
@@ -113,10 +120,20 @@ public class JwtUtil {
      * 为指定用户生成令牌
      */
     public String generateToken(UserDetails userDetails, String deviceId) {
+        return generateToken(userDetails, deviceId, null);
+    }
+
+    /**
+     * @param deviceType web / desktop / phone，写入 devicetype claim；空则不写（兼容旧调用）
+     */
+    public String generateToken(UserDetails userDetails, String deviceId, String deviceType) {
         Map<String, Object> claims = new HashMap<>();
         if (userDetails instanceof UserIDProvider) {
             claims.put("userid", ((UserIDProvider)userDetails).getID());
             claims.put("deviceid", deviceId);
+            if (deviceType != null && !deviceType.isBlank()) {
+                claims.put("devicetype", DeviceTypes.normalize(deviceType));
+            }
         }
         else log.error("UserDetails 未实现 UserIdProvider 接口, userId claim 将不会被添加");
         return doGenerateToken(claims, userDetails.getUsername());

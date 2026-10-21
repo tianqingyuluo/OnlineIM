@@ -59,6 +59,7 @@ public class WebSocketAuthenticator {
             String username = jwtUtil.getUsernameFromToken(actualToken);
             String userId = jwtUtil.getUserIDFromToken(actualToken);
             String deviceId = jwtUtil.getDeviceIDFromToken(actualToken);
+            String deviceType = jwtUtil.getDeviceTypeFromToken(actualToken);
 
             // 加载用户详情
             UserDetails userDetails = userDetailsService.loadUserByUsername(username);
@@ -68,7 +69,7 @@ public class WebSocketAuthenticator {
                 long remainingTime = jwtUtil.getRemainingValidityTime(actualToken);
                 
                 log.info("WebSocket认证成功: username={}, userId={}", username, userId);
-                return AuthResult.success(username, userId, deviceId, actualToken, remainingTime);
+                return AuthResult.success(username, userId, deviceId, deviceType, actualToken, remainingTime);
             } else {
                 log.warn("WebSocket认证失败: JWT令牌无效");
                 return AuthResult.failure("JWT令牌无效");
@@ -131,6 +132,11 @@ public class WebSocketAuthenticator {
          * 设备ID
          */
         private final String deviceId;
+
+        /**
+         * 设备类型：web / desktop / phone。旧令牌可能为空。
+         */
+        private final String deviceType;
         
         /**
          * JWT令牌
@@ -150,16 +156,21 @@ public class WebSocketAuthenticator {
         /**
          * 创建成功结果
          */
-        public static AuthResult success(String username, String userId, String deviceId, 
+        public static AuthResult success(String username, String userId, String deviceId,
                                          String token, long remainingTimeMillis) {
-            return new AuthResult(true, username, userId, deviceId, token, remainingTimeMillis, null);
+            return success(username, userId, deviceId, null, token, remainingTimeMillis);
+        }
+
+        public static AuthResult success(String username, String userId, String deviceId, String deviceType,
+                                         String token, long remainingTimeMillis) {
+            return new AuthResult(true, username, userId, deviceId, deviceType, token, remainingTimeMillis, null);
         }
 
         /**
          * 创建失败结果
          */
         public static AuthResult failure(String reason) {
-            return new AuthResult(false, null, null, null, null, 0, reason);
+            return new AuthResult(false, null, null, null, null, null, 0, reason);
         }
     }
 }

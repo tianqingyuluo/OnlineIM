@@ -1,8 +1,8 @@
 package icu.tianqingyuluo.onlineim.websocket.server;
 
 import icu.tianqingyuluo.onlineim.config.ServerIdentity;
+import icu.tianqingyuluo.onlineim.service.DeviceSessionService;
 import icu.tianqingyuluo.onlineim.service.PresenceService;
-import icu.tianqingyuluo.onlineim.service.UserSessionService;
 import icu.tianqingyuluo.onlineim.websocket.handler.WebSocketAuthenticator;
 import icu.tianqingyuluo.onlineim.websocket.handler.WebSocketMessageRouter;
 import icu.tianqingyuluo.onlineim.websocket.registry.LocalSessionRegistry;
@@ -26,7 +26,7 @@ class VertxWebSocketServerTest {
     private final WebSocketAuthenticator authenticator = mock(WebSocketAuthenticator.class);
     private final WebSocketMessageRouter messageRouter = mock(WebSocketMessageRouter.class);
     private final LocalSessionRegistry sessionRegistry = mock(LocalSessionRegistry.class);
-    private final UserSessionService userSessionService = mock(UserSessionService.class);
+    private final DeviceSessionService deviceSessionService = mock(DeviceSessionService.class);
     private final RedisTemplate<String, Object> redisTemplate = mock(RedisTemplate.class);
     @SuppressWarnings("unchecked")
     private final StreamOperations<String, Object, Object> streamOperations = mock(StreamOperations.class);
@@ -44,7 +44,7 @@ class VertxWebSocketServerTest {
         when(serverIdentity.getServerId()).thenReturn(SERVER_ID);
 
         server = new VertxWebSocketServer(authenticator, messageRouter, sessionRegistry,
-                userSessionService, redisTemplate, serverIdentity, mock(PresenceService.class));
+                deviceSessionService, redisTemplate, serverIdentity, mock(PresenceService.class));
     }
 
     @Test

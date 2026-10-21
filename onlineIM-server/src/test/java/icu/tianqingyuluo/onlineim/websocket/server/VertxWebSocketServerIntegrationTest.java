@@ -3,6 +3,7 @@ package icu.tianqingyuluo.onlineim.websocket.server;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import icu.tianqingyuluo.onlineim.config.ServerIdentity;
+import icu.tianqingyuluo.onlineim.service.DeviceSessionService;
 import icu.tianqingyuluo.onlineim.service.PresenceService;
 import icu.tianqingyuluo.onlineim.service.UserSessionService;
 import icu.tianqingyuluo.onlineim.websocket.handler.HeartbeatHandler;
@@ -74,7 +75,7 @@ class VertxWebSocketServerIntegrationTest {
                 heartbeatHandler
         );
         server = new VertxWebSocketServer(
-                authenticator, messageRouter, sessionRegistry, userSessionService, redisTemplate, serverIdentity,
+                authenticator, messageRouter, sessionRegistry, mock(DeviceSessionService.class), redisTemplate, serverIdentity,
                 mock(PresenceService.class)
         );
         ReflectionTestUtils.setField(server, "port", 0);

@@ -6,6 +6,7 @@ import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageResponse;
 import icu.tianqingyuluo.onlineim.service.MessageEditService;
 import icu.tianqingyuluo.onlineim.websocket.event.WebSocketMessageEvent;
 import icu.tianqingyuluo.onlineim.websocket.registry.LocalSessionRegistry;
+import icu.tianqingyuluo.onlineim.websocket.registry.SessionDelivery;
 import icu.tianqingyuluo.onlineim.websocket.session.WebSocketSession;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -56,8 +57,8 @@ public class EditMessageReceiver implements MessageReceiverHandler {
             List<String> receivers = event.getReceiverIDs() == null ? List.of() : event.getReceiverIDs();
             MessageResponse message = null;
             for (String userId : receivers) {
-                WebSocketSession session = sessionRegistry.getByUserId(userId);
-                if (session == null || !session.isActive()) {
+                List<WebSocketSession> sessions = SessionDelivery.of(sessionRegistry, userId);
+                if (sessions.isEmpty()) {
                     continue;
                 }
                 if (message == null) {
@@ -73,7 +74,10 @@ public class EditMessageReceiver implements MessageReceiverHandler {
                     frame.put("at_me", message.getMentionedUserIds() != null
                             && message.getMentionedUserIds().contains(userId));
                 }
-                session.sendMessage(objectMapper.writeValueAsString(frame));
+                String json = objectMapper.writeValueAsString(frame);
+                for (WebSocketSession session : sessions) {
+                    session.sendMessage(json);
+                }
             }
             return true;
         } catch (Exception e) {

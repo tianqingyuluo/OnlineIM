@@ -11,6 +11,7 @@ import icu.tianqingyuluo.onlineim.service.impl.ReceiptServiceImpl;
 import icu.tianqingyuluo.onlineim.websocket.event.RedisStreamEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -117,5 +118,29 @@ class ReceiptServiceImplTest {
                 .seqId("10")
                 .build()));
         verifyNoInteractions(redisStreamService);
+    }
+
+    @Test
+    void readReceiptIsAlsoDeliveredToTheReadersOtherDevices() {
+        when(conversationRepository.findByConversationIdAndUserId("conv_1", "usr_reader"))
+                .thenReturn(mock(icu.tianqingyuluo.onlineim.pojo.document.Conversation.class));
+        when(privateMessageRepository.findTopByConversationIdOrderBySeqIdDesc("conv_1"))
+                .thenReturn(PrivateMessage.builder()
+                        .conversationId("conv_1")
+                        .senderId("usr_sender")
+                        .receiverId("usr_reader")
+                        .seqId("10")
+                        .build());
+        when(readStateService.advanceRead("conv_1", "usr_reader", "private", "10")).thenReturn(true);
+
+        assertTrue(service.handleRead("usr_reader", ReadReceiptRequest.builder()
+                .conversationId("conv_1")
+                .readSeq("10")
+                .build()));
+
+        ArgumentCaptor<RedisStreamEvent> event = ArgumentCaptor.forClass(RedisStreamEvent.class);
+        verify(redisStreamService).publishMessage(event.capture());
+        assertTrue(event.getValue().getReceiverIDs().contains("usr_sender"));
+        assertTrue(event.getValue().getReceiverIDs().contains("usr_reader"));
     }
 }

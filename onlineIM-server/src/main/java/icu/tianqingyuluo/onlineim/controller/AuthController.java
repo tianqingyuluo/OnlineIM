@@ -6,9 +6,11 @@ import icu.tianqingyuluo.onlineim.pojo.dto.request.UserRegisterRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.AuthResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
 import icu.tianqingyuluo.onlineim.pojo.entity.User;
+import icu.tianqingyuluo.onlineim.service.DeviceSessionService;
 import icu.tianqingyuluo.onlineim.service.JwtService;
 import icu.tianqingyuluo.onlineim.service.UserService;
 import icu.tianqingyuluo.onlineim.service.impl.UserDetailsServiceImpl;
+import icu.tianqingyuluo.onlineim.util.DeviceTypes;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
@@ -44,16 +46,19 @@ public class AuthController {
 
     private final BCryptPasswordEncoder bCryptPasswordEncoder =  new BCryptPasswordEncoder();
     private final JwtService jwtService;
+    private final DeviceSessionService deviceSessionService;
 
     public AuthController(AuthenticationManager authenticationManager,
                           UserDetailsServiceImpl userDetailsService,
                           UserService userService,
-                          JwtUtil jwtUtil, JwtService jwtService) {
+                          JwtUtil jwtUtil, JwtService jwtService,
+                          DeviceSessionService deviceSessionService) {
         this.authenticationManager = authenticationManager;
         this.userDetailsService = userDetailsService;
         this.jwtUtil = jwtUtil;
         this.userService = userService;
         this.jwtService = jwtService;
+        this.deviceSessionService = deviceSessionService;
     }
 
     /**
@@ -90,11 +95,19 @@ public class AuthController {
         userInfo.put("nickname", briefResponse.getNickname());
         userInfo.put("avatar_url", briefResponse.getAvatarUrl());
 
-        // 生成JWT令牌
-        final String jwt = jwtUtil.generateToken(userDetails, authRequest.getDeviceId());
+        // 生成JWT令牌，并按设备类型挤掉同类型的旧会话
+        String deviceType = DeviceTypes.normalize(authRequest.getDeviceType());
+        String deviceId = DeviceTypes.sanitizeDeviceId(authRequest.getDeviceId());
+        if (deviceId == null) {
+            deviceId = deviceType + "-" + IdUtil.fastSimpleUUID();
+        }
+        final String jwt = jwtUtil.generateToken(userDetails, deviceId, deviceType);
+        deviceSessionService.onLogin(briefResponse.getUserId(), deviceId, deviceType, "Bearer " + jwt);
         response.put("access_token", jwt);
         response.put("expires_in", JwtUtil.GET_EXPIRE_TIME());
         response.put("user_info", userInfo);
+        response.put("device_id", deviceId);
+        response.put("device_type", deviceType);
 
         // 返回JWT令牌
         return ResponseEntity.ok(response);
@@ -159,9 +172,13 @@ public class AuthController {
         Map<String, String> response = new HashMap<>();
         String username = jwtUtil.getUsernameFromToken(token);
         String deviceId = jwtUtil.getDeviceIDFromToken(token);
+        String deviceType = jwtUtil.getDeviceTypeFromToken(token);
+        String userId = jwtUtil.getUserIDFromToken(token);
         jwtService.invalidateJWT(token);
         final UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-        response.put("access_token", jwtUtil.generateToken(userDetails, deviceId));
+        String accessToken = jwtUtil.generateToken(userDetails, deviceId, deviceType);
+        deviceSessionService.replaceToken(userId, deviceId, "Bearer " + accessToken);
+        response.put("access_token", accessToken);
         response.put("expires_in", JwtUtil.GET_EXPIRE_TIME());
         return ResponseEntity.ok(response);
     }
@@ -172,6 +189,11 @@ public class AuthController {
      */
     @PostMapping("/logout")
     public ResponseEntity<Map<String, String>> logout(@RequestHeader(value = "Authorization") String token) {
+        try {
+            deviceSessionService.removeLogin(jwtUtil.getUserIDFromToken(token), jwtUtil.getDeviceIDFromToken(token));
+        } catch (RuntimeException e) {
+            log.warn("登出时清理设备会话失败: {}", e.getMessage());
+        }
         jwtService.invalidateJWT(token);
         return ResponseEntity.status(204).build();
     }

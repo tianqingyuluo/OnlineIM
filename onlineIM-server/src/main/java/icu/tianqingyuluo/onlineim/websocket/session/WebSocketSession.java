@@ -31,6 +31,11 @@ public class WebSocketSession {
     private final String deviceId;
 
     /**
+     * 设备类型：web / desktop / phone。同类型只保留一个连接。
+     */
+    private final String deviceType;
+
+    /**
      * JWT令牌，用于会话验证
      */
     private final String token;
@@ -72,10 +77,40 @@ public class WebSocketSession {
      * 关闭WebSocket连接
      */
     public void close() {
+        closeSocket(null, null);
+    }
+
+    /**
+     * 带关闭码关闭。4000 表示同设备连接被新页面替换，4001 表示会话被挤下线。
+     */
+    public void close(short code, String reason) {
+        closeSocket(code, reason);
+    }
+
+    /**
+     * 先把帧写出去，写完再关闭，避免挤下线通知被直接掐掉。
+     */
+    public void sendThenClose(String message, short code, String reason) {
+        if (socket == null || socket.isClosed()) {
+            return;
+        }
+        try {
+            socket.writeTextMessage(message, ignored -> close(code, reason));
+        } catch (Exception e) {
+            log.error("发送挤下线通知失败: connectionId={}, error={}", connectionId, e.getMessage(), e);
+            close(code, reason);
+        }
+    }
+
+    private void closeSocket(Short code, String reason) {
         if (socket != null && !socket.isClosed()) {
             try {
-                socket.close();
-                log.info("WebSocket连接已关闭: connectionId={}, userId={}", connectionId, userId);
+                if (code == null) {
+                    socket.close();
+                } else {
+                    socket.close(code, reason == null ? "" : reason);
+                }
+                log.info("WebSocket连接已关闭: connectionId={}, userId={}, code={}", connectionId, userId, code);
             } catch (Exception e) {
                 log.error("关闭WebSocket连接异常: connectionId={}, error={}", connectionId, e.getMessage(), e);
             }

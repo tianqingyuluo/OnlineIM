@@ -6,6 +6,7 @@ import icu.tianqingyuluo.onlineim.websocket.event.WebSocketMessageEvent;
 import icu.tianqingyuluo.onlineim.websocket.handler.WebSocketFrameSender;
 import icu.tianqingyuluo.onlineim.websocket.listener.handler.MessageTypeReceiverRegistry;
 import icu.tianqingyuluo.onlineim.websocket.registry.LocalSessionRegistry;
+import icu.tianqingyuluo.onlineim.websocket.registry.SessionDelivery;
 import icu.tianqingyuluo.onlineim.websocket.session.WebSocketSession;
 import org.springframework.stereotype.Component;
 
@@ -36,8 +37,9 @@ public class ReceiptMessageReceiver implements MessageReceiverHandler {
             boolean delivered = false;
             if (event.getReceiverIDs() != null) {
                 for (String receiverId : event.getReceiverIDs()) {
-                    WebSocketSession session = sessionRegistry.getByUserId(receiverId);
-                    delivered |= frameSender.send(session, "RECEIPT", payload);
+                    for (WebSocketSession session : SessionDelivery.of(sessionRegistry, receiverId)) {
+                        delivered |= frameSender.send(session, "RECEIPT", payload);
+                    }
                 }
             }
             return delivered || event.getReceiverIDs() == null || event.getReceiverIDs().isEmpty();

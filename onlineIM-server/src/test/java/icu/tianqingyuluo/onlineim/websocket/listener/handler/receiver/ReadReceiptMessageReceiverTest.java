@@ -22,6 +22,7 @@ class ReadReceiptMessageReceiverTest {
         LocalSessionRegistry registry = mock(LocalSessionRegistry.class);
         WebSocketFrameSender frameSender = mock(WebSocketFrameSender.class);
         WebSocketSession session = mock(WebSocketSession.class);
+        when(session.isActive()).thenReturn(true);
         when(registry.getByUserId("usr_member")).thenReturn(session);
         when(frameSender.send(eq(session), eq("READ_RECEIPT"), any(ReceiptEventPayload.class))).thenReturn(true);
 

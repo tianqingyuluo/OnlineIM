@@ -2,6 +2,7 @@ package icu.tianqingyuluo.onlineim.controller;
 
 import icu.tianqingyuluo.onlineim.exception.GlobalExceptionHandler;
 import icu.tianqingyuluo.onlineim.pojo.entity.User;
+import icu.tianqingyuluo.onlineim.service.DeviceSessionService;
 import icu.tianqingyuluo.onlineim.service.JwtService;
 import icu.tianqingyuluo.onlineim.service.UserService;
 import icu.tianqingyuluo.onlineim.service.impl.UserDetailsServiceImpl;
@@ -36,7 +37,8 @@ class AuthControllerValidationTest {
                 mock(UserDetailsServiceImpl.class),
                 userService,
                 mock(JwtUtil.class),
-                mock(JwtService.class));
+                mock(JwtService.class),
+                mock(DeviceSessionService.class));
         LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
         mockMvc = MockMvcBuilders.standaloneSetup(controller)

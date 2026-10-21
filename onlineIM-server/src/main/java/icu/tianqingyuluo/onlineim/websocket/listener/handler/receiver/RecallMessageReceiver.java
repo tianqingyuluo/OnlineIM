@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import icu.tianqingyuluo.onlineim.websocket.event.WebSocketMessageEvent;
 import icu.tianqingyuluo.onlineim.websocket.registry.LocalSessionRegistry;
+import icu.tianqingyuluo.onlineim.websocket.registry.SessionDelivery;
 import icu.tianqingyuluo.onlineim.websocket.session.WebSocketSession;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,8 +57,8 @@ public class RecallMessageReceiver implements MessageReceiverHandler {
 
             List<String> receivers = event.getReceiverIDs() == null ? List.of() : event.getReceiverIDs();
             for (String userId : receivers) {
-                WebSocketSession session = sessionRegistry.getByUserId(userId);
-                if (session == null || !session.isActive()) {
+                List<WebSocketSession> sessions = SessionDelivery.of(sessionRegistry, userId);
+                if (sessions.isEmpty()) {
                     continue;
                 }
                 Map<String, Object> frame = new LinkedHashMap<>();
@@ -73,7 +74,10 @@ public class RecallMessageReceiver implements MessageReceiverHandler {
                     frame.put("seq_id", seqId);
                 }
                 frame.put("timestamp", timestamp);
-                session.sendMessage(objectMapper.writeValueAsString(frame));
+                String json = objectMapper.writeValueAsString(frame);
+                for (WebSocketSession session : sessions) {
+                    session.sendMessage(json);
+                }
             }
             return true;
         } catch (Exception e) {

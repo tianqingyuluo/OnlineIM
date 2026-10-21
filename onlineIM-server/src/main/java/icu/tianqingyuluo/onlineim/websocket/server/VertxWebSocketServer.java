@@ -2,8 +2,8 @@ package icu.tianqingyuluo.onlineim.websocket.server;
 
 import cn.hutool.core.util.IdUtil;
 import icu.tianqingyuluo.onlineim.config.ServerIdentity;
+import icu.tianqingyuluo.onlineim.service.DeviceSessionService;
 import icu.tianqingyuluo.onlineim.service.PresenceService;
-import icu.tianqingyuluo.onlineim.service.UserSessionService;
 import icu.tianqingyuluo.onlineim.util.RealIPUtil;
 import icu.tianqingyuluo.onlineim.websocket.handler.WebSocketAuthenticator;
 import icu.tianqingyuluo.onlineim.websocket.handler.WebSocketAuthenticator.AuthResult;
@@ -21,8 +21,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
-
-import java.util.concurrent.TimeUnit;
 
 /**
  * Vert.x WebSocket服务器
@@ -45,7 +43,7 @@ public class VertxWebSocketServer {
     private final WebSocketAuthenticator authenticator;
     private final WebSocketMessageRouter messageRouter;
     private final LocalSessionRegistry sessionRegistry;
-    private final UserSessionService userSessionService;
+    private final DeviceSessionService deviceSessionService;
     private final RedisTemplate<String, Object> redisTemplate;
     private final ServerIdentity serverIdentity;
     private final PresenceService presenceService;
@@ -53,14 +51,14 @@ public class VertxWebSocketServer {
     public VertxWebSocketServer(WebSocketAuthenticator authenticator,
                                 WebSocketMessageRouter messageRouter,
                                 LocalSessionRegistry sessionRegistry,
-                                UserSessionService userSessionService,
+                                DeviceSessionService deviceSessionService,
                                 RedisTemplate<String, Object> redisTemplate,
                                 ServerIdentity serverIdentity,
                                 PresenceService presenceService) {
         this.authenticator = authenticator;
         this.messageRouter = messageRouter;
         this.sessionRegistry = sessionRegistry;
-        this.userSessionService = userSessionService;
+        this.deviceSessionService = deviceSessionService;
         this.redisTemplate = redisTemplate;
         this.serverIdentity = serverIdentity;
         this.presenceService = presenceService;
@@ -168,23 +166,23 @@ public class VertxWebSocketServer {
                 .connectionId(connectionId)
                 .userId(authResult.getUserId())
                 .deviceId(authResult.getDeviceId())
+                .deviceType(authResult.getDeviceType())
                 .token(authResult.getToken())
                 .socket(ws)
                 .build();
 
-        // 注册到本地会话注册表。下线由注册表移除回调通知 presence，避免关闭和超时清理各记一次。
-        sessionRegistry.register(session);
+        // 先登记在线，再替换同设备旧连接。这样旧连接被摘掉时，新连接已经计入，用户不会闪成离线。
         presenceService.onConnected(authResult.getUserId(), connectionId);
+        sessionRegistry.register(session);
 
-        // 在Redis中存储路由信息（用于横向扩展）
+        // 记下这台设备的在线连接；同类型的旧设备在登录时已经被挤下线
         try {
-            userSessionService.storeDeviceSession(
-                    authResult.getToken(),
+            deviceSessionService.onWebSocketConnected(
                     authResult.getUserId(),
                     authResult.getDeviceId(),
-                    connectionId,
-                    authResult.getRemainingTimeMillis(),
-                    TimeUnit.MILLISECONDS
+                    authResult.getDeviceType(),
+                    authResult.getToken(),
+                    connectionId
             );
         } catch (Exception e) {
             log.error("存储设备会话到Redis失败: {}", e.getMessage());
@@ -221,16 +219,15 @@ public class VertxWebSocketServer {
         String connectionId = session.getConnectionId();
         String userId = session.getUserId();
         String deviceId = session.getDeviceId();
-        String socketId = session.getSocketId();
 
         // 从本地注册表注销
         sessionRegistry.unregister(connectionId);
 
-        // 从Redis中删除会话信息
+        // 只清在线标记，登录记录留到登出或被挤下线
         try {
-            userSessionService.removeDeviceSession(userId, deviceId, socketId);
+            deviceSessionService.onWebSocketClosed(userId, deviceId, connectionId);
         } catch (Exception e) {
-            log.error("从Redis删除设备会话失败: {}", e.getMessage());
+            log.error("更新设备在线状态失败: {}", e.getMessage());
         }
 
         log.info("WebSocket连接已关闭: connectionId={}, userId={}", connectionId, userId);

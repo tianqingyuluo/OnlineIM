@@ -6,6 +6,7 @@ import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageResponse;
 import icu.tianqingyuluo.onlineim.service.MessageService;
 import icu.tianqingyuluo.onlineim.websocket.event.WebSocketMessageEvent;
 import icu.tianqingyuluo.onlineim.websocket.registry.LocalSessionRegistry;
+import icu.tianqingyuluo.onlineim.websocket.registry.SessionDelivery;
 import icu.tianqingyuluo.onlineim.websocket.session.WebSocketSession;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -60,20 +61,24 @@ public class GroupMessageReceiver implements MessageReceiverHandler {
             MessageResponse messageResponse = messageService.convertGroupMessageToResponse(groupMessage);
             List<String> atUsers = groupMessage.getAtUsers() == null ? List.of() : groupMessage.getAtUsers();
 
-            // 向群组成员发送消息（排除发送者自己）
+            // 每个成员的全部在线设备都收到，包括发送者自己的其他设备（发送端按 client_message_id 合并）
             for (String memberId : event.getReceiverIDs()) {
-                if (memberId.equals(event.getSenderID())) {
+                if (memberId == null) {
                     continue;
                 }
-                WebSocketSession memberSession = sessionRegistry.getByUserId(memberId);
-                if (memberSession != null && memberSession.isActive()) {
+                List<WebSocketSession> sessions = SessionDelivery.of(sessionRegistry, memberId);
+                if (sessions.isEmpty()) {
+                    continue;
+                }
+                boolean atMe = atUsers.contains(memberId);
+                for (WebSocketSession memberSession : sessions) {
                     Map<String, Object> response = new LinkedHashMap<>();
                     response.put("type", "GROUP_MESSAGE_RESPONSE");
                     response.put("message", messageResponse);
-                    response.put("at_me", atUsers.contains(memberId));
+                    response.put("at_me", atMe);
                     memberSession.sendMessage(objectMapper.writeValueAsString(response));
-                    log.debug("已向群组成员 {} 发送新消息", memberId);
                 }
+                log.debug("已向群组成员 {} 的 {} 台设备发送新消息", memberId, sessions.size());
             }
 
             return true;
