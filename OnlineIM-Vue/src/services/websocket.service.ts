@@ -6,7 +6,6 @@ import { usePresenceStore } from '@/stores/presence';
 import type { PresenceUpdate } from '@/utils/presence';
 import { dbService } from '@/utils/indexedDB.ts';
 import { toast } from 'vue-sonner';
-import router from '@/router';
 import type {
   MessageAckPayload,
   MessageRecalledPayload,
@@ -246,7 +245,10 @@ export class WebSocketService {
     const userStore = useUserStore();
     userStore.clearLocalSession();
     toast.error(message);
-    void router.push('/login');
+    // 动态引入，避免 websocket 服务和路由互相引用导致路由测试卡住
+    void import('@/router').then(mod => {
+      void mod.default.push('/login');
+    });
   }
 
   disconnect(): void {

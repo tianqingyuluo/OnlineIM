@@ -446,7 +446,7 @@ describe('WebSocketService', () => {
 
     expect(userStore.clearLocalSession).toHaveBeenCalledOnce()
     expect(toast.error).toHaveBeenCalledWith('您的账号已在其他网页端登录，当前设备已下线')
-    expect(routerPush).toHaveBeenCalledWith('/login')
+    await vi.waitFor(() => expect(routerPush).toHaveBeenCalledWith('/login'))
     expect(service.connectionState.value).toBe('offline')
     const syncCalls = historyStore.requestOfflineSync.mock.calls.length
 
