@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { useEmojiStore } from '@/stores/emoji'
 import {meService} from "@/services/me.service.ts";
 import { useListStore } from '@/stores/list'
 import {type User,} from '@/type/User.ts'
@@ -54,6 +55,7 @@ export const useUserStore = defineStore('user', {
       listStore.hasInit = false
       listStore.blacklist=[]
       listStore.FriendRequestsList=[]
+      useEmojiStore().reset()
       TokenService.clear()
 
     },

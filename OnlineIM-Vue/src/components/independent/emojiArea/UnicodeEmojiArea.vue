@@ -14,18 +14,17 @@ const emojiList = [
 ]
 
 function handleSelect(emoji: string) {
-  console.log('Selected emoji:', emoji)
   emit('select', emoji)
 }
 </script>
 
 <template>
-  <div class="h-[90%] pr-2 overflow-y-auto">
-    <div class="grid grid-cols-10 gap-y-4 gap-x-2 p-4">
-      <span 
+  <div class="h-full pr-2 overflow-y-auto" data-testid="unicode-emoji-area">
+    <div class="grid grid-cols-[repeat(auto-fill,minmax(44px,1fr))] gap-y-3 gap-x-2 p-1 sm:p-2">
+      <span
         v-for="(emoji, index) in emojiList"
         :key="index"
-        class="text-4xl cursor-pointer hover:scale-110 transition-transform"
+        class="text-3xl sm:text-4xl text-center cursor-pointer hover:scale-110 transition-transform"
         @click="handleSelect(emoji)"
       >{{ emoji }}</span>
     </div>

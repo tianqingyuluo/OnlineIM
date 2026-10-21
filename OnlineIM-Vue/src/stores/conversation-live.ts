@@ -32,6 +32,8 @@ export function previewOfMessage(message: MessageResponse): string {
     case 'voice':
     case 'audio': return '[语音]'
     case 'video': return '[视频]'
+    case 'emoji':
+    case 'sticker': return '[表情]'
     default: return '[消息]'
   }
 }

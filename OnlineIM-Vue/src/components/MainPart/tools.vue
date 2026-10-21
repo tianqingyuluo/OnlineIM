@@ -5,6 +5,7 @@ import { toast } from "vue-sonner"
 import EmojiArea from "@/components/independent/emojiArea/EmojiArea.vue"
 import VoiceRecordButton from "@/components/MainPart/VoiceRecordButton.vue"
 import type { RecordedVoice } from "@/utils/voice-recorder"
+import type { CustomEmoji } from "@/utils/sticker-message"
 import { uploadChatMedia } from "@/services/upload.service"
 import {
   IMAGE_ACCEPT,
@@ -24,6 +25,7 @@ let uploadController: AbortController | null = null
 const emit = defineEmits<{
   select: [emoji: string]
   uploaded: [kind: ChatMediaKind, media: ChatMedia]
+  sticker: [emoji: CustomEmoji]
 }>()
 
 function handleEmojiSelect(emoji: string) {
@@ -93,7 +95,7 @@ defineExpose({ upload })
   <!-- 新增工具栏 -->
   <div class="flex items-center justify-between px-4 py-3.5 border-t relative" style="height: 40px">
     <div class="flex items-center space-x-2">
-      <div class="h-[40px] flex items-center justify-center hover:text-blue-400 cursor-pointer" title="表情" @click="toggleEmojiArea">
+      <div class="h-[40px] flex items-center justify-center hover:text-blue-400 cursor-pointer" title="表情" data-testid="emoji-button" @click="toggleEmojiArea">
         <Smile style="width: 30px; height: 30px" />
       </div>
       <button
@@ -148,7 +150,7 @@ defineExpose({ upload })
       </button>
     </div>
     <transition name="fade-slide" mode="out-in">
-    <EmojiArea ref="emojiAreaRef" @select="handleEmojiSelect" />
+    <EmojiArea ref="emojiAreaRef" @select="handleEmojiSelect" @sticker="emit('sticker', $event)" />
     </transition>
   </div>
 </template>

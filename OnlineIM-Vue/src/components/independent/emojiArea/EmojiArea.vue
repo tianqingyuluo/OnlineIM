@@ -1,15 +1,20 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue"
-import ImageEmojiArea from './ImageEmojiArea.vue'
+import CustomEmojiArea from './CustomEmojiArea.vue'
 import UnicodeEmojiArea from './UnicodeEmojiArea.vue'
-import { Settings, Smile } from "lucide-vue-next"
+import { Smile, Sticker } from "lucide-vue-next"
+import type { CustomEmoji } from "@/utils/sticker-message"
 
-// 定义emit
-const emit = defineEmits(['select'])
+const emit = defineEmits<{
+  /** Unicode 表情：插入输入框 */
+  select: [emoji: string]
+  /** 自定义表情：直接作为表情消息发送 */
+  sticker: [emoji: CustomEmoji]
+}>()
 
 const showEmojiArea = ref(false)
 const emojiAreaRef = ref<HTMLElement | null>(null)
-const currentEmojiType = ref<'image' | 'unicode'>('unicode')
+const currentEmojiType = ref<'custom' | 'unicode'>('unicode')
 
 function toggleEmojiArea(e?: MouseEvent) {
   e?.stopPropagation()
@@ -38,37 +43,51 @@ defineExpose({
 function handleEmojiSelect(emoji: string) {
   emit('select', emoji)
 }
+
+function handleStickerSend(emoji: CustomEmoji) {
+  emit('sticker', emoji)
+  showEmojiArea.value = false
+}
 </script>
 
 <template>
-  <div v-if="showEmojiArea" ref="emojiAreaRef" class="absolute bottom-[calc(100%+5px)] left-4 bg-white border rounded-lg shadow-lg p-6" style="width: 624px;height: 400px;" @click.stop>
-    <ImageEmojiArea v-if="currentEmojiType === 'image'" @select="handleEmojiSelect" />
-    <UnicodeEmojiArea v-else @select="handleEmojiSelect" />
+  <div
+    v-if="showEmojiArea"
+    ref="emojiAreaRef"
+    class="absolute bottom-[calc(100%+5px)] left-2 z-30 flex h-[min(400px,60vh)] w-[min(624px,calc(100vw-16px))] flex-col rounded-lg border bg-white shadow-lg sm:left-4"
+    data-testid="emoji-panel"
+    @click.stop
+  >
+    <div class="min-h-0 flex-1 p-3 sm:p-4">
+      <CustomEmojiArea v-if="currentEmojiType === 'custom'" @send="handleStickerSend" />
+      <UnicodeEmojiArea v-else @select="handleEmojiSelect" />
+    </div>
 
-    <!-- 底部切换栏 - 修改为原来的样式和位置 -->
-    <div class="border-t border-gray-200 mt-1 pt-1 absolute bottom-0 left-0 right-0 px-2 pb-2">
-      <div class="grid grid-cols-10 gap-2">
-        <button 
-          @click="currentEmojiType = 'image'"
-          :class="[
-            'w-8 h-8 p-1 cursor-pointer hover:scale-110 transition-transform text-gray-600 rounded',
-            currentEmojiType === 'image' ? 'bg-blue-100' : ''
-          ]"
-        >
-          <component :is="Settings"/>
-        </button>
-        <button 
-          @click="currentEmojiType = 'unicode'"
-          :class="[
-            'w-8 h-8 p-1 cursor-pointer hover:scale-110 transition-transform text-gray-600 rounded',
-            currentEmojiType === 'unicode' ? 'bg-blue-100' : ''
-          ]"
-        >
-          <component :is="Smile"/>
-        </button>
-      </div>
+    <div class="flex shrink-0 gap-2 border-t border-gray-200 px-2 py-1.5">
+      <button
+        type="button"
+        title="系统表情"
+        data-testid="emoji-tab-unicode"
+        :class="[
+          'h-8 w-8 rounded p-1 text-gray-600 transition-transform hover:scale-110',
+          currentEmojiType === 'unicode' ? 'bg-blue-100' : '',
+        ]"
+        @click="currentEmojiType = 'unicode'"
+      >
+        <Smile class="h-full w-full" />
+      </button>
+      <button
+        type="button"
+        title="我的表情"
+        data-testid="emoji-tab-custom"
+        :class="[
+          'h-8 w-8 rounded p-1 text-gray-600 transition-transform hover:scale-110',
+          currentEmojiType === 'custom' ? 'bg-blue-100' : '',
+        ]"
+        @click="currentEmojiType = 'custom'"
+      >
+        <Sticker class="h-full w-full" />
+      </button>
     </div>
   </div>
 </template>
-
-

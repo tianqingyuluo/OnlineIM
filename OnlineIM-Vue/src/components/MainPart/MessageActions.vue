@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Copy, Reply } from 'lucide-vue-next'
+import { Copy, Reply, SmilePlus } from 'lucide-vue-next'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -9,21 +9,26 @@ import {
 
 withDefaults(defineProps<{
   canReply?: boolean
+  canCopy?: boolean
+  canSaveEmoji?: boolean
   align?: 'start' | 'end'
 }>(), {
   canReply: true,
+  canCopy: true,
+  canSaveEmoji: false,
   align: 'start',
 })
 
 const emit = defineEmits<{
   reply: []
   copy: []
+  saveEmoji: []
 }>()
 </script>
 
 <template>
   <ContextMenu>
-    <ContextMenuTrigger class="block min-w-0">
+    <ContextMenuTrigger class="block min-w-0" :disabled="!canCopy && !canReply && !canSaveEmoji">
       <div class="group/message relative min-w-0">
         <button
           v-if="canReply"
@@ -42,13 +47,17 @@ const emit = defineEmits<{
       </div>
     </ContextMenuTrigger>
     <ContextMenuContent class="w-40">
-      <ContextMenuItem class="gap-2" @select="emit('copy')">
+      <ContextMenuItem v-if="canCopy" class="gap-2" @select="emit('copy')">
         <Copy class="h-4 w-4" aria-hidden="true" />
         复制
       </ContextMenuItem>
       <ContextMenuItem v-if="canReply" class="gap-2" @select="emit('reply')">
         <Reply class="h-4 w-4" aria-hidden="true" />
         回复
+      </ContextMenuItem>
+      <ContextMenuItem v-if="canSaveEmoji" class="gap-2" data-testid="save-emoji-action" @select="emit('saveEmoji')">
+        <SmilePlus class="h-4 w-4" aria-hidden="true" />
+        添加到表情
       </ContextMenuItem>
     </ContextMenuContent>
   </ContextMenu>

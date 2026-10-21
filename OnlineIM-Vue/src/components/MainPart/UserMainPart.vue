@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import Tools from '@/components/MainPart/tools.vue'
 import UserTextArea from '@/components/MainPart/UserTextArea.vue'
 import type { ChatMedia, ChatMediaKind } from '@/utils/media-message'
+import type { CustomEmoji } from '@/utils/sticker-message'
+import { useEmojiStore } from '@/stores/emoji'
 import FriendSettingsCard from '@/components/independent/friends/FriendSettingsCard.vue'
 import { userService } from '@/services/user.service'
 import type { User } from '@/type/User'
@@ -26,6 +28,7 @@ const route = useRoute()
 const userStore = useUserStore()
 const listStore = useListStore()
 const historyStore = useHistoryStore()
+const emojiStore = useEmojiStore()
 const currentUser = ref<User | null>(null)
 const conversation = ref<Conversation | null>(null)
 const showMenu = ref(false)
@@ -134,6 +137,19 @@ async function handleMediaUploaded(kind: ChatMediaKind, media: ChatMedia) {
   historyStore.sendMessage(conversation.value.conversation_id, targetUserId.value, kind, JSON.stringify(media), false)
   await nextTick()
   scrollToBottom()
+}
+
+/** 自定义表情：content 只需 emoji_id，其余字段用于本地乐观显示，服务端会按收藏记录重新填充 */
+async function handleStickerSend(emoji: CustomEmoji) {
+  if (!conversation.value) return
+  historyStore.sendMessage(conversation.value.conversation_id, targetUserId.value, 'emoji', JSON.stringify(emoji), false)
+  await nextTick()
+  scrollToBottom()
+}
+
+function handleSaveEmoji(message: MessageResponse) {
+  if (!conversation.value) return
+  void emojiStore.saveFromMessage(conversation.value.conversation_id, message.message_id)
 }
 
 async function handleSendClick() {
@@ -276,6 +292,7 @@ onBeforeUnmount(() => {
                 :reply-to="message.reply_to"
                 @reply="handleReply(message)"
                 @navigate="handleReplyNavigate"
+                @save-emoji="handleSaveEmoji(message)"
               />
             </div>
             <div v-else class="flex items-end max-w-[80%]">
@@ -299,6 +316,7 @@ onBeforeUnmount(() => {
                 :reply-to="message.reply_to"
                 @reply="handleReply(message)"
                 @navigate="handleReplyNavigate"
+                @save-emoji="handleSaveEmoji(message)"
               />
               <img :src="userStore.loggedInUser.avatar_url" :alt="userStore.loggedInUser.username" class="w-10 h-10 rounded-full ml-2 object-cover" />
             </div>
@@ -309,7 +327,7 @@ onBeforeUnmount(() => {
       <div v-if="historyStore.isLoading" class="flex justify-center py-2 text-sm text-gray-500">加载中...</div>
     </div>
 
-    <Tools @select="handleEmojiSelect" @uploaded="handleMediaUploaded" />
+    <Tools @select="handleEmojiSelect" @uploaded="handleMediaUploaded" @sticker="handleStickerSend" />
     <ReplyComposerBar
       v-if="historyStore.replyTarget?.conversationId === conversationId"
       :reference="historyStore.replyTarget.reference"
