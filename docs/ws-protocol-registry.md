@@ -22,6 +22,8 @@
 | `RECALL_MESSAGE_REQUEST` | C→S | 业务·发送 | v1 | — |
 | `RECALL_MESSAGE_RESPONSE` | S→C | 业务·撤回确认·兼容 | v1 | message-reply |
 | `MESSAGE_RECALLED` | S→C | 业务·撤回通知·兼容 | v1 | message-reply |
+| `EDIT_MESSAGE_REQUEST` | C→S | 业务·编辑 | v1 | message-edit |
+| `MESSAGE_EDITED` | S→C | 业务·编辑通知 | v1 | message-edit |
 | `NOTICE_MESSAGE_REQUEST` | C→S | 业务·发送 | v1 | — |
 | `NOTICE_MESSAGE` | S→C | 业务·接收 | v1 | — |
 | `HEARTBEAT` | C→S | 控制·心跳 | v1 | ws-heartbeat-reconnect |
@@ -239,6 +241,9 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 | `reply_to` | object/null | 服务端生成的单层引用快照；状态契约见“引用回复协议” |
 | `at_users` | string[]/null | 群聊 @提及 的成员 ID（服务端清洗后）；见“群聊 @提及” |
 | `forwarded_from` | object/null | 逐条转发产生的消息：`{user_id, display_name}` 原作者；见“消息转发” |
+| `edited` | boolean | 文本消息是否被编辑过；见“消息编辑” |
+| `edited_at` | string/null | 最近一次编辑时间（格式同 `timestamp`）；未编辑为 `null` |
+| `content_revision` | number | 内容版本，从 1 开始，每次编辑 +1；客户端据此丢弃乱序到达的旧版本 |
 
 旧 `status` 字段保留，用于兼容历史撤回语义；新客户端优先使用 `delivery_state`。
 
@@ -485,6 +490,63 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 - 目标选择器：好友（备注 / 昵称 / 用户名）与已加入的群，支持搜索与多选（最多 9 个）；手机全屏显示。
 - 逐条转发的消息气泡上方显示“转发自 原作者”；聊天记录显示为卡片（标题 + 前 3 条摘要 + 条数），点开查看全部内容，记录中的图片 / 文件 / 语音 / 表情 / 嵌套记录可正常查看。
 
+## 消息编辑
+
+发送者可以在时间窗内编辑自己发送的**文本**消息。编辑不产生新消息、不改变 `seq_id` / 时间 / 未读数，只替换 `content` 并打上“已编辑”标记。
+
+### 请求
+
+- REST：`PUT /api/v1/messages/{message_id}`，请求体 `{"content": "新内容", "at_users": ["usr_x"]}`，成功返回编辑后的消息（与历史接口格式相同，`edited: true`）。
+- WebSocket：`{"type": "EDIT_MESSAGE_REQUEST", "message": {"message_id": "msg_x", "content": "新内容", "at_users": [...], "client_message_id": "可选"}}`。成功不单独回包，编辑者与其他成员一样收到 `MESSAGE_EDITED`；失败回 `ERROR` 帧，`message.code` 为下表错误码。
+- `content` 去掉首尾空白后保存；`at_users` 只对群聊有效：给出时按当前群成员重新清洗并**替换**原 @ 列表，省略（`null`）表示保持原列表。编辑者取自已认证身份。
+- 内容（与群聊 @ 列表）都没变化时直接返回当前消息，不产生新版本、不推送。
+
+### 校验（REST 与 WebSocket 共用）
+
+| 情况 | code | REST |
+|------|------|------|
+| 消息不存在 | `MESSAGE_NOT_FOUND` | 404 |
+| 不是自己发送的消息 | `NOT_MESSAGE_SENDER` | 403 |
+| 已撤回 | `MESSAGE_ALREADY_RECALLED` | 409 |
+| 不是文本消息（图片 / 文件 / 语音 / 表情 / 聊天记录等） | `EDIT_NOT_SUPPORTED` | 400 |
+| 超过编辑时间窗 | `EDIT_WINDOW_EXPIRED` | 400 |
+| 新内容为空或超过长度上限 | `EDIT_CONTENT_INVALID` | 400 |
+| 私聊已不是好友 / 已不在群里 | `NOT_CONVERSATION_MEMBER` | 403 |
+| 并发编辑（版本已被另一次编辑更新） | `EDIT_CONFLICT` | 409 |
+
+编辑时间窗由 `im.message.edit-window-seconds` 配置，默认等于撤回时间窗（`im.message.recall-window-seconds`，120 秒）；小于等于 0 表示不限制。长度上限 `im.message.edit-max-length`（默认 5000 字符）。
+
+### 存储
+
+消息文档新增 `editedAt`、`editHistory`；`contentRevision` + 1。`editHistory` 记录每个被替换的旧版本 `{revision, content, atUsers, replacedAt}`，`[0]` 始终是原文，最多保留 20 个版本；**只在服务端保存，接口不返回**（本期不提供“查看原内容”）。写入带版本条件（乐观锁），并发编辑时后到的一次返回 `EDIT_CONFLICT`。
+
+### 推送 `MESSAGE_EDITED`
+
+编辑成功后经 Redis Stream（类型 `EDIT_MESSAGE`）推送给会话全部成员（含编辑者自己，用于多标签页同步）：
+
+```json
+{
+  "type": "MESSAGE_EDITED",
+  "message": { "message_id": "msg_x", "conversation_id": "grp_x", "content": "新内容", "edited": true,
+               "edited_at": "2026-10-22 01:00:00", "content_revision": 2, "at_users": ["usr_b"], "...": "与历史接口相同" },
+  "at_me": true
+}
+```
+
+`at_me` 只在群聊出现，表示编辑后的 @ 列表是否包含该接收者。
+
+### 联动
+
+- **会话预览**：如果被编辑的消息是会话最后一条，所有成员会话记录的 `last_message.content` 换成新内容（不改时间、不重新排序、不加未读）。
+- **@我**：群聊编辑后不再被 @ 的成员移除这条“有人@我”，新被 @ 的成员补一条（已读过的在下次已读推进时清掉）。
+- **引用**：引用了它的回复保留引用时的快照，`reply_to.state` 变为 `edited`（客户端显示“原消息已编辑”），与已有引用协议一致。
+- **已读回执**：编辑不影响送达 / 已读状态。
+
+### Web 端
+
+- 自己的文本消息在时间窗内右键（手机长按）菜单有“编辑”（菜单打开时判断时间窗）。点击后原文放进输入框，上方显示“编辑消息”条，发送按钮变为“保存”；回车 / “保存”提交，Esc / ✕ 取消并恢复原来的草稿。群聊编辑时原 @ 成员保留，只要文本里还有对应的 `@名字`。
+- 编辑过的消息气泡右下显示“已编辑”（悬停显示编辑时间）；本地 IndexedDB 缓存同步更新。
+
 ## 撤回事件与引用联动
 
 当前撤回发送方确认 `RECALL_MESSAGE_RESPONSE` 与接收方通知 `MESSAGE_RECALLED` 沿用既有顶层字段格式，而不是标准 `message` 信封；Web 客户端兼容两种解析方式。
@@ -530,3 +592,5 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 | `im.forward.max-targets` | `9` | 一次转发的目标会话上限 |
 | `im.forward.max-messages` | `30` | 逐条转发的消息条数上限 |
 | `im.forward.max-merged-messages` | `100` | 合并转发的消息条数上限 |
+| `im.message.edit-window-seconds` | 同撤回时间窗（`120`） | 编辑时间窗（秒），≤0 不限制 |
+| `im.message.edit-max-length` | `5000` | 编辑后内容的长度上限（字符） |
