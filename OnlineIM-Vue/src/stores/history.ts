@@ -203,7 +203,7 @@ export const useHistoryStore = defineStore('history', {
           messages = response.messages;
           hasMore = response.has_more_before;
           if (messages.length > 0) {
-            await this.updatePendingRanges(conversationId, messages);
+            await this.updatePendingRanges(conversationId, messages, { hasMoreBefore: hasMore });
             await dbService.putHistory(messages);
             await this.sendDeliveredReceipts(messages);
           }
@@ -241,7 +241,11 @@ export const useHistoryStore = defineStore('history', {
       );
     },
 
-    async updatePendingRanges(conversationId: string, newMessages: MessageResponse[]) {
+    async updatePendingRanges(
+      conversationId: string,
+      newMessages: MessageResponse[],
+      options: { hasMoreBefore?: boolean } = {},
+    ) {
       if (!newMessages.length) return;
       const userId = this.pendingMessages[conversationId]?.userId || useUserStore().loggedInUser.user_id;
       const lastSeq = await dbService.getLastHistorySeq(userId, conversationId);
@@ -249,6 +253,12 @@ export const useHistoryStore = defineStore('history', {
       const newEarliest = sortedMessages[0]?.seq_id;
       if (newEarliest && lastSeq && compareSeqId(newEarliest, lastSeq) > 0) {
         await this.addPendingRange(userId, conversationId, lastSeq, newEarliest);
+      } else if (newEarliest && options.hasMoreBefore
+          && !(this.pendingMessages[conversationId]?.ranges || []).some(range => compareSeqId(range.minSeqId, newEarliest) < 0)
+          && !(await this.hasLocalHistoryBefore(userId, conversationId, newEarliest))) {
+        // 服务端说更早还有，本地却一条比这页更早的都没有（第一次打开、或本地只存了实时收到的几条）：
+        // 登记“0 ~ 这页最早一条”待补，往上翻时才会继续找服务端，而不是读空的本地缓存后当成到顶了
+        await this.addPendingRange(userId, conversationId, '0', newEarliest);
       }
 
       const pendingInfo = this.pendingMessages[conversationId];
@@ -265,6 +275,16 @@ export const useHistoryStore = defineStore('history', {
         ) {
           await this.splitPendingRange(userId, conversationId, range, newMin, newMax);
         }
+      }
+    },
+
+    async hasLocalHistoryBefore(userId: string, conversationId: string, seqId: string): Promise<boolean> {
+      try {
+        const older = await dbService.getHistory(userId, conversationId, undefined, seqId);
+        return Array.isArray(older) && older.length > 0;
+      } catch (error) {
+        console.warn('读取本地历史失败:', error);
+        return true;
       }
     },
 
