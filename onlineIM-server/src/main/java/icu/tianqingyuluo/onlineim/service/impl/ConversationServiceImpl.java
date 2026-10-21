@@ -203,51 +203,35 @@ public class ConversationServiceImpl implements ConversationService {
 
         String id = conversation.getId();
         String name;
-        String avatarUrl = "https://img.ixintu.com/download/jpg/20200901/3e9ce3813b7199ea9588eeb920f41208_512_512.jpg!bg"; // TODO: 后期头像要换
+        // 没有头像时返回空串，由前端按会话类型显示默认头像
+        String avatarUrl = "";
 
         if (id.contains("grp_")) {
             GroupBriefResponse group = groupService.getGroupByID(id);
             name = group.getName();
-            if (group.getAvatar() != null) {
+            if (group.getAvatar() != null && !group.getAvatar().isBlank()) {
                 avatarUrl = group.getAvatar();
             }
         }
         else {
-
+            // 私聊会话ID为 conv_ + 两个 usr_ 用户ID按字典序拼接
             String withoutPrefix = id.substring("conv_".length());
-
-            // 按 "usr_" 拆分
             String[] parts = withoutPrefix.split("usr_");
-
-            // 过滤掉空字符串（第一个元素是空字符串）
-            String user1 = "usr_" + parts[1]; // "1231231"
-            String user2 = "usr_" + parts[2]; // "456"
-            String remark = userFriendMapper.getRemarkByUserIdAndFriendId(user1, user2);
-            if (user1.equals(userId)) {
-                id = user2;
-                UserResponse user = userService.getUserInfoByUserID(user2);
-                if (user.getAvatarUrl() != null) {
-                    avatarUrl = user.getAvatarUrl();
-                }
-                if (remark != null) {
-                    name = remark;
-                }
-                else {
-                name = userService.getUserInfoByUserID(user2).getNickname();
-                }
+            String user1 = "usr_" + parts[1];
+            String user2 = "usr_" + parts[2];
+            String otherUserId = user1.equals(userId) ? user2 : user1;
+            id = otherUserId;
+            UserResponse other = userService.getUserInfoByUserID(otherUserId);
+            if (other != null && other.getAvatarUrl() != null && !other.getAvatarUrl().isBlank()) {
+                avatarUrl = other.getAvatarUrl();
+            }
+            // 备注是当前查看者给对方设置的
+            String remark = userFriendMapper.getRemarkByUserIdAndFriendId(userId, otherUserId);
+            if (remark != null && !remark.isBlank()) {
+                name = remark;
             }
             else {
-                id = user1;
-                UserResponse user = userService.getUserInfoByUserID(user1);
-                if (user.getAvatarUrl() != null) {
-                    avatarUrl = user.getAvatarUrl();
-                }
-                if (userFriendMapper.getRemarkByUserIdAndFriendId(user2, user1) != null) {
-                    name = remark;
-                }
-                else  {
-                    name = userService.getUserInfoByUserID(user1).getNickname();
-                }
+                name = other != null ? other.getNickname() : otherUserId;
             }
         }
 

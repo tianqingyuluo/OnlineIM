@@ -556,13 +556,11 @@ public class MessageServiceImpl implements MessageService {
 
     private MessageResponse buildPrivateMessageResponse(
             PrivateMessage message, ReplyReferenceResponse replyReference) {
-        // 创建发送者信息
-        UserBriefResponse senderInfo = UserBriefResponse.builder()
-                .userId(message.getSenderId())
-                // 这里需要根据senderId查询用户信息，补充name和avatar等字段
-                .username("用户" + message.getSenderId())
-                .avatarUrl("https://example.com/avatar.jpg")
-                .build();
+        // 发送者信息：查询真实的用户名/昵称/头像；用户不存在时只返回 user_id，头像留空由前端兜底
+        UserBriefResponse senderInfo = userService.getUserBriefInfoByID(message.getSenderId());
+        if (senderInfo == null) {
+            senderInfo = UserBriefResponse.builder().userId(message.getSenderId()).build();
+        }
         
         // 消息状态映射
         String status = message.getStatus() == 0 ? "1" : String.valueOf(message.getStatus());

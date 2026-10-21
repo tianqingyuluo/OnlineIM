@@ -93,7 +93,7 @@ function handleChatClick(conversation: Conversation) {
                   <div class="flex items-center w-full">
                     <div class="w-[50px] h-[50px] rounded-full overflow-hidden mr-4 flex-shrink-0">
                       <img
-                        :src="conversation.target_info?.avatar_url || '/default-avatar.png'"
+                        :src="conversation.target_info?.avatar_url || (conversation.conversation_id?.startsWith('grp_') ? '/images/group.png' : '/images/help.png')"
                         :alt="conversation.target_info?.name || ''"
                         class="w-full h-full object-cover"
                       />
@@ -129,7 +129,7 @@ function handleChatClick(conversation: Conversation) {
                   <div class="flex items-center w-full">
                     <div class="w-[50px] h-[50px] rounded-full overflow-hidden mr-4 flex-shrink-0">
                       <img
-                        :src="conversation.target_info?.avatar_url || '/default-avatar.png'"
+                        :src="conversation.target_info?.avatar_url || (conversation.conversation_id?.startsWith('grp_') ? '/images/group.png' : '/images/help.png')"
                         :alt="conversation.target_info?.name || ''"
                         class="w-full h-full object-cover"
                       />

@@ -475,6 +475,29 @@ class MessageServiceImplTest {
         assertEquals("usr_me", json.get("recall_user_id").asText());
     }
 
+    @Test
+    void privateMessageResponseUsesRealSenderProfile() {
+        PrivateMessage message = privateMessage("msg_1", "100");
+        when(userService.getUserBriefInfoByID("usr_peer")).thenReturn(UserBriefResponse.builder()
+                .userId("usr_peer").username("peer").nickname("对方").avatarUrl("/onlineim/avatars/p.png").build());
+
+        MessageResponse response = service.convertPrivateMessageToResponse(message);
+
+        assertEquals("peer", response.getSenderInfo().getUsername());
+        assertEquals("对方", response.getSenderInfo().getNickname());
+        assertEquals("/onlineim/avatars/p.png", response.getSenderInfo().getAvatarUrl());
+    }
+
+    @Test
+    void privateMessageResponseFallsBackToSenderIdWhenUserMissing() {
+        PrivateMessage message = privateMessage("msg_1", "100");
+
+        MessageResponse response = service.convertPrivateMessageToResponse(message);
+
+        assertEquals("usr_peer", response.getSenderInfo().getUserId());
+        assertEquals(null, response.getSenderInfo().getAvatarUrl());
+    }
+
     private PrivateMessage privateMessage(String id, String seqId) {
         return PrivateMessage.builder()
                 .id(id)
