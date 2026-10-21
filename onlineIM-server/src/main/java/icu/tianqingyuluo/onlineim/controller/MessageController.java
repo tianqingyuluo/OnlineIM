@@ -6,11 +6,13 @@ import icu.tianqingyuluo.onlineim.pojo.dto.request.MessageSendRequest;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageForwardResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageContextResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageResponse;
+import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageSearchResponse;
 import icu.tianqingyuluo.onlineim.pojo.entity.UserIDProvider;
 import icu.tianqingyuluo.onlineim.pojo.document.ChatUpload;
 import icu.tianqingyuluo.onlineim.service.ChatMediaService;
 import icu.tianqingyuluo.onlineim.service.MessageEditService;
 import icu.tianqingyuluo.onlineim.service.MessageForwardService;
+import icu.tianqingyuluo.onlineim.service.MessageSearchService;
 import icu.tianqingyuluo.onlineim.service.MessageService;
 import icu.tianqingyuluo.onlineim.util.ErrorCodeUtil;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
@@ -39,14 +41,34 @@ public class MessageController {
     private final ChatMediaService chatMediaService;
     private final MessageForwardService messageForwardService;
     private final MessageEditService messageEditService;
+    private final MessageSearchService messageSearchService;
 
     public MessageController(MessageService messageService, JwtUtil jwtUtil, ChatMediaService chatMediaService,
-                             MessageForwardService messageForwardService, MessageEditService messageEditService) {
+                             MessageForwardService messageForwardService, MessageEditService messageEditService,
+                             MessageSearchService messageSearchService) {
         this.messageService = messageService;
         this.jwtUtil = jwtUtil;
         this.chatMediaService = chatMediaService;
         this.messageForwardService = messageForwardService;
         this.messageEditService = messageEditService;
+        this.messageSearchService = messageSearchService;
+    }
+
+    /**
+     * 按关键字搜索自己能看到的文本消息：不带 conversation_id 为全局搜索（会话列表中的私聊与所在群），
+     * 带 conversation_id 只搜该会话。按时间倒序，next_cursor 翻页。
+     */
+    @GetMapping("/search")
+    public ResponseEntity<MessageSearchResponse> searchMessages(
+            @RequestParam(name = "q", required = false) String keyword,
+            @RequestParam(name = "conversation_id", required = false) String conversationId,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false) Integer size,
+            @AuthenticationPrincipal UserIDProvider principal) {
+        if (principal == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        return ResponseEntity.ok(messageSearchService.search(principal.getID(), keyword, conversationId, cursor, size));
     }
 
     /**

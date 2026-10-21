@@ -66,7 +66,7 @@ class MessageControllerTest {
     @Test
     void contextEndpointUsesAuthenticatedPrincipalAndForwardsWindow() throws Exception {
         MessageService messageService = mock(MessageService.class);
-        MessageController controller = new MessageController(messageService, mock(JwtUtil.class), mock(ChatMediaService.class), mock(MessageForwardService.class), mock(MessageEditService.class));
+        MessageController controller = new MessageController(messageService, mock(JwtUtil.class), mock(ChatMediaService.class), mock(MessageForwardService.class), mock(MessageEditService.class), mock(icu.tianqingyuluo.onlineim.service.MessageSearchService.class));
         UserIDProvider principal = () -> "usr_me";
         MessageContextResponse expected = MessageContextResponse.builder()
                 .targetMessageId("msg_100")
@@ -94,7 +94,7 @@ class MessageControllerTest {
     @Test
     void sendEndpointUsesAuthenticatedPrincipal() {
         MessageService messageService = mock(MessageService.class);
-        MessageController controller = new MessageController(messageService, mock(JwtUtil.class), mock(ChatMediaService.class), mock(MessageForwardService.class), mock(MessageEditService.class));
+        MessageController controller = new MessageController(messageService, mock(JwtUtil.class), mock(ChatMediaService.class), mock(MessageForwardService.class), mock(MessageEditService.class), mock(icu.tianqingyuluo.onlineim.service.MessageSearchService.class));
         UserIDProvider principal = () -> "usr_me";
         MessageSendRequest request = MessageSendRequest.builder()
                 .targetId("usr_peer")
@@ -140,7 +140,8 @@ class MessageControllerTest {
 
         MessageForwardService forwardService = mock(MessageForwardService.class);
         MessageController controller = new MessageController(mock(MessageService.class), mock(JwtUtil.class),
-                mock(ChatMediaService.class), forwardService, mock(MessageEditService.class));
+                mock(ChatMediaService.class), forwardService, mock(MessageEditService.class),
+                mock(icu.tianqingyuluo.onlineim.service.MessageSearchService.class));
         icu.tianqingyuluo.onlineim.pojo.dto.response.MessageForwardResponse expected =
                 icu.tianqingyuluo.onlineim.pojo.dto.response.MessageForwardResponse.builder()
                         .mode("merged").results(List.of()).build();
@@ -161,11 +162,32 @@ class MessageControllerTest {
 
         MessageEditService editService = mock(MessageEditService.class);
         MessageController controller = new MessageController(mock(MessageService.class), mock(JwtUtil.class),
-                mock(ChatMediaService.class), mock(MessageForwardService.class), editService);
+                mock(ChatMediaService.class), mock(MessageForwardService.class), editService,
+                mock(icu.tianqingyuluo.onlineim.service.MessageSearchService.class));
         MessageResponse expected = MessageResponse.builder().messageId("msg_1").content("新内容").edited(true).build();
         when(editService.edit("msg_1", request, "usr_me")).thenReturn(expected);
 
         assertEquals(expected, controller.editMessage("msg_1", request, () -> "usr_me").getBody());
         assertEquals(401, controller.editMessage("msg_1", request, null).getStatusCode().value());
+    }
+
+    @Test
+    void searchEndpointUsesPrincipalAndPassesQueryParameters() throws Exception {
+        icu.tianqingyuluo.onlineim.service.MessageSearchService searchService =
+                mock(icu.tianqingyuluo.onlineim.service.MessageSearchService.class);
+        MessageController controller = new MessageController(mock(MessageService.class), mock(JwtUtil.class),
+                mock(ChatMediaService.class), mock(MessageForwardService.class), mock(MessageEditService.class),
+                searchService);
+        icu.tianqingyuluo.onlineim.pojo.dto.response.MessageSearchResponse expected =
+                icu.tianqingyuluo.onlineim.pojo.dto.response.MessageSearchResponse.builder()
+                        .keyword("你好").results(List.of()).build();
+        when(searchService.search("usr_me", "你好", "conv_1", "1:msg_1", 10)).thenReturn(expected);
+
+        assertEquals(expected, controller.searchMessages("你好", "conv_1", "1:msg_1", 10, () -> "usr_me").getBody());
+        assertEquals(401, controller.searchMessages("你好", null, null, null, null).getStatusCode().value());
+
+        Method search = MessageController.class.getMethod("searchMessages", String.class, String.class,
+                String.class, Integer.class, UserIDProvider.class);
+        assertEquals("/search", search.getAnnotation(GetMapping.class).value()[0]);
     }
 }
