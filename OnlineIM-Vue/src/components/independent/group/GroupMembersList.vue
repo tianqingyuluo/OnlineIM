@@ -14,6 +14,8 @@ import {
 import { useUserStore } from '@/stores/user';
 import { groupMembersService } from '@/services/groupmembers.service';
 import {useOtherStore} from "@/stores/otherStore.ts";
+import PresenceLabel from '@/components/common/PresenceLabel.vue'
+import { usePresenceStore } from '@/stores/presence'
 
 const props = defineProps<{
   groupId: string
@@ -26,6 +28,7 @@ const loading = ref(false)
 const hasMore = ref(true)
 const userStore = useUserStore()
 const otherStore = useOtherStore()
+const presenceStore = usePresenceStore()
 const subMenuOpenStates = ref<Record<string, boolean>>({})
 
 function onContextMenuOpenChange(value: boolean) {
@@ -148,6 +151,8 @@ async function loadMembers() {
       member.role = getRoleText(member.role);
     });
     members.value = [...members.value, ...response.members]
+    const ids = response.members.map(member => member.user_info?.user_id).filter((id): id is string => !!id)
+    if (ids.length) void presenceStore.refresh(ids).catch(error => console.error('加载群成员在线状态失败:', error))
 
     hasMore.value = response.members.length >= 20
     offset.value += 20
@@ -208,6 +213,7 @@ onUnmounted(() => {
               >
               <div class="member-info">
                 <span class="nickname">{{ member.user_info.username }}</span>
+                <PresenceLabel :user-id="member.user_info.user_id" />
                 <span class="role">{{ member.role }}</span>
               </div>
             </div>

@@ -2,6 +2,8 @@ import { computed, ref, type ComputedRef, type Ref } from 'vue';
 import { WS_API_URL } from '../../shared/config.ts';
 import { useUserStore } from '@/stores/user';
 import { useHistoryStore } from '@/stores/history';
+import { usePresenceStore } from '@/stores/presence';
+import type { PresenceUpdate } from '@/utils/presence';
 import { dbService } from '@/utils/indexedDB.ts';
 import { toast } from 'vue-sonner';
 import type {
@@ -158,6 +160,9 @@ export class WebSocketService {
           case 'MESSAGE_RECALLED':
           case 'RECALL_MESSAGE_RESPONSE':
             void historyStore.handleMessageRecalled(payload as unknown as MessageRecalledPayload);
+            break;
+          case 'PRESENCE_UPDATE':
+            usePresenceStore().applyUpdate(payload as unknown as PresenceUpdate);
             break;
           default:
             break;

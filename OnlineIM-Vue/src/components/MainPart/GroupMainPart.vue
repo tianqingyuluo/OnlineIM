@@ -39,6 +39,7 @@ import RecallNotice from '@/components/MainPart/RecallNotice.vue'
 import RecallConfirmDialog from '@/components/MainPart/RecallConfirmDialog.vue'
 import { useMessageRecall } from '@/composables/useMessageRecall'
 import { isRecalledMessage } from '@/utils/message-recall'
+import { usePresenceStore } from '@/stores/presence'
 import { useListStore } from '@/stores/list'
 import type { GroupMemberAll } from '@/type/group'
 import {
@@ -70,6 +71,7 @@ const messageListRef = ref<HTMLElement | null>(null)
 const messageInputRef = ref<HTMLTextAreaElement | null>(null)
 const draft = ref('')
 const listStore = useListStore()
+const presenceStore = usePresenceStore()
 const groupMembers = ref<GroupMemberAll[]>([])
 /** 本次草稿中通过选择器选中的成员：user_id → 插入的名字 */
 const pickedMentions = new Map<string, string>()
@@ -142,6 +144,16 @@ const mentionNames = computed<Record<string, string[]>>(() => {
       .filter((name): name is string => !!name && !!name.trim())
   }
   return map
+})
+
+const onlineCount = computed(() => groupMembers.value.filter(member => {
+  const record = presenceStore.byUserId[member.user_info?.user_id]
+  return record?.visible !== false && record?.status === 'online'
+}).length)
+
+watch(groupMembers, members => {
+  const ids = members.map(member => member.user_info?.user_id).filter((id): id is string => !!id)
+  if (ids.length) void presenceStore.refresh(ids).catch(error => console.error('加载群成员在线状态失败:', error))
 })
 
 async function loadMembers() {
@@ -526,7 +538,10 @@ onBeforeUnmount(() => {
 <template>
   <div v-if="currentGroup && conversation" class="flex flex-col h-full">
     <div class="flex items-center justify-between w-full p-4 border-b relative">
-      <span class="text-lg font-semibold">{{ currentGroup.name }}</span>
+      <div class="min-w-0">
+        <div class="text-lg font-semibold truncate">{{ currentGroup.name }}</div>
+        <div class="text-xs text-gray-500" data-testid="group-online-count">{{ onlineCount }} 人在线</div>
+      </div>
       <div class="flex items-center gap-2">
         <button
           type="button"

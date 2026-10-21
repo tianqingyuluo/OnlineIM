@@ -14,6 +14,7 @@ import UserPart from '@/views/userPart.vue'
 import GroupPart from '@/views/groupPart.vue'
 import {useWidthStore} from "@/stores/width";
 import { websocketService } from '@/services/websocket.service';
+import { refreshContactPresence } from '@/stores/presence';
 const userStore = useUserStore()
 const listStore = useListStore()
 const route = useRoute()
@@ -67,6 +68,7 @@ onMounted(async () => {
     await userStore.fetchUserData();
 
     await listStore.fetchUserData();
+    await refreshContactPresence().catch(error => console.error('加载在线状态失败:', error));
     websocketService.connect();
   } catch (err) {
     console.error('获取用户信息失败:', err);

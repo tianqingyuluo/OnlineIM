@@ -23,6 +23,7 @@ import { useRouter } from 'vue-router'
 import type { Friend } from '@/type/Friends.ts'
 import AddGroupDialog from "@/components/AddGroupDialog.vue";
 import EditGroupDialog from "@/components/EditGroupDialog.vue";
+import PresenceLabel from "@/components/common/PresenceLabel.vue";
 
 const router = useRouter()
 const activeItem = ref<string | null>(null);
@@ -197,9 +198,7 @@ const showUserProfile = computed(() => route.path.startsWith('/main/friends/'))
                           </div>
                           <div class="flex flex-col flex-grow space-y-1">
                             <span class="text-[18px] font-bold">{{ friend.friend_info.remark || friend.friend_info.nickname }}</span>
-                            <span class="text-[13px] text-gray-500">
-                              {{ friend.friend_info.online_status === 'online' ? '在线' : '离线' }}
-                            </span>
+                            <PresenceLabel :user-id="friend.friend_info.user_id" />
                           </div>
                         </div>
                       </SidebarMenuButton>

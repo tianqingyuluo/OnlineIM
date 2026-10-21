@@ -36,11 +36,14 @@ import RecallNotice from '@/components/MainPart/RecallNotice.vue'
 import RecallConfirmDialog from '@/components/MainPart/RecallConfirmDialog.vue'
 import { useMessageRecall } from '@/composables/useMessageRecall'
 import { isRecalledMessage } from '@/utils/message-recall'
+import PresenceLabel from '@/components/common/PresenceLabel.vue'
+import { usePresenceStore } from '@/stores/presence'
 
 const route = useRoute()
 const userStore = useUserStore()
 const listStore = useListStore()
 const historyStore = useHistoryStore()
+const presenceStore = usePresenceStore()
 const emojiStore = useEmojiStore()
 const currentUser = ref<User | null>(null)
 const conversation = ref<Conversation | null>(null)
@@ -81,6 +84,10 @@ const targetUserId = computed(() =>
   || listStore.conversations.find(item => item.conversation_id === conversationId.value)?.target_info.id
   || '',
 )
+
+watch(targetUserId, id => {
+  if (id) void presenceStore.refresh([id]).catch(error => console.error('加载对方在线状态失败:', error))
+}, { immediate: true })
 
 const deliveryLabels: Record<string, string> = {
   sending: '发送中',
@@ -353,7 +360,10 @@ onBeforeUnmount(() => {
 <template>
   <div v-if="currentUser && conversation" class="flex flex-col h-full">
     <div class="flex items-center justify-between w-full p-4 border-b relative">
-      <span class="text-lg font-semibold">{{ currentUser.nickname || currentUser.username }}</span>
+      <div class="min-w-0">
+        <div class="text-lg font-semibold truncate">{{ currentUser.nickname || currentUser.username }}</div>
+        <PresenceLabel :user-id="targetUserId" data-testid="chat-header-presence" />
+      </div>
       <div class="flex items-center gap-2">
         <button
           type="button"

@@ -6,6 +6,7 @@ import {toTypedSchema} from '@vee-validate/zod';
 import {useForm} from 'vee-validate';
 import * as z from 'zod';
 import DraggableHeader from "@/components/common/DraggableHeader.vue";
+import PresencePrivacySwitch from "@/components/common/PresencePrivacySwitch.vue";
 
 // 表单验证规则
 const formSchema = toTypedSchema(
@@ -263,6 +264,8 @@ const handleDrag = ({ deltaX, deltaY }: { deltaX: number; deltaY: number }) => {
           <p v-if="errors.signature" class="text-red-500 text-sm mt-1">{{ errors.signature }}</p>
         </div>
       </div>
+
+      <PresencePrivacySwitch class="mt-4" />
 
       <!-- 按钮区域 -->
       <div class="flex justify-end space-x-3 mt-6">

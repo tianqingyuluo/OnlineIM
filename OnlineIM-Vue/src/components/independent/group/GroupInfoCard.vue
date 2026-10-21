@@ -13,7 +13,9 @@ import AddFriendModal from '@/components/independent/group/AddFriendModal.vue';
 import {conversationService} from "@/services/conversation.service.ts";
 import GroupMemberProfileModal from '@/components/independent/group/GroupMemberProfileModal.vue'; // 引入成员资料模态框组件
 import GroupSettings from './GroupSettings.vue';
+import { usePresenceStore } from '@/stores/presence'
 
+const presenceStore = usePresenceStore()
 const showAddFriendModal = ref(false);
 const showMemberProfileModal = ref(false); // 控制成员资料模态框显示状态
 const selectedMember = ref<GroupMemberAll | null>(null); // 存储选中的成员数据
@@ -133,6 +135,8 @@ const fetchMembers = async () => {
       offset: 0
     })
     members.value = response.members.slice(0, 11)
+    const ids = members.value.map(member => member.user_info?.user_id).filter((id): id is string => !!id)
+    if (ids.length) void presenceStore.refresh(ids).catch(error => console.error('加载群成员在线状态失败:', error))
   } catch (err) {
     error.value = err as Error
   } finally {
@@ -220,12 +224,17 @@ onMounted(() => {
                   class="flex flex-col items-center hover:bg-gray-100 cursor-pointer" 
                   @click="handleMemberClick(member)" 
               >
-                <div class="w-14 h-14 rounded-full bg-gray-100 p-1 flex justify-center items-center"> <!-- 灰色圆形背景 -->
+                <div class="relative w-14 h-14 rounded-full bg-gray-100 p-1 flex justify-center items-center">
                   <img
                       :src="member.user_info.avatar_url || '/images/default-avatar.png'"
                       class="w-12 h-12 rounded-full object-cover"
                       :alt="member.user_info.username"
                   >
+                  <span
+                      v-if="presenceStore.byUserId[member.user_info.user_id]?.status === 'online'"
+                      class="absolute bottom-1 right-1 h-3 w-3 rounded-full border-2 border-white bg-green-500"
+                      aria-hidden="true"
+                  />
                 </div>
                 <span class="text-xs mt-2 truncate w-full text-center">
         {{ member.user_info.nickname || member.user_info.username }}

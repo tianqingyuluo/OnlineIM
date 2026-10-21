@@ -5,6 +5,10 @@ const userStore = {
   loggedInUser: { user_id: 'usr_test' },
 }
 
+const presenceStore = {
+  applyUpdate: vi.fn(),
+}
+
 const historyStore = {
   handleWebSocketMessage: vi.fn(),
   handleGroupWebSocketMessage: vi.fn(),
@@ -29,6 +33,7 @@ const dbServiceMock = {
 
 vi.mock('@/stores/user', () => ({ useUserStore: () => userStore }))
 vi.mock('@/stores/history', () => ({ useHistoryStore: () => historyStore }))
+vi.mock('@/stores/presence', () => ({ usePresenceStore: () => presenceStore }))
 vi.mock('@/utils/indexedDB.ts', () => ({ dbService: dbServiceMock }))
 vi.mock('vue-sonner', () => ({
   toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() },
@@ -278,6 +283,26 @@ describe('WebSocketService', () => {
       message_id: 'msg_1',
     }))
     await vi.waitFor(() => expect(dbServiceMock.markOutboundSent).toHaveBeenCalledWith('usr_test', 'client_1'))
+  })
+
+  it('writes PRESENCE_UPDATE into the presence store', async () => {
+    const { WebSocketService } = await import('@/services/websocket.service')
+    const service = new WebSocketService()
+    service.connect()
+    const socket = FakeWebSocket.instances[0]
+    socket.open()
+
+    socket.receive({
+      type: 'PRESENCE_UPDATE',
+      message: { user_id: 'usr_a', status: 'offline', last_seen_at: 1700000000000, server_time: 1700000001000 },
+    })
+
+    expect(presenceStore.applyUpdate).toHaveBeenCalledWith({
+      user_id: 'usr_a',
+      status: 'offline',
+      last_seen_at: 1700000000000,
+      server_time: 1700000001000,
+    })
   })
 
   it('routes top-level MESSAGE_RECALLED frames to the history store', async () => {

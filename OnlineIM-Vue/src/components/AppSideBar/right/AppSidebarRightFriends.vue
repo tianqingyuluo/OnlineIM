@@ -24,6 +24,7 @@ import type { FriendInFriendGroup} from '@/type/Friends.ts'
 import AddGroupDialog from "@/components/AddGroupDialog.vue";
 import EditGroupDialog from "@/components/EditGroupDialog.vue";
 import BlacklistSidebar from "@/components/BlacklistSidebar.vue";
+import PresenceLabel from "@/components/common/PresenceLabel.vue";
 const router = useRouter()
 const activeItem = ref<string | null>(null);
 const expandedGroups = ref<Record<string, boolean>>({});
@@ -219,9 +220,7 @@ function handleUserClick(user: FriendInFriendGroup) {
                             <span class="text-[18px] font-bold truncate">
                               {{ friend.remark || friend.nickname }}
                             </span>
-                            <span class="text-[13px] text-gray-500">
-                              {{ friend.online_status === 'online' ? '在线' : '离线' }}
-                            </span>
+                            <PresenceLabel :user-id="friend.user_id" />
                           </div>
                         </div>
                       </SidebarMenuButton>
