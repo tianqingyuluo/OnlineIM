@@ -11,6 +11,7 @@ import icu.tianqingyuluo.onlineim.service.FriendService;
 import icu.tianqingyuluo.onlineim.service.GroupService;
 import icu.tianqingyuluo.onlineim.service.ConversationReadStateService;
 import icu.tianqingyuluo.onlineim.service.UserService;
+import icu.tianqingyuluo.onlineim.util.ConversationIdUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -92,6 +93,16 @@ public class ConversationServiceImpl implements ConversationService {
         conversationRepository.save(conversation);
         
         return true;
+    }
+
+    @Override
+    public void hidePrivateConversation(String userId, String friendUserId) {
+        String conversationId = ConversationIdUtil.privateConversationId(userId, friendUserId);
+        conversationRepository.findById(conversationId).ifPresent(conversation -> {
+            conversation.setStatus(0);
+            conversation.setUpdatedAt(new Date());
+            conversationRepository.save(conversation);
+        });
     }
 
     @Override

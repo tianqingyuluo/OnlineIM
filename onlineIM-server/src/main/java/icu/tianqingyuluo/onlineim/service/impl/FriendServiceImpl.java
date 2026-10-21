@@ -81,6 +81,24 @@ public class FriendServiceImpl implements FriendService {
     }
 
     @Override
+    @Transactional
+    public String deleteFriend(String callerId, String friendOrRelationId) {
+        String relationId = resolveOwnedFriendshipId(callerId, friendOrRelationId);
+        if (relationId == null) {
+            return null;
+        }
+        // 只取调用者自己名下这条关系的好友ID，保证只能删除自己的好友关系
+        String friendUserId = userFriendMapper.getFriendIdByIdAndUserId(relationId, callerId);
+        if (friendUserId == null) {
+            return null;
+        }
+        userFriendMapper.deleteByUserIdAndFriendId(callerId, friendUserId);
+        userFriendMapper.deleteByUserIdAndFriendId(friendUserId, callerId);
+        friendRequestMapper.deleteBetween(callerId, friendUserId);
+        return friendUserId;
+    }
+
+    @Override
     public boolean areFriends(String userId, String friendUserId) {
         if (userId == null || friendUserId == null || userId.isBlank() || friendUserId.isBlank()
                 || userId.equals(friendUserId)) {

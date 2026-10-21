@@ -30,6 +30,14 @@ public interface FriendService {
      * 拉黑、删除或只有单向记录都不算好友。
      */
     boolean areFriends(String userId, String friendUserId);
+
+    /**
+     * 删除好友：双向删除好友关系并清理两人之间的好友申请记录。
+     * @param callerId 当前用户ID
+     * @param friendOrRelationId 好友的用户ID（usr_）或调用者自己的好友关系ID（rel_）
+     * @return 被删除好友的用户ID；调用者没有这条好友关系时返回 null
+     */
+    String deleteFriend(String callerId, String friendOrRelationId);
     void createFriend(UserFriend userFriend, String friendRequestId, int requestStatus, String updatedAt);
     void updateRemarkByID(String id,String remark);
     void updateGroupByID(String id,String groupId);

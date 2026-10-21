@@ -36,6 +36,12 @@ public interface UserFriendMapper {
     
     @Delete("DELETE FROM user_friends WHERE id = #{id}")
     int delete(String id);
+
+    @Select("SELECT friend_id FROM user_friends WHERE id = #{id} AND user_id = #{userId}")
+    String getFriendIdByIdAndUserId(@Param("id") String id, @Param("userId") String userId);
+
+    @Delete("DELETE FROM user_friends WHERE user_id = #{userId} AND friend_id = #{friendId}")
+    int deleteByUserIdAndFriendId(@Param("userId") String userId, @Param("friendId") String friendId);
     
     @Select("SELECT * FROM user_friends WHERE user_id = #{userId} AND status = 2")
     List<UserFriend> getBlacklist(String userId);

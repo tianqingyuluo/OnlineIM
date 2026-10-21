@@ -8,6 +8,7 @@ import icu.tianqingyuluo.onlineim.pojo.dto.response.FriendResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
 import icu.tianqingyuluo.onlineim.pojo.entity.FriendRequest;
 import icu.tianqingyuluo.onlineim.pojo.entity.UserFriend;
+import icu.tianqingyuluo.onlineim.service.ConversationService;
 import icu.tianqingyuluo.onlineim.service.FriendGroupService;
 import icu.tianqingyuluo.onlineim.service.FriendService;
 import icu.tianqingyuluo.onlineim.service.UserService;
@@ -41,8 +42,10 @@ public class FriendController {
     private final UserService userService;
     private final FriendGroupService friendGroupService;
     private final FriendRequestMapper friendRequestMapper;
+    private final ConversationService conversationService;
 
-    public FriendController(FriendService friendService, JwtUtil jwtUtil, UserService userService, FriendGroupService friendGroupService, FriendRequestMapper friendRequestMapper) {
+    public FriendController(FriendService friendService, JwtUtil jwtUtil, UserService userService, FriendGroupService friendGroupService, FriendRequestMapper friendRequestMapper, ConversationService conversationService) {
+        this.conversationService = conversationService;
         this.friendService = friendService;
         this.jwtUtil = jwtUtil;
         this.userService = userService;
@@ -161,6 +164,22 @@ public class FriendController {
         response.put("friendship_id", friendId);
         response.put("friendship_group_id", friend.getFriendGroupID());
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 删除好友：双向解除好友关系，隐藏两人的私聊会话（消息历史保留）
+     * @param friendId 好友的用户ID（usr_）或自己的好友关系ID（rel_）
+     * @return 204；不是自己的好友时 404
+     */
+    @DeleteMapping("/{friendId}")
+    public ResponseEntity<?> deleteFriend(@RequestHeader("Authorization") String token, @PathVariable String friendId) {
+        String userid = jwtUtil.getUserIDFromToken(token);
+        String friendUserId = friendService.deleteFriend(userid, friendId);
+        if (friendUserId == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ErrorCodeUtil.getErrorOutput("404", "未找到该好友"));
+        }
+        conversationService.hidePrivateConversation(userid, friendUserId);
+        return ResponseEntity.noContent().build();
     }
 
     /**

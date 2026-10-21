@@ -36,6 +36,13 @@ public interface FriendRequestMapper {
     @Update("UPDATE friend_requests SET status = #{status}, updated_at = #{updatedAt} WHERE id = #{id}")
     int updateStatus(@Param("id") String id, @Param("status") int status, @Param("updatedAt") String updatedAt);
     
+    /**
+     * 删除两个用户之间（双向）的全部好友申请记录，删除好友后允许重新申请
+     */
+    @Delete("DELETE FROM friend_requests WHERE (from_user_id = #{userA} AND to_user_id = #{userB}) " +
+            "OR (from_user_id = #{userB} AND to_user_id = #{userA})")
+    int deleteBetween(@Param("userA") String userA, @Param("userB") String userB);
+
     @Select("SELECT * FROM friend_requests WHERE from_user_id = #{fromUserId} AND to_user_id = #{toUserId} AND status = 0")
     FriendRequest getPendingRequest(@Param("fromUserId") String fromUserId, @Param("toUserId") String toUserId);
 } 
