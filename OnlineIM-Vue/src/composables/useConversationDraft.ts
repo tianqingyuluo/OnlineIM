@@ -31,13 +31,20 @@ export function useConversationDraft(options: {
   /** 取某个会话当前的回复目标 / @；参数是草稿所属的会话（切换瞬间路由参数可能已经是新会话） */
   getExtra: (conversationId: string | undefined) => DraftExtra
   applyExtra: (extra: DraftExtra, payload: DraftPayload | null) => void
+  /**
+   * 当前界面正打开的会话。新会话 loadInitialHistory 会先清掉旧会话的 replyTarget；
+   * 用它判断「已切走」，避免把丢掉回复的镜像写回服务端。未传则只按 conversationId 判断。
+   */
+  getActiveConversationId?: () => string | null | undefined
 }) {
-  const { conversationId, draft, isEditing, getExtra, applyExtra } = options
+  const { conversationId, draft, isEditing, getExtra, applyExtra, getActiveConversationId } = options
   let ready = false
   let applying = false
   let generation = 0
   let warnedLength = false
   let lastSynced = draftSignature('', EMPTY_DRAFT_EXTRA)
+  /** 与 lastSynced 对应的 extra；切走时 replyTarget 常被先清掉，靠它避免把「丢掉回复」写回服务端/本地镜像 */
+  let lastSyncedExtra: DraftExtra = { ...EMPTY_DRAFT_EXTRA }
   let timer: ReturnType<typeof setTimeout> | null = null
   let retryTimer: ReturnType<typeof setTimeout> | null = null
   /** 同一次关闭里 beforeunload 和 pagehide 都会响，同一份内容只发一次 keepalive */
@@ -86,6 +93,40 @@ export function useConversationDraft(options: {
     return draftSignature(content, extra)
   }
 
+  function copyExtra(extra: DraftExtra): DraftExtra {
+    return {
+      replyToMessageId: extra.replyToMessageId,
+      atUsers: extra.atUsers ? extra.atUsers.map(item => ({ ...item })) : [],
+    }
+  }
+
+  function markSynced(signature: string, extra: DraftExtra) {
+    lastSynced = signature
+    lastSyncedExtra = copyExtra(extra)
+  }
+
+  /** 新会话的 loadInitialHistory 会先清掉 replyTarget；此时 bound 会话其实已经切走 */
+  function stillOnBoundConversation(id: string | undefined): boolean {
+    if (!id || boundId !== id) return false
+    const active = getActiveConversationId?.()
+    if (active && active !== id) return false
+    return id === conversationId.value
+  }
+
+  /**
+   * 取用于落盘/镜像的 extra。
+   * 切走或卸载时 live 回复常已被清空，若正文与上次同步（带回复）一致，沿用上次，避免误清回复目标。
+   * 用户仍在本会话里主动取消回复时，live 无回复且 stillOn → 按 live 继续同步。
+   */
+  function resolveExtraForPersist(id: string | undefined, content: string): DraftExtra {
+    const live = getExtra(id)
+    if (!id || live.replyToMessageId) return live
+    if (!lastSyncedExtra.replyToMessageId) return live
+    if (signatureOf(content, lastSyncedExtra) !== lastSynced) return live
+    if (stillOnBoundConversation(id)) return live
+    return copyExtra(lastSyncedExtra)
+  }
+
   function payloadSignature(payload: DraftPayload | null): string {
     if (!payload || payload.cleared || !payload.content) return signatureOf('', EMPTY_DRAFT_EXTRA)
     return signatureOf(payload.content, {
@@ -126,7 +167,11 @@ export function useConversationDraft(options: {
       }, payload)
     }
     applying = false
-    lastSynced = currentSignature()
+    const appliedExtra = cleared ? EMPTY_DRAFT_EXTRA : {
+      replyToMessageId: payload!.reply_to_message_id || payload!.reply_to?.message_id || null,
+      atUsers: (payload!.at_users || []).filter(item => item.user_id && item.name),
+    }
+    markSynced(signatureOf(content, appliedExtra), appliedExtra)
     // 输入框已经采用这份服务端/远端草稿，本地镜像作废，避免下次打开把旧字盖回去
     if (payload?.conversation_id) {
       clearPendingDraft(currentUserId(), payload.conversation_id)
@@ -169,7 +214,7 @@ export function useConversationDraft(options: {
         publishDraftUpdate(cleared)
         forgetPendingIfSynced(id, savedSignature)
         if (id === boundId && currentSignature() === savedSignature) {
-          lastSynced = savedSignature
+          markSynced(savedSignature, extra)
         }
       } catch (error) {
         scheduleRetry(id, error)
@@ -193,7 +238,7 @@ export function useConversationDraft(options: {
       if (saved) publishDraftUpdate(saved)
       forgetPendingIfSynced(id, savedSignature)
       if (id === boundId && currentSignature() === savedSignature) {
-        lastSynced = savedSignature
+        markSynced(savedSignature, extra)
       } else if (id === boundId && !isEditing.value) {
         schedule()
       }
@@ -227,7 +272,7 @@ export function useConversationDraft(options: {
     const id = boundId
     if (!id || id !== conversationId.value || !ready || isEditing.value) return
     const content = draft.value
-    const extra = getExtra(id)
+    const extra = resolveExtraForPersist(id, content)
     if (signatureOf(content, extra) === lastSynced) return
     await persist(id, content, extra)
   }
@@ -240,7 +285,7 @@ export function useConversationDraft(options: {
     const id = boundId
     if (!id || isEditing.value) return
     const content = draft.value
-    const extra = getExtra(id)
+    const extra = resolveExtraForPersist(id, content)
     const signature = signatureOf(content, extra)
     if (signature === lastSynced) return
     rememberPending(id, content, extra)
@@ -272,7 +317,7 @@ export function useConversationDraft(options: {
       }
       const dirty = currentSignature() !== lastSynced && draft.value.trim()
       if (dirty) {
-        rememberPending(id, draft.value, getExtra(id))
+        rememberPending(id, draft.value, resolveExtraForPersist(id, draft.value))
         ready = true
         schedule()
         return
@@ -285,11 +330,11 @@ export function useConversationDraft(options: {
       if (pending && !draft.value.trim()) {
         applying = true
         restorePending(id, pending, null)
-        lastSynced = signatureOf('', EMPTY_DRAFT_EXTRA)
+        markSynced(signatureOf('', EMPTY_DRAFT_EXTRA), EMPTY_DRAFT_EXTRA)
         applying = false
         flushAfter = currentSignature() !== lastSynced
       } else {
-        lastSynced = currentSignature()
+        markSynced(currentSignature(), getExtra(id))
       }
     } finally {
       if (gen === generation && id === conversationId.value && !isEditing.value) ready = true
@@ -302,13 +347,27 @@ export function useConversationDraft(options: {
     const pending = readPendingDraft(currentUserId(), id)
     if (!pending) return false
     const pendingSig = signatureOf(pending.content, extraOf(pending))
-    if (pendingSig === payloadSignature(server)) {
+    const serverSig = payloadSignature(server)
+    if (pendingSig === serverSig) {
+      clearPendingDraft(currentUserId(), id)
+      return false
+    }
+    const serverReply = server.reply_to_message_id || server.reply_to?.message_id || null
+    // 切走竞态留下的镜像：正文与服务端相同，只是丢掉了回复 → 信任服务端
+    if (
+      pending.content === (server.content || '') &&
+      !pending.replyToMessageId &&
+      serverReply
+    ) {
       clearPendingDraft(currentUserId(), id)
       return false
     }
     applying = true
     restorePending(id, pending, server)
-    lastSynced = payloadSignature(server)
+    markSynced(serverSig, {
+      replyToMessageId: serverReply,
+      atUsers: (server.at_users || []).filter(item => item.user_id && item.name),
+    })
     applying = false
     return currentSignature() !== lastSynced
   }
@@ -317,7 +376,7 @@ export function useConversationDraft(options: {
     const from = boundId ?? prev
     const editing = isEditing.value
     const content = draft.value
-    const extra = getExtra(from)
+    const extra = resolveExtraForPersist(from, content)
     const wasReady = ready
     ready = false
     clearTimers()
@@ -332,11 +391,15 @@ export function useConversationDraft(options: {
   watch(() => draftSignature(draft.value, getExtra(boundId)), (next) => {
     if (applying || !ready || isEditing.value) return
     if (!boundId) return
-    if (next === lastSynced) {
-      clearPendingDraft(currentUserId(), boundId)
+    const content = draft.value
+    const extra = resolveExtraForPersist(boundId, content)
+    const sig = signatureOf(content, extra)
+    if (sig === lastSynced) {
+      // 仅在 live 签名也一致时清镜像；切走竞态下 live 已丢回复但不应清掉带回复的镜像
+      if (next === lastSynced) clearPendingDraft(currentUserId(), boundId)
       return
     }
-    rememberPending(boundId, draft.value, getExtra(boundId))
+    rememberPending(boundId, content, extra)
     schedule()
   }, { flush: 'sync' })
 
@@ -357,8 +420,11 @@ export function useConversationDraft(options: {
   function onVisible() {
     if (document.visibilityState === 'hidden') {
       const id = boundId
-      if (!id || isEditing.value || currentSignature() === lastSynced) return
-      rememberPending(id, draft.value, getExtra(id))
+      if (!id || isEditing.value) return
+      const content = draft.value
+      const extra = resolveExtraForPersist(id, content)
+      if (signatureOf(content, extra) === lastSynced) return
+      rememberPending(id, content, extra)
       if (ready) void flush()
       return
     }
@@ -385,9 +451,13 @@ export function useConversationDraft(options: {
     window.removeEventListener('pageshow', onPageShow)
     unsubscribe()
     const id = boundId
-    if (id && ready && !isEditing.value && currentSignature() !== lastSynced) {
-      rememberPending(id, draft.value, getExtra(id))
-      void persist(id, draft.value, getExtra(id))
+    if (id && ready && !isEditing.value) {
+      const content = draft.value
+      const extra = resolveExtraForPersist(id, content)
+      if (signatureOf(content, extra) !== lastSynced) {
+        rememberPending(id, content, extra)
+        void persist(id, content, extra)
+      }
     }
     clearTimers()
   })

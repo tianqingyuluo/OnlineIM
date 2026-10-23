@@ -108,6 +108,7 @@ const draftSync = useConversationDraft({
   conversationId: groupId,
   draft,
   isEditing: computed(() => edit.isEditing),
+  getActiveConversationId: () => historyStore.activeConversationId,
   getExtra: id => {
     const atUsers: DraftMention[] = []
     for (const [userId, name] of pickedMentions) {

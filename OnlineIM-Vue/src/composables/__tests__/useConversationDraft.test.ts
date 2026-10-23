@@ -174,6 +174,7 @@ describe('useConversationDraft', () => {
   async function setupPerConversation() {
     const draft = ref('')
     const conversationId = ref('conv_1')
+    const activeConversationId = ref<string | null>('conv_1')
     const replies = new Map<string, string>()
     const Comp = defineComponent({
       setup() {
@@ -181,6 +182,7 @@ describe('useConversationDraft', () => {
           conversationId,
           draft,
           isEditing: ref(false),
+          getActiveConversationId: () => activeConversationId.value,
           getExtra: id => ({ replyToMessageId: (id && replies.get(id)) || null, atUsers: [] }),
           applyExtra: () => {},
         })
@@ -189,7 +191,7 @@ describe('useConversationDraft', () => {
     })
     const wrapper = track(mount(Comp))
     await (wrapper.vm.reload as () => Promise<void>)()
-    return { draft, conversationId, replies, wrapper }
+    return { draft, conversationId, activeConversationId, replies, wrapper }
   }
 
   it('从私聊点到群聊（路由参数先变、旧组件再卸载）不会把私聊草稿写进群', async () => {
@@ -339,4 +341,74 @@ describe('useConversationDraft', () => {
     expect(saveDraft).not.toHaveBeenCalled()
     expect(readPendingDraft('usr_me', 'conv_1')).toBeNull()
   })
+
+  it('切走时 replyTarget 先被清掉：已同步的带回复草稿不会被镜像/服务端丢掉', async () => {
+    signInUser()
+    const api = await setupPerConversation()
+    api.replies.set('conv_1', 'msg_1')
+    api.draft.value = '带着回复'
+    await vi.advanceTimersByTimeAsync(DRAFT_DEBOUNCE_MS)
+    expect(saveDraft).toHaveBeenCalledWith('conv_1', expect.objectContaining({
+      content: '带着回复',
+      reply_to_message_id: 'msg_1',
+    }))
+    saveDraft.mockClear()
+
+    // 新会话 loadInitialHistory 先清掉全局 replyTarget，再卸载旧组件
+    api.activeConversationId.value = 'grp_1'
+    api.replies.delete('conv_1')
+    await nextTick()
+    api.wrapper.unmount()
+    await vi.advanceTimersByTimeAsync(DRAFT_DEBOUNCE_MS * 2)
+
+    expect(saveDraft).not.toHaveBeenCalled()
+    expect(readPendingDraft('usr_me', 'conv_1')).toBeNull()
+  })
+
+  it('本地镜像误丢回复、服务端仍带回复时采用服务端，不把回复清掉', async () => {
+    signInUser()
+    writePendingDraft('usr_me', 'conv_1', {
+      content: '带着回复',
+      replyToMessageId: null,
+      atUsers: [],
+      savedAt: 1,
+    })
+    getDraft.mockResolvedValue({
+      conversation_id: 'conv_1',
+      content: '带着回复',
+      draft_preview: '带着回复',
+      reply_to_message_id: 'msg_1',
+      reply_to: { state: 'active', message_id: 'msg_1', content: '原消息' },
+      updated_at: 2,
+    })
+    const api = await setup()
+    await api.reload()
+    expect(api.draft.value).toBe('带着回复')
+    expect(api.extra().replyToMessageId).toBe('msg_1')
+    expect(saveDraft).not.toHaveBeenCalled()
+    expect(readPendingDraft('usr_me', 'conv_1')).toBeNull()
+  })
+
+  it('仍在本会话时用户取消回复：会同步清掉服务端回复目标', async () => {
+    signInUser()
+    const api = await setupPerConversation()
+    api.replies.set('conv_1', 'msg_1')
+    api.draft.value = '带着回复'
+    await vi.advanceTimersByTimeAsync(DRAFT_DEBOUNCE_MS)
+    saveDraft.mockClear()
+
+    api.replies.delete('conv_1')
+    // Map 本身不是响应式的；真实环境里 replyTarget 是 store 状态，清掉就会触发 watch
+    const keep = api.draft.value
+    api.draft.value = keep + ' '
+    await nextTick()
+    api.draft.value = keep
+    await nextTick()
+    await vi.advanceTimersByTimeAsync(DRAFT_DEBOUNCE_MS)
+    expect(saveDraft).toHaveBeenCalledWith('conv_1', expect.objectContaining({
+      content: '带着回复',
+      reply_to_message_id: null,
+    }))
+  })
+
 })
