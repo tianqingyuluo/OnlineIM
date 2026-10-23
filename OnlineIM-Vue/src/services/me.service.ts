@@ -3,7 +3,7 @@ import type { FormContext } from 'vee-validate';
 import { useUserStore } from '@/stores/user.ts';
 import {type User}from '@/type/User.ts'
 import axios from 'axios';
-import { API_BASE_URL } from '../../shared/config.ts';
+import { API_BASE_URL } from '../../shared/endpoints.js';
 
 
 
@@ -35,9 +35,13 @@ export const meService = {
         formContext?: FormContext
     ): Promise<User> {
         try {
-            // 确保avatar_url是字符串而不是嵌套对象
-            if (userData.avatar_url && typeof userData.avatar_url === 'object') {
-                userData.avatar_url = userData.avatar_url.avatar_url;
+            // 个别调用方曾把 { avatar_url } 整包塞进来，这里展平回字符串。
+            const avatar = userData.avatar_url as unknown
+            if (avatar && typeof avatar === 'object' && 'avatar_url' in avatar) {
+                const nested = (avatar as { avatar_url?: unknown }).avatar_url
+                if (typeof nested === 'string') {
+                    userData.avatar_url = nested
+                }
             }
             const response = await api.put<User>('/users/me', userData);
             return response.data;

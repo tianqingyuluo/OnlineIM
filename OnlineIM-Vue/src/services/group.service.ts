@@ -9,7 +9,7 @@ import {
 import { useListStore } from '@/stores/list';
 import { useUserStore } from '@/stores/user';
 import axios from 'axios';
-import { API_BASE_URL } from '../../shared/config.ts';
+import { API_BASE_URL } from '../../shared/endpoints.js';
 export const groupService = {
   // 创建群组
   async createGroup(
@@ -51,6 +51,8 @@ export const groupService = {
         },
         formContext?: FormContext
     ): Promise<GroupSearchResponse> {
+        // 后端 /groups/search/{keyword} 不接收分页，page 只为现有调用方保留。
+        void page
         try {
             const response = await api.get<GroupSearchResponse>(`/groups/search/${encodeURIComponent(query)}`, {
                 params

@@ -1,5 +1,5 @@
 import { computed, ref, type ComputedRef, type Ref } from 'vue';
-import { API_BASE_URL, WS_API_URL } from '../../shared/config.ts';
+import { API_BASE_URL, WS_API_URL } from '../../shared/endpoints.js';
 import { useUserStore } from '@/stores/user';
 import { useHistoryStore } from '@/stores/history';
 import { usePresenceStore } from '@/stores/presence';

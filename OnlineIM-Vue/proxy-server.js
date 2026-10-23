@@ -1,6 +1,6 @@
 import express from 'express';
 import { createProxyMiddleware } from 'http-proxy-middleware';
-import { API_BASE_URL } from './shared/config.js';
+import { API_BASE_URL } from './shared/endpoints.js';
 const app = express();
 
 app.use('/', createProxyMiddleware({
