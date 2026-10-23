@@ -23,13 +23,13 @@ const settings = ref({
 });
 
 // Watch for changes in conversation or userId props to update settings
-watch(() => [props.conversation, props.userId], ([newConversation, newUserId]) => {
-  if (newConversation) {
-    settings.value.isPinned = newConversation.is_pinned || false;
-    settings.value.isMuted = newConversation.is_muted || false;
+watch(() => ({ conversation: props.conversation, userId: props.userId }), ({ conversation, userId }) => {
+  if (conversation) {
+    settings.value.isPinned = conversation.is_pinned || false;
+    settings.value.isMuted = conversation.is_muted || false;
   }
-  if (newUserId) {
-    settings.value.isBlocked = listStore.blacklist.some(user => user.user_id === newUserId);
+  if (userId) {
+    settings.value.isBlocked = listStore.blacklist.some(user => user.user_id === userId);
   }
 }, { immediate: true });
 

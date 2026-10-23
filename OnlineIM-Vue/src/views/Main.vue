@@ -21,7 +21,7 @@ const route = useRoute()
 const initialWidth = computed(() => {
   return useWidthStore().sidebarWidth
 })
-let sidebarWidth = ref(initialWidth)
+const sidebarWidth = ref(initialWidth.value)
 const isResizing = ref(false)
 
 const showUserProfile = computed(() => route.path.startsWith('/main/friends/'))

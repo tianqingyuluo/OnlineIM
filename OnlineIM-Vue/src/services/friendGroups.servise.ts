@@ -2,6 +2,14 @@ import api from "@/services/api.service.ts";
 import type {UserGroupInfo} from "@/type/userGroup.ts";
 import { toast } from "vue-sonner";
 
+function responseMessage(error: unknown): string | undefined {
+    if (typeof error !== 'object' || error === null || !('response' in error)) {
+        return undefined
+    }
+    const data = (error as { response?: { data?: { message?: unknown } } }).response?.data
+    return typeof data?.message === 'string' && data.message ? data.message : undefined
+}
+
 export const friendGroupsService={
     async getFriendGroups(): Promise<UserGroupInfo[]>{
         try{
@@ -18,7 +26,7 @@ export const friendGroupsService={
             await api.delete(`/friend-groups/${groupId}`);
         }
         catch(e) {
-            const errorMessage = e.response?.data?.message || "删除好友分组失败";
+            const errorMessage = responseMessage(e) || "删除好友分组失败";
             toast.error(errorMessage);
             throw new Error(errorMessage);
         }
@@ -30,7 +38,7 @@ export const friendGroupsService={
             return response.data;
         }
         catch(e) {
-            const errorMessage = e.response?.data?.message || "创建好友分组失败";
+            const errorMessage = responseMessage(e) || "创建好友分组失败";
             toast.error(errorMessage);
             throw new Error(errorMessage);
         }
@@ -42,7 +50,7 @@ export const friendGroupsService={
             return response.data;
         }
         catch(e) {
-            const errorMessage = e.response?.data?.message || "更新好友分组失败";
+            const errorMessage = responseMessage(e) || "更新好友分组失败";
             toast.error(errorMessage);
             throw new Error(errorMessage);
         }

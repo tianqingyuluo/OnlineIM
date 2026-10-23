@@ -68,7 +68,7 @@
         <button class="btn-close" @click="closeDetail">×</button>
       </div>
 
-      <div v-if="!isEditing && !showCreateForm" class="detail-content">
+      <div v-if="selectedAnnouncement && !isEditing && !showCreateForm" class="detail-content">
         <h4>{{ selectedAnnouncement.title }}</h4>
         <div class="content">{{ selectedAnnouncement.content }}</div>
         <div class="meta">
