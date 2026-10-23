@@ -207,6 +207,60 @@ class DeviceSessionServiceTest {
     }
 
     @Test
+    void listShowsStoredDisplayNameAndFallsBackToTypeLabel() {
+        service.onLogin("usr_1", "desktop-1", DeviceTypes.DESKTOP, "Bearer desktop", "桌面端 · Chrome / Windows");
+        service.onLogin("usr_1", "phone-1", DeviceTypes.PHONE, "Bearer phone");
+        service.onWebSocketConnected("usr_1", "desktop-1", DeviceTypes.DESKTOP, "Bearer desktop", "conn_desktop");
+
+        List<DeviceSessionResponse> devices = service.list("usr_1", "desktop-1");
+        DeviceSessionResponse desktop = devices.stream()
+                .filter(device -> "desktop-1".equals(device.getDeviceId()))
+                .findFirst()
+                .orElseThrow();
+        DeviceSessionResponse phone = devices.stream()
+                .filter(device -> "phone-1".equals(device.getDeviceId()))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("桌面端 · Chrome / Windows", desktop.getDeviceName());
+        assertEquals("手机端", phone.getDeviceName());
+        assertTrue(desktop.isOnline());
+
+        Map<String, Object> legacy = new HashMap<>();
+        legacy.put("deviceId", "web-1");
+        legacy.put("deviceType", DeviceTypes.WEB);
+        legacy.put("deviceName", "web-1");
+        legacy.put("userId", "usr_1");
+        values.put(DeviceSessionService.sessionKey("usr_1", "web-1"), legacy);
+        hashes.get(DeviceSessionService.indexKey("usr_1")).put(DeviceTypes.WEB, "web-1");
+        DeviceSessionResponse web = service.list("usr_1", "desktop-1").stream()
+                .filter(device -> "web-1".equals(device.getDeviceId()))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("网页端", web.getDeviceName());
+    }
+
+    @Test
+    void mapShapedSessionKeepsAReadableName() {
+        Map<String, Object> stored = new HashMap<>();
+        stored.put("token", "Bearer phone");
+        stored.put("userId", "usr_1");
+        stored.put("deviceId", "phone-1");
+        stored.put("deviceType", DeviceTypes.PHONE);
+        stored.put("deviceName", "手机端 · Safari / iOS");
+        stored.put("connectionID", "conn_phone");
+        stored.put("loginTime", 10L);
+        stored.put("activeTime", 11L);
+        values.put(DeviceSessionService.sessionKey("usr_1", "phone-1"), stored);
+        hashes.computeIfAbsent(DeviceSessionService.indexKey("usr_1"), key -> new HashMap<>())
+                .put(DeviceTypes.PHONE, "phone-1");
+
+        DeviceSessionResponse device = service.list("usr_1", "other").get(0);
+        assertEquals("手机端 · Safari / iOS", device.getDeviceName());
+        assertEquals(DeviceTypes.PHONE, device.getDeviceType());
+        assertTrue(device.isOnline());
+    }
+
+    @Test
     void sameDeviceIdLoggingInAsAnotherTypeIsListedOnce() {
         service.onLogin("usr_1", "dev-1", DeviceTypes.WEB, "Bearer as-web");
         service.onLogin("usr_1", "dev-1", DeviceTypes.PHONE, "Bearer as-phone");

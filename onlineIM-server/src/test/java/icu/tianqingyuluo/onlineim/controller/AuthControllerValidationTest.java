@@ -108,4 +108,16 @@ class AuthControllerValidationTest {
 
         verifyNoInteractions(authenticationManager);
     }
+
+    @Test
+    void loginRejectsOversizedDeviceName() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"abcd\",\"password\":\"secret12\",\"device_name\":\""
+                                + "名".repeat(129) + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").exists());
+
+        verifyNoInteractions(authenticationManager);
+    }
 }

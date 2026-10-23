@@ -933,7 +933,7 @@ WebSocket **每次**连接成功（含第一次连接和断线重连）后，客
 
 同一账号按设备类型同时只保留一个会话。类型只有三种：`web`（网页）、`desktop`（桌面）、`phone`（手机）。网页和手机可以同时在线；再用另一台网页登录时，旧的网页会话被挤下线。未识别的类型按 `web` 处理。
 
-登录请求在原有 `device_id` 之外增加 `device_type`。服务端把类型写入 JWT 的 `devicetype` claim。响应增加：
+登录请求在原有 `device_id` 之外增加 `device_type`，并可以带上 `device_name`（设备列表里的可读名称，最长 128 字符，入库时截到 64）。服务端把类型写入 JWT 的 `devicetype` claim。没传 `device_name`、或传来的值和 `device_id` 相同、或只有空白时，用 `User-Agent` 拼出「桌面端 / 手机端 / 网页端 · 浏览器 / 系统」；User-Agent 也认不出时只用类型标签。响应增加：
 
 | 字段 | 说明 |
 |------|------|
@@ -984,6 +984,7 @@ GET /api/v1/devices
     {
       "device_id": "web-1",
       "device_type": "web",
+      "device_name": "网页端 · Chrome / Windows",
       "online": true,
       "current": true,
       "login_at": 1710000000000,
@@ -993,7 +994,7 @@ GET /api/v1/devices
 }
 ```
 
-`online` 表示 WebSocket 还连着。主动断开连接后设备仍算已登录，直到登出或被挤下线。
+`device_name` 是给人看的名称，不参与挤下线。旧会话没有这个字段时，接口仍返回类型标签（「网页端」「桌面端」「手机端」），不会返回 `device_id`。`online` 表示 WebSocket 还连着。主动断开连接后设备仍算已登录，直到登出或被挤下线。WebSocket 重连和刷新 token 保留已保存的名称。
 
 ```http
 POST /api/v1/devices/{deviceId}/logout

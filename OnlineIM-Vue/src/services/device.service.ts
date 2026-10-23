@@ -3,6 +3,7 @@ import api from './api.service'
 export interface DeviceSession {
   device_id: string
   device_type: string
+  device_name?: string | null
   online: boolean
   current: boolean
   login_at?: number | null

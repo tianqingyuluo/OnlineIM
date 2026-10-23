@@ -3,6 +3,7 @@ package icu.tianqingyuluo.onlineim.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.DeviceSessionResponse;
 import icu.tianqingyuluo.onlineim.pojo.entity.RedisConnectionMeta;
+import icu.tianqingyuluo.onlineim.util.DeviceNames;
 import icu.tianqingyuluo.onlineim.util.DeviceTypes;
 import icu.tianqingyuluo.onlineim.websocket.registry.LocalSessionRegistry;
 import icu.tianqingyuluo.onlineim.websocket.session.WebSocketSession;
@@ -63,6 +64,13 @@ public class DeviceSessionService {
      * 登录成功后登记这台设备。同类型的另一台设备会被挤下线。
      */
     public void onLogin(String userId, String deviceId, String deviceType, String token) {
+        onLogin(userId, deviceId, deviceType, token, null);
+    }
+
+    /**
+     * @param deviceName 已经解析好的展示名；空则列表按设备类型显示「桌面端 / 手机端 / 网页端」
+     */
+    public void onLogin(String userId, String deviceId, String deviceType, String token, String deviceName) {
         String safeId = DeviceTypes.sanitizeDeviceId(deviceId);
         if (userId == null || userId.isBlank() || safeId == null) {
             return;
@@ -90,6 +98,7 @@ public class DeviceSessionService {
         meta.setUserId(userId);
         meta.setDeviceId(safeId);
         meta.setDeviceType(type);
+        meta.setDeviceName(displayName(deviceName, safeId));
         meta.setCurrentNodeIP(nodeIp);
         meta.setLoginTime(now);
         meta.setActiveTime(now);
@@ -200,9 +209,11 @@ public class DeviceSessionService {
             RedisConnectionMeta meta = read(userId, deviceId);
             boolean online = meta != null && meta.getConnectionID() != null && !meta.getConnectionID().isBlank();
             Long activeAt = meta == null || meta.getActiveTime() <= 0 ? null : meta.getActiveTime();
+            String resolvedType = DeviceTypes.normalize(meta != null && meta.getDeviceType() != null ? meta.getDeviceType() : type);
             result.add(DeviceSessionResponse.builder()
                     .deviceId(deviceId)
-                    .deviceType(DeviceTypes.normalize(meta != null && meta.getDeviceType() != null ? meta.getDeviceType() : type))
+                    .deviceType(resolvedType)
+                    .deviceName(visibleName(meta == null ? null : meta.getDeviceName(), deviceId, resolvedType))
                     .online(online)
                     .current(deviceId.equals(currentDeviceId))
                     .loginAt(meta == null ? null : meta.getLoginTime())
@@ -337,11 +348,31 @@ public class DeviceSessionService {
             meta.setUserId(str(map.get("userId")));
             meta.setDeviceId(str(map.get("deviceId")));
             meta.setDeviceType(str(map.get("deviceType")));
+            meta.setDeviceName(str(map.get("deviceName")));
             Object loginTime = map.get("loginTime");
             meta.setLoginTime(loginTime == null ? null : longVal(loginTime));
             return meta;
         }
         return null;
+    }
+
+    /**
+     * 不把设备标识本身存成展示名。WebSocket 重连沿用已有 meta，不会清掉这个字段。
+     */
+    private static String displayName(String deviceName, String deviceId) {
+        String cleaned = DeviceNames.sanitize(deviceName);
+        if (cleaned == null || cleaned.equals(deviceId)) {
+            return null;
+        }
+        return cleaned;
+    }
+
+    private static String visibleName(String stored, String deviceId, String deviceType) {
+        String cleaned = DeviceNames.sanitize(stored);
+        if (cleaned == null || cleaned.equals(deviceId)) {
+            return DeviceTypes.label(deviceType);
+        }
+        return cleaned;
     }
 
     private static String str(Object value) {

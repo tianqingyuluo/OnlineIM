@@ -17,6 +17,8 @@ public class RedisConnectionMeta {
     String deviceId;
     /** web / desktop / phone */
     String deviceType;
+    /** 设备列表展示名，例如「桌面端 · Chrome / Windows」；旧会话可能为空 */
+    String deviceName;
     /** 本次登录时间（epoch millis） */
     Long loginTime;
 

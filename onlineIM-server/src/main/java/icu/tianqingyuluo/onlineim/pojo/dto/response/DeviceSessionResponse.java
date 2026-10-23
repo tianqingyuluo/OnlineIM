@@ -22,6 +22,10 @@ public class DeviceSessionResponse {
     @JsonProperty("device_type")
     private String deviceType;
 
+    /** 列表上的可读名称。没有单独保存时由类型生成，例如「手机端」 */
+    @JsonProperty("device_name")
+    private String deviceName;
+
     /** WebSocket 是否还连着 */
     private boolean online;
 

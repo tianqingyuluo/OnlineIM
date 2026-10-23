@@ -34,4 +34,11 @@ public class AuthRequest {
      */
     @JsonProperty("device_type")
     private String deviceType;
+
+    /**
+     * 设备列表上的可读名称。可空；过长在入库前截断，这里只拦住明显超长的请求。
+     */
+    @JsonProperty("device_name")
+    @Size(max = 128, message = "设备名称过长")
+    private String deviceName;
 }

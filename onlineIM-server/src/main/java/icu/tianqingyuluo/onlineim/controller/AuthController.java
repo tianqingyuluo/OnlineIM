@@ -10,6 +10,7 @@ import icu.tianqingyuluo.onlineim.service.DeviceSessionService;
 import icu.tianqingyuluo.onlineim.service.JwtService;
 import icu.tianqingyuluo.onlineim.service.UserService;
 import icu.tianqingyuluo.onlineim.service.impl.UserDetailsServiceImpl;
+import icu.tianqingyuluo.onlineim.util.DeviceNames;
 import icu.tianqingyuluo.onlineim.util.DeviceTypes;
 import icu.tianqingyuluo.onlineim.util.JwtUtil;
 import jakarta.validation.Valid;
@@ -67,7 +68,9 @@ public class AuthController {
      * @return JWT令牌
      */
     @PostMapping("/login")
-    public ResponseEntity<?> createAuthenticationToken(@Valid @RequestBody AuthRequest authRequest) {
+    public ResponseEntity<?> createAuthenticationToken(
+            @Valid @RequestBody AuthRequest authRequest,
+            @RequestHeader(value = "User-Agent", required = false) String userAgent) {
         try {
             // 尝试进行身份验证
             authenticationManager.authenticate(
@@ -102,7 +105,8 @@ public class AuthController {
             deviceId = deviceType + "-" + IdUtil.fastSimpleUUID();
         }
         final String jwt = jwtUtil.generateToken(userDetails, deviceId, deviceType);
-        deviceSessionService.onLogin(briefResponse.getUserId(), deviceId, deviceType, "Bearer " + jwt);
+        String deviceName = DeviceNames.resolve(authRequest.getDeviceName(), userAgent, deviceType, deviceId);
+        deviceSessionService.onLogin(briefResponse.getUserId(), deviceId, deviceType, "Bearer " + jwt, deviceName);
         response.put("access_token", jwt);
         response.put("expires_in", JwtUtil.GET_EXPIRE_TIME());
         response.put("user_info", userInfo);

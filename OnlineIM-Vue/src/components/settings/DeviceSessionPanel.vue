@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { deviceService, type DeviceSession } from '@/services/device.service'
-import { deviceTypeLabel } from '@/utils/device-session'
+import { deviceDisplayName } from '@/utils/device-session'
 import { toast } from 'vue-sonner'
 
 const emit = defineEmits<{ close: [] }>()
@@ -26,7 +26,7 @@ async function load() {
 
 async function logout(device: DeviceSession) {
   if (device.current || loggingOut.value) return
-  if (!window.confirm(`登出${deviceTypeLabel(device.device_type)}？该设备需要重新登录。`)) return
+  if (!window.confirm(`登出${deviceDisplayName(device)}？该设备需要重新登录。`)) return
   loggingOut.value = device.device_id
   try {
     await deviceService.logout(device.device_id)
@@ -60,8 +60,8 @@ onMounted(load)
           class="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2"
         >
           <div>
-            <p class="text-sm text-gray-800">
-              {{ deviceTypeLabel(device.device_type) }}
+            <p class="text-sm text-gray-800 break-words">
+              {{ deviceDisplayName(device) }}
               <span v-if="device.current" class="ml-1 text-xs text-blue-600">当前设备</span>
             </p>
             <p class="text-xs text-gray-500">{{ device.online ? '在线' : '已登录，当前不在线' }}</p>

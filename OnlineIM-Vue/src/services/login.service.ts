@@ -42,11 +42,15 @@ export const LoginService = {
             const device = buildDeviceLoginFields({
                 uaDeviceType: uaResult.device.type,
                 override: localStorage.getItem('onlineim.device_type'),
+                browser: uaResult.browser.name,
+                os: uaResult.os.name,
+                clientName: localStorage.getItem('onlineim.device_name'),
             });
             const requestBody = {
                 ...credentials,
                 device_id: device.device_id,
                 device_type: device.device_type,
+                device_name: device.device_name,
             };
             const response = await api.post('/auth/login', requestBody);
 
