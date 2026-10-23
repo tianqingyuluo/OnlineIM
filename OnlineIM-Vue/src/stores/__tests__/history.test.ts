@@ -458,7 +458,7 @@ describe('history store message receipt flow', () => {
     store.replyTarget = {
       conversationId: 'conv_1',
       reference: { message_id: 'msg_target', seq_id: '100', sender_id: 'usr_peer', sender_display_name: '小明', message_type: 'text', preview_text: '原文', state: 'active' },
-    } as never
+    }
 
     const edited = {
       ...base, message_id: 'msg_target', sender_info: { user_id: 'usr_peer', nickname: '小明' }, seq_id: '100',
@@ -527,6 +527,7 @@ describe('history store message receipt flow', () => {
       status: 1,
       timestamp: '2026-10-21 22:00:00',
       is_recalled: false,
+      client_message_id: 'msg_a',
     }]
 
     await store.requestOfflineSync()
@@ -712,6 +713,7 @@ describe('history store message receipt flow', () => {
         edited: true,
         edited_at: '2026-10-21 22:04:00',
         content_revision: 2,
+        client_message_id: 'msg_old',
       }],
       messages: [{
         message_id: 'msg_new',
@@ -723,6 +725,7 @@ describe('history store message receipt flow', () => {
         status: 1,
         timestamp: '2026-10-21 22:05:00',
         is_recalled: false,
+        client_message_id: 'msg_new',
       }],
       truncated: false,
     })
@@ -744,6 +747,7 @@ describe('history store message receipt flow', () => {
       status: 1,
       timestamp: '2026-10-21 22:05:00',
       is_recalled: false,
+      client_message_id: 'msg_new',
     })
     expect(list.conversations[0]?.unread_count).toBe(0)
   })

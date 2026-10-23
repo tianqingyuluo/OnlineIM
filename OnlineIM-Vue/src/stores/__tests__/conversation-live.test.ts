@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
+import type { Conversation } from '@/type/Conversation'
 
 const getConversationById = vi.fn()
 vi.mock('@/services/conversation.service', () => ({
@@ -9,11 +10,12 @@ vi.mock('@/stores/user', () => ({ useUserStore: () => ({ loggedInUser: { user_id
 vi.mock('@/utils/indexedDB', () => ({ dbService: { putHistory: vi.fn().mockResolvedValue(undefined), markMessageRecalled: vi.fn().mockResolvedValue(undefined) }, STORES: {} }))
 vi.mock('@/services/websocket.service', () => ({ websocketService: { sendMessage: vi.fn(), sendReceipt: vi.fn(), sendReadReceipt: vi.fn() } }))
 
-const conv = (id: string, extra: Record<string, unknown> = {}) => ({
+const conv = (id: string, extra: Partial<Conversation> = {}): Conversation => ({
   conversation_id: id,
   type: id.startsWith('grp_') ? 'group' : 'private',
   target_info: { id: 'usr_peer', name: id },
-  last_message: null,
+  // 列表里的空会话运行时没有最后一条消息，类型上该字段非空，测试保持 null。
+  last_message: null as unknown as Conversation['last_message'],
   unread_count: 0,
   last_activity_time: '2026-10-21 10:00:00',
   ...extra,
