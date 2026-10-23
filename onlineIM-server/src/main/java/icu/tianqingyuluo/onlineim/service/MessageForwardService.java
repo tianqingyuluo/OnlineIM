@@ -380,6 +380,7 @@ public class MessageForwardService {
         message.setTimestamp(now);
         message.setCreatedAt(now);
         message.setUpdatedAt(now);
+        chatMediaService.attachToConversation(message.getContent(), conversationId);
         privateMessageRepository.save(message);
         conversationRecords.onPrivateMessage(message);
         redisStreamService.publishPrivateMessage("PRIVATE_MESSAGE", userId, serialize(message), target);
@@ -407,6 +408,7 @@ public class MessageForwardService {
         message.setTimestamp(now);
         message.setCreatedAt(now);
         message.setUpdatedAt(now);
+        chatMediaService.attachToConversation(message.getContent(), target);
         List<String> memberIds = groupMemberIds(target);
         groupMessageRepository.save(message);
         conversationRecords.onGroupMessage(message, memberIds);

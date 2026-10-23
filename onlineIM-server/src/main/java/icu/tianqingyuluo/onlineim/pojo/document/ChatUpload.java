@@ -8,6 +8,7 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.util.Date;
+import java.util.List;
 
 /**
  * 聊天上传记录。发送图片/文件消息时只引用 {@link #id}，消息里的 URL、大小、尺寸等元数据由服务端从这里取，
@@ -39,4 +40,6 @@ public class ChatUpload {
     private String durationSource; // 语音时长来源：parsed=服务端解析 / client=客户端上报（已校验范围）
     private String codec;          // 语音编码（opus/vorbis/aac/mp3/pcm…，能识别时）
     private Date createdAt;
+    /** 已发送到的会话（私聊 conv_ 或群 grp_）。下载时只放行这些会话的当前参与者；尚未发送时为空。 */
+    private List<String> conversationIds;
 }

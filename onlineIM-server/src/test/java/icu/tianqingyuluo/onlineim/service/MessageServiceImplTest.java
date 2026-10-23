@@ -590,5 +590,7 @@ class MessageServiceImplTest {
         verify(groupMessageRepository).save(captor.capture());
         assertFalse(captor.getValue().getContent().contains("evil.example"));
         assertEquals("a.jpg", captor.getValue().getExt().get("file_name"));
+        verify(chatMediaService).attachToConversation(
+                "{\"file_id\":\"upl_1\",\"url\":\"/onlineim/chats/images/a.jpg\"}", "grp_1");
     }
 }

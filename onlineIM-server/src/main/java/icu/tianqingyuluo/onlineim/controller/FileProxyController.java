@@ -1,16 +1,21 @@
 package icu.tianqingyuluo.onlineim.controller;
 
+import icu.tianqingyuluo.onlineim.pojo.entity.UserIDProvider;
+import icu.tianqingyuluo.onlineim.service.ChatFileAccessService;
 import icu.tianqingyuluo.onlineim.service.FileStorageService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.HandlerMapping;
 import org.springframework.util.AntPathMatcher;
 
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 
@@ -26,12 +31,15 @@ public class FileProxyController {
     static final List<String> PUBLIC_PREFIXES = List.of("avatars/", "groups/avatars/", "chats/");
 
     private final FileStorageService fileStorageService;
+    private final ChatFileAccessService chatFileAccessService;
     private final String bucket;
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
 
     public FileProxyController(FileStorageService fileStorageService,
+                               ChatFileAccessService chatFileAccessService,
                                @Value("${oss.default-bucket:onlineim}") String bucket) {
         this.fileStorageService = fileStorageService;
+        this.chatFileAccessService = chatFileAccessService;
         this.bucket = bucket;
     }
 
@@ -42,6 +50,13 @@ public class FileProxyController {
         String objectName = pathMatcher.extractPathWithinPattern(pattern, path);
         if (!isPublicObject(objectName)) {
             return ResponseEntity.notFound().build();
+        }
+        boolean chatObject = objectName.startsWith("chats/");
+        if (chatObject) {
+            ResponseEntity<byte[]> denied = authorizeChatObject(objectName);
+            if (denied != null) {
+                return denied;
+            }
         }
         try (InputStream inputStream = fileStorageService.downloadFile(bucket, objectName)) {
             if (inputStream == null) {
@@ -56,9 +71,12 @@ public class FileProxyController {
                         .header(HttpHeaders.CONTENT_RANGE, "bytes */" + bytes.length)
                         .build();
             }
+            CacheControl cache = chatObject
+                    ? CacheControl.maxAge(Duration.ofHours(1)).cachePrivate()
+                    : CacheControl.maxAge(Duration.ofDays(7)).cachePublic();
             ResponseEntity.BodyBuilder response = (range == null ? ResponseEntity.ok() : ResponseEntity.status(HttpStatus.PARTIAL_CONTENT))
                     .contentType(contentType)
-                    .cacheControl(CacheControl.maxAge(Duration.ofDays(7)).cachePublic())
+                    .cacheControl(cache)
                     .header(HttpHeaders.ACCEPT_RANGES, "bytes")
                     .header("X-Content-Type-Options", "nosniff");
             if (isDownloadOnly(objectName)) {
@@ -79,6 +97,44 @@ public class FileProxyController {
             log.error("Error retrieving file {}: {}", objectName, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
+    }
+
+    /**
+     * 聊天文件只允许当前会话参与者读取。头像仍公开。
+     * @return 拒绝时的响应；允许读取时返回 null
+     */
+    private ResponseEntity<byte[]> authorizeChatObject(String objectName) {
+        String userId = currentUserId();
+        if (userId == null) {
+            return json(HttpStatus.UNAUTHORIZED, "401", "未登录或登录已失效");
+        }
+        ChatFileAccessService.ReadDecision decision = chatFileAccessService.decide(userId, objectName);
+        if (decision == ChatFileAccessService.ReadDecision.ABSENT) {
+            return ResponseEntity.notFound().build();
+        }
+        if (decision != ChatFileAccessService.ReadDecision.ALLOW) {
+            return json(HttpStatus.FORBIDDEN, "403", "无权访问该文件");
+        }
+        return null;
+    }
+
+    static String currentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return null;
+        }
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof UserIDProvider provider) {
+            String userId = provider.getID();
+            return userId == null || userId.isBlank() ? null : userId;
+        }
+        return null;
+    }
+
+    private static ResponseEntity<byte[]> json(HttpStatus status, String code, String message) {
+        byte[] body = ("{\"code\":\"" + code + "\",\"message\":\"" + message + "\"}")
+                .getBytes(StandardCharsets.UTF_8);
+        return ResponseEntity.status(status).contentType(MediaType.APPLICATION_JSON).body(body);
     }
 
     static boolean isPublicObject(String objectName) {

@@ -67,6 +67,7 @@ public class ChatMediaService {
     private final ObjectMapper objectMapper;
     private final SecureRandom random = new SecureRandom();
     private EmojiService emojiService;
+    private ChatFileAccessService chatFileAccessService;
 
     public ChatMediaService(FileStorageService storage, ChatUploadRepository repository,
                             ChatUploadProperties properties, ObjectMapper objectMapper) {
@@ -86,6 +87,19 @@ public class ChatMediaService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     public void setEmojiService(EmojiService emojiService) {
         this.emojiService = emojiService;
+    }
+
+    /** 文件授权（setter 注入；单测不关心会话绑定时可为空） */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setChatFileAccessService(ChatFileAccessService chatFileAccessService) {
+        this.chatFileAccessService = chatFileAccessService;
+    }
+
+    /** 把已生成的消息内容里的文件/表情绑定到会话，供下载接口校验参与者。 */
+    public void attachToConversation(String content, String conversationId) {
+        if (chatFileAccessService != null) {
+            chatFileAccessService.attach(content, conversationId);
+        }
     }
 
     /** 发送媒体消息时由服务端生成的消息内容（JSON 字符串）与扩展字段 */

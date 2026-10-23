@@ -8,6 +8,7 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.util.Date;
+import java.util.List;
 
 /**
  * 用户收藏的自定义表情。发送表情消息时只引用 {@link #id}，消息里的 URL、尺寸等由服务端从这里取。
@@ -36,4 +37,6 @@ public class UserEmoji {
     private String source;        // upload / message
     private String sourceMessageId;
     private Date createdAt;
+    /** 该表情被发送到的会话。收藏者本人始终可预览；其他用户仅当仍是其中某个会话的成员时才能读取。 */
+    private List<String> conversationIds;
 }

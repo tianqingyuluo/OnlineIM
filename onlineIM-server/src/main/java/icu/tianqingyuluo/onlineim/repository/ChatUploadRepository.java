@@ -6,4 +6,8 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface ChatUploadRepository extends MongoRepository<ChatUpload, String> {
+
+    ChatUpload findByObjectKey(String objectKey);
+
+    ChatUpload findByThumbnailKey(String thumbnailKey);
 }

@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { ArrowUpToLine, LoaderCircle, Plus, X } from 'lucide-vue-next'
 import { useEmojiStore } from '@/stores/emoji'
 import { EMOJI_ACCEPT, type CustomEmoji } from '@/utils/sticker-message'
+import { authorizeChatFileUrl } from '@/utils/chat-file-url'
 
 const emit = defineEmits<{ send: [emoji: CustomEmoji] }>()
 
@@ -82,7 +83,7 @@ function handleClick(emoji: CustomEmoji) {
             :data-emoji-id="emoji.emoji_id"
             @click="handleClick(emoji)"
           >
-            <img :src="emoji.url" :alt="emoji.name" class="max-h-full max-w-full object-contain" loading="lazy" draggable="false" />
+            <img :src="authorizeChatFileUrl(emoji.url)" :alt="emoji.name" class="max-h-full max-w-full object-contain" referrerpolicy="no-referrer" loading="lazy" draggable="false" />
           </button>
           <template v-if="managing">
             <button

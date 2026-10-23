@@ -110,6 +110,7 @@ public class PrivateMessageSender implements MessageSenderHandler {
             } else {
                 privateMessage.setContent(request.getContent());
             }
+            chatMediaService.attachToConversation(privateMessage.getContent(), request.getConversationId());
             privateMessage.setReplyTo(replyTo);
             privateMessage.setContentRevision(1);
             privateMessage.setStatus(0);

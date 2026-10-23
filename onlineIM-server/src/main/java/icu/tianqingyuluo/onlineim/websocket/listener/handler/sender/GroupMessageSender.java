@@ -99,6 +99,7 @@ public class GroupMessageSender implements MessageSenderHandler {
             } else {
                 groupMessage.setContent(request.getContent());
             }
+            chatMediaService.attachToConversation(groupMessage.getContent(), request.getGroupId());
             groupMessage.setReplyTo(replyTo);
             groupMessage.setContentRevision(1);
             groupMessage.setStatus(0);

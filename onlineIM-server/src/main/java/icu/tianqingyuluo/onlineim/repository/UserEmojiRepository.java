@@ -16,4 +16,6 @@ public interface UserEmojiRepository extends MongoRepository<UserEmoji, String> 
     UserEmoji findByIdAndOwnerId(String id, String ownerId);
 
     UserEmoji findFirstByOwnerIdAndContentHash(String ownerId, String contentHash);
+
+    List<UserEmoji> findByObjectKey(String objectKey);
 }

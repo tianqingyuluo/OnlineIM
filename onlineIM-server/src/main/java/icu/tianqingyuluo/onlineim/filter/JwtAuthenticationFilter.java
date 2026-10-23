@@ -45,7 +45,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
-        final String authorizationHeader = request.getHeader("Authorization");
+        String authorizationHeader = request.getHeader("Authorization");
+        // <img>/<audio>/<a> 无法带 Authorization，聊天文件允许用查询参数携带同一个 Bearer token
+        if ((authorizationHeader == null || !authorizationHeader.startsWith("Bearer "))
+                && isChatFileRequest(request)) {
+            String queryToken = request.getParameter("access_token");
+            if (queryToken != null && !queryToken.isBlank()) {
+                authorizationHeader = "Bearer " + queryToken.trim();
+            }
+        }
 
         String username = null;
         String jwt = null;
@@ -88,6 +96,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         // 继续过滤器链
         filterChain.doFilter(request, response);
+    }
+
+    static boolean isChatFileRequest(HttpServletRequest request) {
+        String uri = request.getRequestURI();
+        return uri != null && uri.contains("/onlineim/chats/");
     }
 
     /**

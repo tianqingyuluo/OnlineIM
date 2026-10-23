@@ -3,6 +3,7 @@ import { Pause, Play } from 'lucide-vue-next'
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { toast } from 'vue-sonner'
 import { formatVoiceClock, formatVoiceSeconds, type ChatMedia } from '@/utils/media-message'
+import { authorizeChatFileUrl } from '@/utils/chat-file-url'
 
 const props = defineProps<{ media: ChatMedia; isSelf?: boolean }>()
 
@@ -24,7 +25,7 @@ function ensureAudio(): HTMLAudioElement {
   if (audio) return audio
   audio = new Audio()
   audio.preload = 'none'
-  audio.src = props.media.url
+  audio.src = authorizeChatFileUrl(props.media.url)
   audio.addEventListener('timeupdate', () => {
     if (audio) positionMs.value = audio.currentTime * 1000
   })

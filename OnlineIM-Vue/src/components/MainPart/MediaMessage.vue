@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { Download, FileText, ImageOff, X } from 'lucide-vue-next'
 import { formatFileSize, parseMediaContent } from '@/utils/media-message'
+import { authorizeChatFileUrl } from '@/utils/chat-file-url'
 import VoiceMessage from '@/components/MainPart/VoiceMessage.vue'
 
 const props = defineProps<{
@@ -11,6 +12,8 @@ const props = defineProps<{
 }>()
 
 const media = computed(() => parseMediaContent(props.messageType, props.content))
+const thumbnailSrc = computed(() => authorizeChatFileUrl(media.value?.thumbnail_url || media.value?.url))
+const originalSrc = computed(() => authorizeChatFileUrl(media.value?.url))
 const previewOpen = ref(false)
 const thumbFailed = ref(false)
 
@@ -76,7 +79,8 @@ onBeforeUnmount(() => {
     >
       <img
         v-if="!thumbFailed"
-        :src="media.thumbnail_url || media.url"
+        :src="thumbnailSrc"
+        referrerpolicy="no-referrer"
         :alt="media.name"
         loading="lazy"
         class="h-full w-full object-cover"
@@ -96,14 +100,16 @@ onBeforeUnmount(() => {
       >
         <div class="absolute right-4 top-4 flex items-center gap-3 text-white">
           <a
-            :href="media.url"
+            :href="originalSrc"
             target="_blank"
             rel="noopener noreferrer"
+            referrerpolicy="no-referrer"
             class="rounded px-2 py-1 text-sm hover:bg-white/20"
           >查看原图</a>
           <a
-            :href="media.url"
+            :href="originalSrc"
             :download="media.name"
+            referrerpolicy="no-referrer"
             class="rounded p-1 hover:bg-white/20"
             title="下载"
           ><Download class="h-5 w-5" /></a>
@@ -112,7 +118,8 @@ onBeforeUnmount(() => {
           </button>
         </div>
         <img
-          :src="media.url"
+          :src="originalSrc"
+          referrerpolicy="no-referrer"
           :alt="media.name"
           class="max-h-[85vh] max-w-[92vw] object-contain"
           data-testid="media-original"
@@ -126,7 +133,8 @@ onBeforeUnmount(() => {
 
   <a
     v-else
-    :href="media.url"
+    :href="originalSrc"
+    referrerpolicy="no-referrer"
     :download="media.name"
     class="flex w-64 max-w-full items-center gap-3 rounded-lg bg-white/70 p-2 text-left ring-1 ring-black/[0.06] hover:bg-white"
     data-testid="media-file"

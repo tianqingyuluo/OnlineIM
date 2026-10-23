@@ -58,8 +58,9 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 // 允许所有人访问登录和注册接口
                 .requestMatchers("/api/v1/auth/**").permitAll()
-                // 允许所有人访问静态资源
-                .requestMatchers("/onlineim/**").permitAll()
+                // 头像公开；聊天图片/文件/语音/表情必须登录，再由 FileProxyController 校验会话成员
+                .requestMatchers("/onlineim/avatars/**", "/onlineim/groups/avatars/**").permitAll()
+                .requestMatchers("/onlineim/**").authenticated()
                 // 其他所有请求都需要认证
                 .anyRequest().authenticated()
             )

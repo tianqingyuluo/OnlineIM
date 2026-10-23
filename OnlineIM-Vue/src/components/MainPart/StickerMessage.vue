@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { parseStickerContent, stickerDisplaySize } from '@/utils/sticker-message'
+import { authorizeChatFileUrl } from '@/utils/chat-file-url'
 
 const props = defineProps<{
   messageType: string
@@ -8,6 +9,7 @@ const props = defineProps<{
 }>()
 
 const emoji = computed(() => parseStickerContent(props.messageType, props.content))
+const emojiSrc = computed(() => authorizeChatFileUrl(emoji.value?.url))
 const failed = ref(false)
 
 /** 按原图比例预留尺寸（长边 ≤ 140px），加载前后消息列表不跳动；窄屏随容器收缩 */
@@ -27,7 +29,8 @@ const style = computed(() => {
   </div>
   <img
     v-else
-    :src="emoji.url"
+    :src="emojiSrc"
+    referrerpolicy="no-referrer"
     :alt="emoji.name || '表情'"
     :title="emoji.name"
     :style="style"

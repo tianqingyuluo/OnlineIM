@@ -424,7 +424,7 @@ public class MessageServiceImpl implements MessageService {
             message.setTimestamp(new Date());
             message.setCreatedAt(new Date());
             message.setUpdatedAt(new Date());
-            applyContent(message::setContent, message::setExt, request, userId);
+            applyContent(message::setContent, message::setExt, request, userId, conversationId);
 
             privateMessageRepository.save(message);
             conversationRecords.onPrivateMessage(message);
@@ -466,7 +466,7 @@ public class MessageServiceImpl implements MessageService {
             message.setTimestamp(new Date());
             message.setCreatedAt(new Date());
             message.setUpdatedAt(new Date());
-            applyContent(message::setContent, message::setExt, request, userId);
+            applyContent(message::setContent, message::setExt, request, userId, targetId);
 
             groupMessageRepository.save(message);
             conversationRecords.onGroupMessage(message, memberIds);
@@ -487,16 +487,20 @@ public class MessageServiceImpl implements MessageService {
      */
     private void applyContent(java.util.function.Consumer<String> setContent,
                               java.util.function.Consumer<Map<String, Object>> setExt,
-                              MessageSendRequest request, String userId) {
+                              MessageSendRequest request, String userId, String conversationId) {
+        String stored;
         if (ChatMediaService.isMediaMessage(request.getMessageType())) {
             ChatMediaService.ResolvedMedia media = chatMediaService.resolveForMessage(
                     userId, request.getMessageType(), request.getContent());
             setContent.accept(media.content());
             setExt.accept(media.ext());
-            return;
+            stored = media.content();
+        } else {
+            setContent.accept(request.getContent());
+            setExt.accept(request.getExt());
+            stored = request.getContent();
         }
-        setContent.accept(request.getContent());
-        setExt.accept(request.getExt());
+        chatMediaService.attachToConversation(stored, conversationId);
     }
 
     private void validateSendRequest(MessageSendRequest request, String userId) {
