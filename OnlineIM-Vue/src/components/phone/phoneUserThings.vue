@@ -3,10 +3,8 @@ import { useUserStore } from '@/stores/user.ts'
 import { useRouter } from 'vue-router'
 import { websocketService } from '@/services/websocket.service'
 import { usePresenceStore } from '@/stores/presence'
-import UserProfile from "@/components/independent/profile/UserProfile.vue";
 import {ref} from "vue";
 import {LogIn,UserRoundPen,MonitorSmartphone} from 'lucide-vue-next'
-import UserFounding from "@/components/independent/founding/userFounding.vue";
 import PhoneUserProfile from "@/components/phone/phoneUserProfile.vue";
 import DeviceSessionPanel from '@/components/settings/DeviceSessionPanel.vue'
 

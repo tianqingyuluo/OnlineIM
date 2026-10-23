@@ -10,9 +10,7 @@ export const authService = {
       throw error;
     }
   },
-  async updateToken(
-      refreshToken:string
-      ): Promise<TokenResponse> {
+  async updateToken(): Promise<TokenResponse> {
       try {
         const response = await api.post<TokenResponse>('/auth/refresh-token');
         return response.data;

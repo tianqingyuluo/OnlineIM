@@ -5,8 +5,7 @@ let tokenServiceInstance: TokenService | null = null
 
 export class TokenService {
   private refreshTimeout: number | null = null
-  private token: string = ''
-  
+
   public static init(token: string): TokenService {
     if (!tokenServiceInstance) {
       tokenServiceInstance = new TokenService(token)
@@ -16,16 +15,14 @@ export class TokenService {
   }
 
   private constructor(initialToken: string) {
-    this.token = initialToken
     useUserStore().token = initialToken
   }
 
   public async updateToken(): Promise<void> {
     try {
       await new Promise(resolve => setTimeout(resolve, 1000));
-      const response = await authService.updateToken(this.token)
+      const response = await authService.updateToken()
       console.log(response)
-      this.token = response.access_token
       useUserStore().token = response.access_token
       this.scheduleNextRefresh((response.expires_in - 30) * 1000)
     } catch (error) {

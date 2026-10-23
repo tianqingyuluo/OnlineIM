@@ -16,7 +16,6 @@ import CreateGroup from "@/components/independent/group/CreateGroup.vue";
 import {Button} from "@/components/ui/button";
 import { useListStore } from '@/stores/list'
 import { useRouter } from 'vue-router'
-import { dbService } from '@/utils/indexedDB'; // 引入 dbService
 
 const listStore = useListStore()
 const activeItem = ref<string | null>(null);
