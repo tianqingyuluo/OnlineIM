@@ -63,7 +63,18 @@ onMounted(() => {
 onMounted(async () => {
   try {
     const data = await groupService.getGroupInfo(props.groupId)
-    groupInfo.value = data
+    groupInfo.value = {
+      ...groupInfo.value,
+      group_id: data.group_id,
+      name: data.name,
+      owner_id: data.owner_id,
+      avatar_url: data.avatar_url || groupInfo.value.avatar_url,
+      description: data.description || '',
+      announcement: data.announcement || '',
+      created_at: data.create_at,
+      member_count: data.member_count,
+      my_role: data.my_role,
+    }
     const response = await userService.getUserById(data.owner_id)
     ownerName.value = response.username
   } catch (error) {

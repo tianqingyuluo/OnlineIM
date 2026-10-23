@@ -7,7 +7,7 @@ import {
 } from '@/components/ui/context-menu'
 import { ref, computed } from 'vue'
 import { onClickOutside } from '@vueuse/core'
-import { type MessageResponse } from '@/type/message.ts'
+import { type MessageResponse, type MessageUserBrief } from '@/type/message.ts'
 import { useUserStore } from '@/stores/user.ts'
 import { useListStore } from '@/stores/list.ts'
 import HoverProfile from '@/components/independent/profile/hoverProfile.vue' // 引入 HoverProfile 组件
@@ -76,9 +76,9 @@ const menuItems = computed(() => {
 
 // 好友请求弹窗控制
 const showSendFriendRequest = ref(false)
-const selectedUserForFriendRequest = ref(null)
+const selectedUserForFriendRequest = ref<MessageUserBrief | null>(null)
 
-const openSendFriendRequest = (user: any) => {
+const openSendFriendRequest = (user: MessageUserBrief) => {
   selectedUserForFriendRequest.value = user
   showSendFriendRequest.value = true
 }
@@ -138,7 +138,7 @@ const handleMenuItemClick = (action: string) => {
     <Teleport to="body">
       <Transition name="send-friend-request">
         <div
-          v-if="showSendFriendRequest"
+          v-if="showSendFriendRequest && selectedUserForFriendRequest"
           class="fixed inset-0 m-auto w-1/2 h-1/2 z-[100]"
         >
           <SendFriendRequest

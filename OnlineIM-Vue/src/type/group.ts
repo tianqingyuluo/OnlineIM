@@ -57,27 +57,21 @@ export interface GroupMembersResponse {
     members: GroupMemberAll[];
     total: number;
 }
+export interface GroupJoinUserBrief {
+    user_id: string
+    username: string
+    nickname: string
+    avatar_url: string
+}
+
+/** 与后端 GroupJoinRequestResponse 的 snake_case JSON 一致 */
 export interface GroupJoinRequestResponse {
-    
-    requestID:string
-    groupID:string
-    groupName:string
-    user_info:
-        {
-            username:string
-            nickname:string
-            avatarUrl:string
-            userID:string
-        }
-    inviterInfo:
-        {
-        username:string
-        nickname:string
-        avatarUrl:string
-        userID:string
-        }
-    message:string
-    status:string
-    createdAt:string
-    
+    request_id: string
+    group_id: string
+    group_name: string
+    user_info: GroupJoinUserBrief
+    inviter_info?: GroupJoinUserBrief | null
+    message: string
+    status: string
+    created_at: string
 } 

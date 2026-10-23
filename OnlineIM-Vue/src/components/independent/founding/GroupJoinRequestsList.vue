@@ -30,9 +30,9 @@ onMounted(() => {
       暂无加群请求
     </div>
     <div v-else>
-      <div v-for="request in requests" :key="request.requestID" class="request-item">
+      <div v-for="request in requests" :key="request.request_id" class="request-item">
         <img 
-          :src="request.user_info?.avatarUrl"
+          :src="request.user_info?.avatar_url"
           class="avatar"
         >
         <div class="request-info">

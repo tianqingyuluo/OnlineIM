@@ -112,7 +112,6 @@ const isFriend = computed(() => {
 });
 
 const showSendFriendRequest = ref(false);
-const selectedUserForFriendRequest = ref<User | null>(null);
 
 function openSendFriendRequest() {
 
@@ -193,7 +192,7 @@ function closeSendFriendRequest() {
   </div>
 
   <SendFriendRequest
-      v-if="showSendFriendRequest && selectedUserForFriendRequest"
+      v-if="showSendFriendRequest && user"
       @close="closeSendFriendRequest"
       :user="user"
       class="fixed inset-0 m-auto w-1/2 h-1/2 z-[9999]"

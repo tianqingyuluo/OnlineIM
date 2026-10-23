@@ -46,10 +46,13 @@ watch(() => showMembersList.value, (newVal) => {
     })
   }
 })
-const roleTranslations = {
-  2: '群主',
-  1: '管理员',
-  0: '成员'
+const roleTranslations: Record<string, string> = {
+  '2': '群主',
+  '1': '管理员',
+  '0': '成员',
+  owner: '群主',
+  admin: '管理员',
+  member: '成员',
 }
 const isMute = ref(props.conversation?.is_mute || false)
 const isPinned = ref(props.conversation?.is_pinned || false)
@@ -71,7 +74,7 @@ const handleMemberClick = (member: GroupMemberAll) => {
   showMemberProfileModal.value = true;
 };
 
-const handleSettingChange = async (key: keyof GroupSetting, value: any) => {
+const handleSettingChange = async <K extends keyof GroupSetting>(key: K, value: GroupSetting[K]) => {
 
   try {
     // 创建包含所有设置字段的完整对象
@@ -181,7 +184,7 @@ onMounted(() => {
           <div class="flex-1 min-w-0">
             <h2 class="text-xl font-semibold text-gray-800 truncate">{{ props.group.name }}</h2>
             <p class="text-gray-500 text-sm mt-1">创建时间: {{ props.group.create_at }}</p>
-            <p class="text-gray-500 text-sm mt-1">我的角色: {{ roleTranslations[props.group.my_role] }}</p>
+            <p class="text-gray-500 text-sm mt-1">我的角色: {{ roleTranslations[props.group.my_role] || props.group.my_role }}</p>
           </div>
         </div>
 
@@ -254,7 +257,7 @@ onMounted(() => {
             </div>
           </div>
           <!-- 群组设置 -->
-          <div v-if="myRole === '1' || myRole === '2'" class="bg-gray-50 p-3 rounded-lg space-y-3">
+          <div v-if="groupSettings && (myRole === '1' || myRole === '2')" class="bg-gray-50 p-3 rounded-lg space-y-3">
             <h3 class="text-gray-500 text-sm font-medium">群组设置</h3>
             <div class="space-y-2">
               <div class="flex items-center justify-between py-2">
