@@ -1,6 +1,7 @@
 <!-- src/components/BlacklistSidebar.vue -->
 <script setup lang="ts">
 import { ref} from "vue";
+import { slideAfterEnter, slideBeforeLeave, slideEnter, slideLeave } from '@/utils/slideHeight'
 import { ChevronDown, ChevronRight } from "lucide-vue-next";
 import { useRouter } from 'vue-router';
 import {useListStore} from "@/stores/list.ts";
@@ -36,10 +37,10 @@ const handleUserClick = (userId: string) => {
 
     <transition
         name="slide"
-        @enter="el => el.style.height = el.scrollHeight + 'px'"
-        @after-enter="el => el.style.height = null"
-        @before-leave="el => el.style.height = el.scrollHeight + 'px'"
-        @leave="el => el.style.height = 0"
+        @enter="slideEnter"
+        @after-enter="slideAfterEnter"
+        @before-leave="slideBeforeLeave"
+        @leave="slideLeave"
     >
       <div v-show="isExpanded" class="transition-all duration-300">
         <div

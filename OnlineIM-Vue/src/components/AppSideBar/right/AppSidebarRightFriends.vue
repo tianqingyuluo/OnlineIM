@@ -16,6 +16,7 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu'
 import { ref, computed, onMounted } from "vue";
+import { slideAfterEnter, slideBeforeLeave, slideEnter, slideLeave } from '@/utils/slideHeight'
 import { Input } from "@/components/ui/input";
 import { Search, ChevronDown, ChevronRight } from "lucide-vue-next";
 import { useListStore } from '@/stores/list.ts'
@@ -192,10 +193,10 @@ function handleUserClick(user: FriendInFriendGroup) {
 
                 <transition
                     name="slide"
-                    @enter="el => el.style.height = el.scrollHeight + 'px'"
-                    @after-enter="el => el.style.height = null"
-                    @before-leave="el => el.style.height = el.scrollHeight + 'px'"
-                    @leave="el => el.style.height = 0"
+                    @enter="slideEnter"
+                    @after-enter="slideAfterEnter"
+                    @before-leave="slideBeforeLeave"
+                    @leave="slideLeave"
                 >
                   <div v-show="isGroupExpanded(group.group_id)" class="transition-all duration-300">
                     <SidebarMenuItem

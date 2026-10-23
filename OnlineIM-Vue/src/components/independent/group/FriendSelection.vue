@@ -28,10 +28,10 @@
 
           <transition
               name="slide"
-              @enter="el => el.style.height = el.scrollHeight + 'px'"
-              @after-enter="el => el.style.height = null"
-              @before-leave="el => el.style.height = el.scrollHeight + 'px'"
-              @leave="el => el.style.height = 0"
+              @enter="slideEnter"
+              @after-enter="slideAfterEnter"
+              @before-leave="slideBeforeLeave"
+              @leave="slideLeave"
           >
             <div v-show="isGroupExpanded(group.group_id)" class="transition-all duration-300">
               <!-- 好友空状态 -->
@@ -71,6 +71,7 @@
 
 <script setup lang="ts">
 import {ref, computed} from 'vue'
+import { slideAfterEnter, slideBeforeLeave, slideEnter, slideLeave } from '@/utils/slideHeight'
 import { ChevronDown, ChevronRight } from 'lucide-vue-next'
 import { SidebarGroupLabel } from '@/components/ui/sidebar'
 import { useListStore } from '@/stores/list'
