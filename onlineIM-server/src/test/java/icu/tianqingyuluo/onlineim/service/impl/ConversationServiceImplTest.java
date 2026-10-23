@@ -158,9 +158,31 @@ class ConversationServiceImplTest {
         assertTrue(list.get(0).getAtMe());
         assertEquals(1, list.get(0).getAtMeCount());
         assertEquals("msg_new", list.get(0).getAtMeMessageId());
+        assertFalse(list.get(0).getAtPersonal());
         assertFalse(list.get(1).getAtMe());
         assertEquals(0, list.get(1).getAtMeCount());
         assertNull(list.get(1).getAtMeMessageId());
+    }
+
+    @Test
+    void sameMessageAtAllAndPersonalMentionShowsBoth() {
+        Conversation group = own("grp_1", "usr_a", "grp_1", "group");
+        group.setPendingMentions(List.of(
+                Conversation.PendingMention.builder()
+                        .messageId("msg_mix").seqId("1000000000000000008").senderId("usr_b")
+                        .atAll(true).personal(true).build()));
+        when(repository.findByUserIdAndStatus(eq("usr_a"), eq(1), any(Sort.class))).thenReturn(List.of(group));
+        GroupBriefResponse brief = new GroupBriefResponse();
+        brief.setName("G");
+        when(groupService.getGroupByID("grp_1")).thenReturn(brief);
+
+        ConversationResponse response = service.getUserConversations("usr_a").getFirst();
+
+        assertTrue(response.getAtAll());
+        assertTrue(response.getAtMe());
+        assertTrue(response.getAtPersonal());
+        assertEquals(1, response.getAtAllCount());
+        assertEquals(1, response.getAtMeCount());
     }
 
     @Test

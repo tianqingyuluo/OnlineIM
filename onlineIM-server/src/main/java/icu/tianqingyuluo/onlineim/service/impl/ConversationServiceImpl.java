@@ -279,6 +279,8 @@ public class ConversationServiceImpl implements ConversationService {
         var atAllMentions = mentions.stream()
                 .filter(mention -> mention != null && Boolean.TRUE.equals(mention.getAtAll()))
                 .toList();
+        boolean atPersonal = mentions.stream()
+                .anyMatch(mention -> mention != null && Boolean.TRUE.equals(mention.getPersonal()));
 
         return ConversationResponse.builder()
                 .conversationID(conversationId)
@@ -292,6 +294,7 @@ public class ConversationServiceImpl implements ConversationService {
                 .atAll(!atAllMentions.isEmpty())
                 .atAllCount(atAllMentions.size())
                 .atAllMessageId(atAllMentions.isEmpty() ? null : atAllMentions.getFirst().getMessageId())
+                .atPersonal(atPersonal)
                 .deliveredSeq(deliveredSeq)
                 .readSeq(readSeq)
                 .latestSeq(latestSeq)

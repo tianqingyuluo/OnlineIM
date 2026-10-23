@@ -20,4 +20,7 @@ public interface GroupAnnouncementService {
     void deleteAnnouncement(String groupId, String announcementId, String deleterId);
 
     void pinAnnouncement(String groupId, String announcementId, Boolean pinStatus, String operatorId);
+
+    /** 变更置顶前先记下当前置顶，用来给被取消的那几条补推帧 */
+    List<String> listPinnedIds(String groupId);
 }

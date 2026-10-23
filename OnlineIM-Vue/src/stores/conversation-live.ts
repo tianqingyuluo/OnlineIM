@@ -16,7 +16,7 @@ export const RECALLED_PREVIEW = '[消息已撤回]'
 const refreshTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const countedMessageIds = new Set<string>()
 /** 本页会话里本地加过未读、且可能还没被服务端快照覆盖的消息 */
-const unreadExtras = new Map<string, { conversationId: string, seq: string, atMe: boolean, atAll: boolean }>()
+const unreadExtras = new Map<string, { conversationId: string, seq: string, atMe: boolean, atAll: boolean, atPersonal: boolean }>()
 /** 已处理过未读扣减的撤回（同一撤回可能先后收到 REST 结果与推送） */
 const recalledMessageIds = new Set<string>()
 const MAX_COUNTED = 2000
@@ -72,15 +72,17 @@ function extraUnread(conversationId: string, afterSeq: string): number {
   return count
 }
 
-function extraMentions(conversationId: string, afterSeq: string): { atMe: number, atAll: number } {
+function extraMentions(conversationId: string, afterSeq: string): { atMe: number, atAll: number, atPersonal: number } {
   let atMe = 0
   let atAll = 0
+  let atPersonal = 0
   for (const item of unreadExtras.values()) {
     if (item.conversationId !== conversationId || compareSeqId(item.seq, afterSeq) <= 0) continue
     if (item.atMe) atMe++
     if (item.atAll) atAll++
+    if (item.atPersonal) atPersonal++
   }
-  return { atMe, atAll }
+  return { atMe, atAll, atPersonal }
 }
 
 function clearExtras(conversationId: string): void {
@@ -136,7 +138,7 @@ function findConversation(conversationId: string): Conversation | undefined {
 /** 列表里该会话当前是否带着 [有人@我] / [@所有人] */
 export function hasMentionMark(conversationId: string): boolean {
   const conversation = findConversation(conversationId)
-  return !!conversation && (!!conversation.at_me || !!conversation.at_all)
+  return !!conversation && (!!conversation.at_me || !!conversation.at_all || !!conversation.at_personal)
 }
 
 export function isViewingConversation(conversationId: string, activeConversationId: string | null): boolean {
@@ -149,6 +151,12 @@ export function mentionsAll(message: MessageResponse, atAll?: boolean): boolean 
   if (atAll === true) return true
   if (message.is_recalled || String(message.status) === '3') return false
   return Array.isArray(message.at_users) && message.at_users.includes('all')
+}
+
+/** at_users 里有这位用户自己的 ID（不含仅 @所有人） */
+export function mentionsPersonally(message: MessageResponse, userId: string | undefined): boolean {
+  if (!userId || message.is_recalled || String(message.status) === '3') return false
+  return Array.isArray(message.at_users) && message.at_users.includes(userId)
 }
 
 /** 该消息是否 @ 了 userId（帧上的 at_me / at_all 优先，否则看 at_users，含 @所有人） */
@@ -181,12 +189,14 @@ export function onConversationMessage(
   const countThis = countUnread && !replay
   const mentioned = mentionsUser(message, me, atMe, atAll)
   const mentionedAll = mentionsAll(message, atAll)
+  const mentionedPersonally = mentionsPersonally(message, me)
   if (countThis && message.message_id) {
     unreadExtras.set(message.message_id, {
       conversationId: message.conversation_id,
       seq: message.seq_id || '0',
       atMe: mentioned,
       atAll: mentionedAll,
+      atPersonal: mentionedPersonally,
     })
   }
   applyMessageToConversation(conversation, message, { countUnread: countThis })
@@ -195,6 +205,7 @@ export function onConversationMessage(
     conversation.at_me = true
     conversation.at_me_count = (conversation.at_me_count || 0) + 1
     conversation.at_me_message_id = conversation.at_me_message_id || message.message_id
+    if (mentionedPersonally) conversation.at_personal = true
     if (mentionsAll(message, atAll)) {
       conversation.at_all = true
       conversation.at_all_count = (conversation.at_all_count || 0) + 1
@@ -246,6 +257,7 @@ export function onConversationRecall(
   if (mentionExtra) {
     mentionExtra.atMe = false
     mentionExtra.atAll = false
+    mentionExtra.atPersonal = false
   }
   if (recalledMessageIds.size > MAX_COUNTED) {
     const first = recalledMessageIds.values().next().value
@@ -286,6 +298,7 @@ export function onConversationRead(conversationId: string, remaining = 0): void 
         if (item.conversationId === conversationId) {
           item.atMe = false
           item.atAll = false
+          item.atPersonal = false
         }
       }
     }
@@ -300,6 +313,7 @@ export function clearMention(conversation: Conversation): void {
   conversation.at_all = false
   conversation.at_all_count = 0
   conversation.at_all_message_id = undefined
+  conversation.at_personal = false
 }
 
 export function scheduleConversationRefresh(conversationId: string, delay = 500): void {
@@ -333,9 +347,10 @@ export async function refreshConversation(conversationId: string): Promise<void>
 
 /** 上线补齐里的 @我 / @所有人 以服务端快照为准；快照之后本页才数到的提及仍保留。 */
 function applyMentionSnapshot(existing: Conversation, fresh: Conversation, afterSeq: string | null): void {
-  const extra = afterSeq ? extraMentions(existing.conversation_id, afterSeq) : { atMe: 0, atAll: 0 }
+  const extra = afterSeq ? extraMentions(existing.conversation_id, afterSeq) : { atMe: 0, atAll: 0, atPersonal: 0 }
   const atMe = !!fresh.at_me || extra.atMe > 0
   const atAll = !!fresh.at_all || extra.atAll > 0
+  const atPersonal = !!fresh.at_personal || extra.atPersonal > 0
   const atMeCount = (fresh.at_me_count || 0) + extra.atMe
   const atAllCount = (fresh.at_all_count || 0) + extra.atAll
   existing.at_me = atMe
@@ -344,6 +359,7 @@ function applyMentionSnapshot(existing: Conversation, fresh: Conversation, after
   existing.at_all = atAll
   existing.at_all_count = atAll ? Math.max(atAllCount, 1) : 0
   existing.at_all_message_id = atAll ? (fresh.at_all_message_id || existing.at_all_message_id) : undefined
+  existing.at_personal = atPersonal
 }
 
 /**

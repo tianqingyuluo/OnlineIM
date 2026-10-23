@@ -151,10 +151,15 @@ describe('conversation list live updates', () => {
     live.onConversationMessage(msg('all', 'grp_1', 'usr_peer', { at_users: ['all'] }) as never, null)
     expect(g1().at_all).toBe(true)
     expect(g1().at_me).toBe(true)
+    expect(g1().at_personal).toBeFalsy()
     expect(g1().at_all_count).toBe(1)
-    live.onConversationMessage(msg('person', 'grp_1', 'usr_peer', { at_users: ['usr_me'] }) as never, null, true, false)
+    live.onConversationMessage(msg('mix', 'grp_1', 'usr_peer', { at_users: ['all', 'usr_me'] }) as never, null, true, true)
+    expect(g1().at_personal).toBe(true)
+    expect(g1().at_all_count).toBe(2)
     expect(g1().at_me_count).toBe(2)
-    expect(g1().at_all_count).toBe(1)
+    live.onConversationMessage(msg('person', 'grp_1', 'usr_peer', { at_users: ['usr_me'] }) as never, null, true, false)
+    expect(g1().at_me_count).toBe(3)
+    expect(g1().at_all_count).toBe(2)
   })
 
   it('recall by someone else lowers my unread count once, only when I had not read it', async () => {
@@ -247,11 +252,13 @@ describe('conversation list live updates', () => {
         at_all: true,
         at_all_count: 1,
         at_all_message_id: 'g_all',
+        at_personal: true,
       }),
     ], null)
     const g1 = () => list.conversations[0]
     expect(g1().at_all).toBe(true)
     expect(g1().at_me).toBe(true)
+    expect(g1().at_personal).toBe(true)
     expect(g1().at_all_message_id).toBe('g_all')
     expect(g1().unread_count).toBe(2)
 

@@ -86,7 +86,7 @@ export function applyAnnouncementFrame(
     unread_count: incoming.unread_count ?? previous?.unread_count,
   }
   const exists = !!previous
-  // 一个群只有一条置顶：服务端置顶新公告时会悄悄取消旧的置顶，不单独推帧，这里同步取消
+  // 服务端取消旧置顶时会另推一帧 pinned:false；这里仍在收到新的置顶时先清掉其他置顶，避免两帧之间闪一下
   const base = merged.pinned
     ? items.map(item => item.pinned && item.announcement_id !== merged.announcement_id ? { ...item, pinned: false } : item)
     : items

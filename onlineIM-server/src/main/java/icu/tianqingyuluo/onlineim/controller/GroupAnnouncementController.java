@@ -89,6 +89,8 @@ public class GroupAnnouncementController {
         try {
             GroupAnnouncementResponse announcement = groupAnnouncementService.getAnnouncementById(groupId, announcementId);
             if (announcement != null) {
+                // 打开详情也要落下已读（旧公告原先没有任何已读行）
+                groupAnnouncementReadService.markRead(groupId, announcementId, userId, publisherId(announcement));
                 groupAnnouncementReadService.attach(groupId, userId, List.of(announcement));
                 return ResponseEntity.ok(announcement);
             } else {
@@ -122,8 +124,12 @@ public class GroupAnnouncementController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorCodeUtil.getErrorOutput("403", "你没有该权限"));
         }
         try {
+            List<String> pinnedBefore = groupAnnouncementService.listPinnedIds(groupId);
             GroupAnnouncementResponse newAnnouncement = groupAnnouncementService.createAnnouncement(groupId, request, publisherId);
             groupAnnouncementReadService.afterPublished(newAnnouncement, publisherId);
+            if (newAnnouncement != null) {
+                publishClearedPins(groupId, pinnedBefore, newAnnouncement.getAnnouncementID(), publisherId);
+            }
             return ResponseEntity.status(201).body(newAnnouncement); // 201 Created
         }
         catch (PersistenceException e) {
@@ -156,9 +162,11 @@ public class GroupAnnouncementController {
         }
         try {
             GroupAnnouncementResponse before = groupAnnouncementService.getAnnouncementById(groupId, announcementId);
+            List<String> pinnedBefore = groupAnnouncementService.listPinnedIds(groupId);
             GroupAnnouncementResponse updatedAnnouncement = groupAnnouncementService.updateAnnouncement(groupId, announcementId, request, updaterId);
             if (updatedAnnouncement != null) {
                 groupAnnouncementReadService.afterUpdated(before, updatedAnnouncement, updaterId);
+                publishClearedPins(groupId, pinnedBefore, announcementId, updaterId);
                 return ResponseEntity.ok(updatedAnnouncement);
             } else {
                 // 根据实际业务逻辑，这里可能是 notFound 或 forbidden
@@ -236,11 +244,14 @@ public class GroupAnnouncementController {
         if (before == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ErrorCodeUtil.getErrorOutput("404", "公告不存在"));
         }
+        List<String> pinnedBefore = groupAnnouncementService.listPinnedIds(groupId);
         try {
             groupAnnouncementService.pinAnnouncement(groupId, announcementId, pinStatus, operatorId);
             GroupAnnouncementResponse after = groupAnnouncementService.getAnnouncementById(groupId, announcementId);
             if (after != null) {
                 groupAnnouncementReadService.afterUpdated(before, after, operatorId);
+                // 置顶新的一条会取消旧的；明确取消置顶则 afterUpdated 已经推了 pinned:false
+                publishClearedPins(groupId, pinnedBefore, announcementId, operatorId);
             }
             return ResponseEntity.ok().build();
         }
@@ -266,7 +277,7 @@ public class GroupAnnouncementController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ErrorCodeUtil.getErrorOutput("404", "公告不存在"));
         }
         try {
-            groupAnnouncementReadService.markRead(groupId, announcementId, userId);
+            groupAnnouncementReadService.markRead(groupId, announcementId, userId, publisherId(announcement));
             groupAnnouncementReadService.attach(groupId, userId, List.of(announcement));
             return ResponseEntity.ok(announcement);
         } catch (PersistenceException e) {
@@ -293,5 +304,29 @@ public class GroupAnnouncementController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ErrorCodeUtil.getErrorOutput("404", "公告不存在"));
         }
         return ResponseEntity.ok(groupAnnouncementReadService.listReads(groupId, announcementId, userId));
+    }
+
+    /** 被本次置顶挤掉的公告，各推一帧 pinned:false，别的在线客户端才能马上清掉置顶 */
+    private void publishClearedPins(String groupId, List<String> previouslyPinned, String exceptId, String actorId) {
+        if (previouslyPinned == null || previouslyPinned.isEmpty()) {
+            return;
+        }
+        for (String id : previouslyPinned) {
+            if (id == null || id.equals(exceptId)) {
+                continue;
+            }
+            GroupAnnouncementResponse current = groupAnnouncementService.getAnnouncementById(groupId, id);
+            if (current == null || Boolean.TRUE.equals(current.getPinned())) {
+                continue;
+            }
+            groupAnnouncementReadService.publishPin(current, actorId);
+        }
+    }
+
+    private static String publisherId(GroupAnnouncementResponse announcement) {
+        if (announcement == null || announcement.getPublisherInfo() == null) {
+            return null;
+        }
+        return announcement.getPublisherInfo().getUserId();
     }
 }

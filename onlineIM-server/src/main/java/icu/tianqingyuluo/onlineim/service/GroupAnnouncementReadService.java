@@ -17,11 +17,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * 群公告已读：成员确认、群主/管理员看名单，并通过 Redis Stream 通知在线成员。
@@ -52,6 +54,7 @@ public class GroupAnnouncementReadService {
         if (announcements == null || announcements.isEmpty() || viewerId == null) {
             return;
         }
+        backfillPublishersWithoutReads(groupId, announcements);
         List<String> readIds = readMapper.listReadAnnouncementIds(groupId, viewerId);
         java.util.Set<String> read = new LinkedHashSet<>(readIds == null ? List.of() : readIds);
         boolean manager = groupMemberService.isAdminOrOwner(groupId, viewerId);
@@ -97,13 +100,22 @@ public class GroupAnnouncementReadService {
 
     /**
      * 成员确认已读。重复确认保持第一次的时间，也不再推送。
-     * 公告不存在时返回 null。
      */
     @Transactional
     public boolean markRead(String groupId, String announcementId, String userId) {
+        return markRead(groupId, announcementId, userId, null);
+    }
+
+    /**
+     * 打开/确认公告。还没有任何已读行时（功能上线前的旧公告，或已读被清空），
+     * 先把发布者补成已读，再记下当前查看的人，这样「已读」不只有新公告才有记录。
+     */
+    @Transactional
+    public boolean markRead(String groupId, String announcementId, String userId, String publisherId) {
         if (!groupMemberService.isGroupMember(groupId, userId)) {
             throw new ForbiddenException("你没有该权限");
         }
+        backfillPublisherIfUntracked(groupId, announcementId, userId, publisherId);
         if (readMapper.countByUser(announcementId, userId) > 0) {
             return false;
         }
@@ -149,6 +161,61 @@ public class GroupAnnouncementReadService {
     public void afterDeleted(String groupId, String announcementId, String operatorId) {
         readMapper.deleteByAnnouncement(announcementId);
         AfterCommit.run(() -> publishDeleted(groupId, announcementId, operatorId));
+    }
+
+    /**
+     * 某条公告的置顶状态变了（通常是被另一条挤掉，或被明确取消）。
+     * 单独推一帧，在线客户端不用等刷新就能清掉旧的置顶。
+     */
+    public void publishPin(GroupAnnouncementResponse announcement, String actorId) {
+        if (announcement == null || announcement.getAnnouncementID() == null) {
+            return;
+        }
+        attach(announcement.getGroupID(), actorId, List.of(announcement));
+        AfterCommit.run(() -> publishAnnouncement("pinned", announcement, actorId));
+    }
+
+    /**
+     * 列表/详情加载时，给还没有任何已读行的公告补上发布者的已读。
+     * 新公告在发布时就会写入发布者；旧公告缺这行，已读人数会一直是 0。
+     */
+    private void backfillPublishersWithoutReads(String groupId, List<GroupAnnouncementResponse> announcements) {
+        List<String> missing = readMapper.listIdsWithoutReads(groupId);
+        if (missing == null || missing.isEmpty()) {
+            return;
+        }
+        Set<String> ids = new HashSet<>(missing);
+        for (GroupAnnouncementResponse announcement : announcements) {
+            if (announcement == null || !ids.contains(announcement.getAnnouncementID())) {
+                continue;
+            }
+            String publisherId = publisherId(announcement);
+            if (publisherId == null || !groupMemberService.isGroupMember(groupId, publisherId)) {
+                continue;
+            }
+            rememberSilently(groupId, announcement.getAnnouncementID(), publisherId);
+        }
+    }
+
+    private void backfillPublisherIfUntracked(String groupId, String announcementId, String viewerId, String publisherId) {
+        if (publisherId == null || publisherId.isBlank() || publisherId.equals(viewerId)) {
+            return;
+        }
+        if (readMapper.countByAnnouncement(announcementId) > 0) {
+            return;
+        }
+        if (!groupMemberService.isGroupMember(groupId, publisherId)) {
+            return;
+        }
+        rememberSilently(groupId, announcementId, publisherId);
+    }
+
+    private static String publisherId(GroupAnnouncementResponse announcement) {
+        if (announcement.getPublisherInfo() == null) {
+            return null;
+        }
+        String publisherId = announcement.getPublisherInfo().getUserId();
+        return publisherId == null || publisherId.isBlank() ? null : publisherId;
     }
 
     private void rememberSilently(String groupId, String announcementId, String userId) {

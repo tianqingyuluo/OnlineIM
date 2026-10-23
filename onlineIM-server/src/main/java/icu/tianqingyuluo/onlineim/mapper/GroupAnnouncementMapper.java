@@ -89,6 +89,10 @@ public interface GroupAnnouncementMapper {
      */
     @Select("SELECT * FROM group_announcements WHERE group_id = #{groupId} AND pin = 1 AND status = 1 ORDER BY created_at DESC")
     List<GroupAnnouncement> getPinnedAnnouncements(@Param("groupId") String groupId);
+
+    /** 当前仍置顶的公告 ID（含 status 非 1 的，与 cancelPin 的范围一致） */
+    @Select("SELECT id FROM group_announcements WHERE group_id = #{groupId} AND pin = 1")
+    List<String> listPinnedIds(@Param("groupId") String groupId);
     
     /**
      * 获取最新公告

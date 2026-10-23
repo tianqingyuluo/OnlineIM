@@ -39,6 +39,21 @@ describe('announcement read state', () => {
     expect(next.find(item => item.announcement_id === 'old')?.read_by_me).toBe(true)
   })
 
+  it('clears the pin when an unpin frame arrives and keeps the previous read state', () => {
+    const items = [announcement('old', { pinned: true, read_by_me: true }), announcement('other')]
+    const { items: next, openPopup } = applyAnnouncementFrame(items, {
+      type: 'GROUP_ANNOUNCEMENT',
+      message: {
+        action: 'pinned',
+        announcement: announcement('old', { pinned: false, read_by_me: false }),
+      },
+    }, 'usr_me')
+    expect(openPopup).toBe(false)
+    expect(next.find(item => item.announcement_id === 'old')?.pinned).toBe(false)
+    expect(next.find(item => item.announcement_id === 'old')?.read_by_me).toBe(true)
+    expect(next.find(item => item.announcement_id === 'old')?.title).toBe('old')
+  })
+
   it('keeps the bar until this user confirms, and opens the popup for someone else', () => {
     const published = applyAnnouncementFrame([], {
       type: 'GROUP_ANNOUNCEMENT',

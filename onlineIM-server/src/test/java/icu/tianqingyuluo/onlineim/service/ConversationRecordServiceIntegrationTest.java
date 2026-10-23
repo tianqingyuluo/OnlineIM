@@ -194,7 +194,9 @@ class ConversationRecordServiceIntegrationTest {
 
         assertNull(record(GRP, A).getPendingMentions(), "发送者自己没有 @我");
         assertEquals(Boolean.TRUE, record(GRP, B).getPendingMentions().getFirst().getAtAll());
+        assertEquals(Boolean.TRUE, record(GRP, B).getPendingMentions().getFirst().getPersonal(), "同一条里点名的人还要记个人 @");
         assertEquals(Boolean.TRUE, record(GRP, C).getPendingMentions().getFirst().getAtAll());
+        assertNull(record(GRP, C).getPendingMentions().getFirst().getPersonal());
         assertEquals(1, record(GRP, B).getPendingMentions().size());
 
         everyone.setAtUsers(List.of(B));
@@ -202,6 +204,7 @@ class ConversationRecordServiceIntegrationTest {
         assertEquals(List.of("msg_all"), record(GRP, B).getPendingMentions().stream()
                 .map(Conversation.PendingMention::getMessageId).toList());
         assertNull(record(GRP, B).getPendingMentions().getFirst().getAtAll());
+        assertEquals(Boolean.TRUE, record(GRP, B).getPendingMentions().getFirst().getPersonal());
         assertTrue(record(GRP, C).getPendingMentions() == null || record(GRP, C).getPendingMentions().isEmpty());
     }
 

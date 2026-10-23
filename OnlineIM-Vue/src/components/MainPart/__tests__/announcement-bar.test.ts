@@ -30,6 +30,7 @@ describe('group announcement bar', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     getAnnouncementsByGroupId.mockResolvedValue([announcement])
+    markAnnouncementRead.mockResolvedValue({ ...announcement, read_by_me: true })
     getAnnouncementReads.mockResolvedValue({
       announcement_id: 'ann_1',
       group_id: 'grp_1',
@@ -48,11 +49,11 @@ describe('group announcement bar', () => {
 
     await wrapper.get('[data-testid="announcement-bar-open"]').trigger('click')
     await flushPromises()
+    expect(markAnnouncementRead).toHaveBeenCalledWith('grp_1', 'ann_1')
     expect(wrapper.get('[data-testid="announcement-popup-title"]').text()).toBe('周五开会')
     expect(wrapper.get('[data-testid="announcement-read-lists"]').text()).toContain('丙')
     expect(wrapper.find('[data-testid="announcement-bar"]').exists()).toBe(true)
 
-    markAnnouncementRead.mockResolvedValue({ ...announcement, read_by_me: true })
     await wrapper.get('[data-testid="announcement-confirm"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-testid="announcement-bar"]').exists()).toBe(false)

@@ -431,15 +431,16 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 | `at_all` | boolean | 其中有未读的 @所有人 |
 | `at_all_count` | number | 未读 @所有人 条数 |
 | `at_all_message_id` | string/null | 最早一条未读 @所有人 消息 |
+| `at_personal` | boolean | 未读里有直接 @ 到自己的 ID（可以和 @所有人在同一条消息）。为 true 时列表同时显示 `[有人@我]` |
 
-清除：`READ_RECEIPT` 推进已读游标后移除 `seq_id ≤ read_seq` 的记录（响应计算本身也按游标过滤，裁剪失败也不会显示错误）；消息撤回后从所有成员记录中移除。Web 端在会话预览前显示红色 `[有人@我]`；若未读里有 @所有人则显示 `[@所有人]`（只有 @所有人时不重复显示 `[有人@我]`，另外还有单独 @我 时两个都显示）。收到 `at_me` / `at_all` 帧且未在查看该会话时实时打标，读到最新后实时清除并以服务端值校正。
+清除：`READ_RECEIPT` 推进已读游标后移除 `seq_id ≤ read_seq` 的记录（响应计算本身也按游标过滤，裁剪失败也不会显示错误）；消息撤回后从所有成员记录中移除。Web 端在会话预览前显示红色 `[有人@我]`；若未读里有 @所有人则显示 `[@所有人]`。只有 @所有人时不重复显示 `[有人@我]`；同一条消息里还直接 @ 了自己（`at_personal`），或另外还有单独 @我 时，两个都显示。收到 `at_me` / `at_all` 帧且未在查看该会话时实时打标，读到最新后实时清除并以服务端值校正。
 
 ### @所有人
 
 登记任务：v1-group-at-all-announce-read。复用 `at_users`，保留值 `all`（前端 `MENTION_ALL_ID`），**不**展开成成员 ID，因此不受 50 人上限，历史消息也不随退群改写。
 
 - 只有群主或管理员可以留下 `all`（`group_members.role <> 0`，或 `groups.owner_id`）。普通成员提交的 `all` 被静默丢弃，同一次请求里其他合法的 @单人保留，消息照常发送。编辑消息时按发送者**当前**身份重新清洗。
-- 除发送者外的每个当前成员都会记一条 `pendingMentions`（`atAll=true`），会话列表出现 `[@所有人]`。`at_me` 同时为 true，旧客户端仍显示 `[有人@我]`。
+- 除发送者外的每个当前成员都会记一条 `pendingMentions`（`atAll=true`；`at_users` 里还有该成员自己的 ID 时 `personal=true`），会话列表出现 `[@所有人]`。`at_me` 同时为 true，旧客户端仍显示 `[有人@我]`。`personal=true` 时新客户端同时显示 `[@所有人]` 和 `[有人@我]`。
 - 本期没有频次限制。
 
 ## 群公告已读
@@ -459,6 +460,8 @@ HTTP 发送入口对同一业务错误返回 `409 Conflict` 和 `code=REPLY_TARG
 | `unread_count` | 群主/管理员 | 当前在群成员里尚未确认的人数 |
 
 发布者在发布时记为自己已读。标题或正文变化后清空该公告的已读（操作者保持已读），只改置顶不清。未置顶的公告现在也会真正写入（原先 `pin=false` 时不会插入）。
+
+功能上线前的旧公告（或已读行被清空、一条都没有）在成员打开详情、点开公告条或确认时补记：先写入仍在群里的发布者，再写入当前查看的人。加载公告列表时也会给「还没有任何已读行」的公告补上发布者，这样已读人数不只有新公告才大于 0。`GET .../announcements/{id}` 同样会为当前用户落下已读。
 
 ### 名单 `GET /api/v1/groups/{groupId}/announcements/{announcementId}/reads`
 
@@ -482,7 +485,7 @@ Redis Stream 类型与帧 `type` 同名。`GROUP_ANNOUNCEMENT` 发给全体在�
                "announcement": { "announcement_id": "ann_1", "title": "开会", "content": "...", "read_by_me": false } } }
 ```
 
-`action`：`published`（新公告）、`updated`（标题或正文变了，除操作者外都要重新确认）、`pinned`（只改置顶）、`deleted`（无 `announcement`）。客户端把 `actor_id` 等于自己视为已读。
+`action`：`published`（新公告）、`updated`（标题或正文变了，除操作者外都要重新确认）、`pinned`（只改置顶，`announcement.pinned` 为 false 表示取消置顶）、`deleted`（无 `announcement`）。客户端把 `actor_id` 等于自己视为已读。置顶新公告而挤掉旧公告时，除了新公告那一帧，被取消置顶的每条旧公告也会各收到一帧 `action: pinned` 且 `pinned: false`，在线客户端不用刷新就能清掉旧的置顶标记。
 
 ```json
 { "type": "GROUP_ANNOUNCEMENT_READ",

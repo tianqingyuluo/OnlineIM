@@ -195,12 +195,15 @@ export default defineComponent({
       }
     };
 
-    // 选择公告查看详情
+    // 选择公告查看详情。没有已读行的旧公告也在这时补上记录，列表才能显示「已读」
     const selectAnnouncement = (announcement: GroupAnnouncement) => {
       selectedAnnouncement.value = announcement;
       isEditing.value = false;
       showCreateForm.value = false;
       readDetail.value = null;
+      if (!announcement.read_by_me) {
+        void confirmRead(announcement);
+      }
     };
 
     const namesOf = (people: { nickname?: string; username?: string; user_id: string }[] | undefined) =>

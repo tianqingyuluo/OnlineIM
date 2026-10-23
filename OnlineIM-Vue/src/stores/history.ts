@@ -772,18 +772,20 @@ export const useHistoryStore = defineStore('history', {
       if (!edited?.message_id || !edited.conversation_id) return;
       const me = useUserStore().loggedInUser.user_id;
       const mentioned = (ids?: string[] | null) => !!me && !!ids && (ids.includes(me) || ids.includes('all'));
+      const personally = (ids?: string[] | null) => !!me && !!ids && ids.includes(me);
       let mentionChanged = false;
       let applied = false;
       for (const message of this.messagesForConversation(edited.conversation_id)) {
         if (message.message_id === edited.message_id) {
           if (!isNewerRevision(edited.content_revision, message.content_revision)) continue;
           const before = mentioned(message.at_users);
+          const beforePersonal = personally(message.at_users);
           message.content = edited.content;
           message.edited = true;
           message.edited_at = edited.edited_at ?? null;
           message.content_revision = edited.content_revision;
           if (edited.at_users !== undefined) message.at_users = edited.at_users;
-          mentionChanged = before !== mentioned(message.at_users);
+          mentionChanged = before !== mentioned(message.at_users) || beforePersonal !== personally(message.at_users);
           applied = true;
         }
         if (message.reply_to?.message_id === edited.message_id && message.reply_to.state === 'active') {

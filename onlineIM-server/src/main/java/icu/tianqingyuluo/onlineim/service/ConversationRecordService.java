@@ -172,7 +172,6 @@ public class ConversationRecordService {
             Map<String, Conversation> existing = loadRecords(message.getGroupId(), members);
             BulkOperations bulk = mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, Conversation.class);
             Set<String> mentioned = MentionUtil.notifiedUserIds(message.getSenderId(), message.getAtUsers(), members);
-            boolean atAll = MentionUtil.mentionsAll(message.getAtUsers());
             int writes = 0;
             for (String userId : members) {
                 // 这条消息已经是该成员记录的最后一条：重试不再 +1，也不再追加 @我
@@ -182,9 +181,8 @@ public class ConversationRecordService {
                 Update update = newMessageUpdate(message.getGroupId(), TYPE_GROUP, userId, message.getGroupId(), last,
                         !userId.equals(message.getSenderId()));
                 if (mentioned.contains(userId)) {
-                    // 被 @ 的成员记一条“有人@我”（@所有人记 atAll），读到该消息（或撤回）时移除
-                    update.push("pendingMentions").slice(-MAX_PENDING_MENTIONS).each(
-                            mentionOf(message, atAll));
+                    // 被 @ 的成员记一条“有人@我”。@所有人记 atAll；at_users 里还有自己的 ID 时另记 personal
+                    update.push("pendingMentions").slice(-MAX_PENDING_MENTIONS).each(mentionOf(message, userId));
                 }
                 bulk.upsert(byRecordId(message.getGroupId(), userId), update);
                 writes++;
@@ -340,12 +338,11 @@ public class ConversationRecordService {
         } catch (RuntimeException ex) {
             log.warn("重写 @我 前移除旧标记失败: groupId={}, error={}", message.getGroupId(), ex.getMessage());
         }
-        boolean atAll = MentionUtil.mentionsAll(message.getAtUsers());
         for (String userId : MentionUtil.notifiedUserIds(message.getSenderId(), message.getAtUsers(), memberIds)) {
             try {
                 mongoTemplate.updateFirst(Query.query(Criteria.where("_id").is(recordId(message.getGroupId(), userId))
                                 .and("pendingMentions.messageId").ne(message.getId())),
-                        new Update().push("pendingMentions").slice(-MAX_PENDING_MENTIONS).each(mentionOf(message, atAll)),
+                        new Update().push("pendingMentions").slice(-MAX_PENDING_MENTIONS).each(mentionOf(message, userId)),
                         Conversation.class);
             } catch (RuntimeException ex) {
                 log.warn("重写 @我 失败: groupId={}, userId={}, error={}", message.getGroupId(), userId, ex.getMessage());
@@ -353,12 +350,15 @@ public class ConversationRecordService {
         }
     }
 
-    private static Conversation.PendingMention mentionOf(GroupMessage message, boolean atAll) {
+    private static Conversation.PendingMention mentionOf(GroupMessage message, String userId) {
+        boolean atAll = MentionUtil.mentionsAll(message.getAtUsers());
+        boolean personal = message.getAtUsers() != null && userId != null && message.getAtUsers().contains(userId);
         return Conversation.PendingMention.builder()
                 .messageId(message.getId())
                 .seqId(message.getSeqId())
                 .senderId(message.getSenderId())
                 .atAll(atAll ? Boolean.TRUE : null)
+                .personal(personal ? Boolean.TRUE : null)
                 .build();
     }
 
@@ -384,12 +384,7 @@ public class ConversationRecordService {
             try {
                 mongoTemplate.updateFirst(Query.query(Criteria.where("_id").is(recordId(message.getGroupId(), userId))
                                 .and("pendingMentions.messageId").ne(message.getId())),
-                        new Update().push("pendingMentions").slice(-MAX_PENDING_MENTIONS).each(
-                                Conversation.PendingMention.builder()
-                                        .messageId(message.getId())
-                                        .seqId(message.getSeqId())
-                                        .senderId(message.getSenderId())
-                                        .build()),
+                        new Update().push("pendingMentions").slice(-MAX_PENDING_MENTIONS).each(mentionOf(message, userId)),
                         Conversation.class);
             } catch (RuntimeException ex) {
                 log.warn("补充编辑后的 @我 失败: groupId={}, userId={}, error={}", message.getGroupId(), userId, ex.getMessage());

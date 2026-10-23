@@ -20,8 +20,12 @@ const unread = computed(() => formatUnread(props.conversation.unread_count ?? pr
 const preview = computed(() =>
   conversationPreviewText(props.conversation, props.currentUserId) || '无消息')
 const draftText = computed(() => (props.conversation.draft_preview || '').trim())
-/** 只有 @所有人时不重复显示 [有人@我]；另外还有单独 @我 时两个都显示 */
+/**
+ * 只有 @所有人时不重复显示 [有人@我]。
+ * 同一条消息里还点了自己的名（at_personal），或另外还有单独 @我 时，两个都显示。
+ */
 const showPersonalMention = computed(() => {
+  if (props.conversation.at_personal) return true
   if (!props.conversation.at_me) return false
   if (!props.conversation.at_all) return true
   const allCount = props.conversation.at_all_count || 0

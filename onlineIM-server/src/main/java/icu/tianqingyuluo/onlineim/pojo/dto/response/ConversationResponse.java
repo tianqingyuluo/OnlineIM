@@ -77,6 +77,13 @@ public class ConversationResponse {
     private String atAllMessageId;
 
     /**
+     * 未读里有直接 @ 到自己（at_users 含自己的 ID，可以和 @所有人在同一条消息里）。
+     * 为 true 时客户端在 [@所有人] 旁边再显示 [有人@我]。
+     */
+    @JsonProperty("at_personal")
+    private Boolean atPersonal;
+
+    /**
      * 当前用户已送达的最新消息序列号
      */
     @JsonProperty("delivered_seq")

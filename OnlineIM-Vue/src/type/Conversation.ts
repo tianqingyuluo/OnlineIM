@@ -60,6 +60,8 @@ export interface Conversation {
     at_all?: boolean
     at_all_count?: number
     at_all_message_id?: string
+    /** 未读里有直接 @ 到自己（可以和 @所有人在同一条消息）。为 true 时再显示 [有人@我] */
+    at_personal?: boolean
     /** 未发送草稿的摘要；会话列表显示“[草稿] ”加这段文字 */
     draft_preview?: string | null
     notreadednumber?: number

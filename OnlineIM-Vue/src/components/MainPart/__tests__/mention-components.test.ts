@@ -67,7 +67,10 @@ describe('mention rendering', () => {
     const wrapper = mount(Item, { props: { conversation: conversation as never } })
     expect(wrapper.get('[data-testid="conversation-at-all"]').text()).toBe('[@所有人]')
     expect(wrapper.find('[data-testid="conversation-at-me"]').exists()).toBe(false)
-    await wrapper.setProps({ conversation: { ...conversation, at_me_count: 2 } as never })
+    await wrapper.setProps({ conversation: { ...conversation, at_personal: true } as never })
+    expect(wrapper.get('[data-testid="conversation-preview"]').text()).toContain('[@所有人]')
+    expect(wrapper.get('[data-testid="conversation-at-me"]').text()).toBe('[有人@我]')
+    await wrapper.setProps({ conversation: { ...conversation, at_personal: false, at_me_count: 2 } as never })
     expect(wrapper.get('[data-testid="conversation-at-me"]').text()).toBe('[有人@我]')
   })
 

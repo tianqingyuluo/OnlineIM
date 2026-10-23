@@ -49,6 +49,8 @@ public class Conversation {
         private String senderId;
         /** true 表示这条“有人@我”来自 @所有人（at_users 含 all） */
         private Boolean atAll;
+        /** true 表示 at_users 里有这位成员自己的 ID（同一条消息也可以同时 @所有人） */
+        private Boolean personal;
     }
 
     /**

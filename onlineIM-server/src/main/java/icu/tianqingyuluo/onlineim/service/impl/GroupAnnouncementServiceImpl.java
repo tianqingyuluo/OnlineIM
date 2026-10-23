@@ -89,4 +89,10 @@ public class GroupAnnouncementServiceImpl implements GroupAnnouncementService {
             groupAnnouncementMapper.updatePin(announcementId,pinStatus);
         }
     }
+
+    @Override
+    public List<String> listPinnedIds(String groupId) {
+        List<String> ids = groupAnnouncementMapper.listPinnedIds(groupId);
+        return ids == null ? List.of() : ids;
+    }
 }

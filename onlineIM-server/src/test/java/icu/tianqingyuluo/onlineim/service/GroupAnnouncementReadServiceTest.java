@@ -7,6 +7,7 @@ import icu.tianqingyuluo.onlineim.pojo.dto.response.AnnouncementReadCountRow;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.AnnouncementReaderResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.GroupAnnouncementReadListResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.GroupAnnouncementResponse;
+import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DuplicateKeyException;
@@ -107,6 +108,66 @@ class GroupAnnouncementReadServiceTest {
         assertNull(announcement.getReadCount());
         assertNull(announcement.getUnreadCount());
         verify(readMapper, never()).countReads(anyString());
+    }
+
+    @Test
+    void viewingLegacyAnnouncementStoresPublisherAndViewer() {
+        when(readMapper.countByAnnouncement("ann_1")).thenReturn(0);
+        when(readMapper.countByUser("ann_1", "usr_member")).thenReturn(0);
+        when(readMapper.countByUser("ann_1", "usr_admin")).thenReturn(0);
+        when(readMapper.listReaders("ann_1")).thenReturn(List.of(reader("usr_admin"), reader("usr_member")));
+        when(readMapper.listUnreadMembers("grp_1", "ann_1")).thenReturn(List.of());
+
+        assertTrue(service.markRead("grp_1", "ann_1", "usr_member", "usr_admin"));
+
+        verify(readMapper).insert(startsWith("anr_"), eq("ann_1"), eq("grp_1"), eq("usr_admin"));
+        verify(readMapper).insert(startsWith("anr_"), eq("ann_1"), eq("grp_1"), eq("usr_member"));
+        verify(redis).publishGroupMessage(eq(GroupAnnouncementReadService.STREAM_READ), eq("usr_member"), anyString(), any());
+    }
+
+    @Test
+    void listingLegacyAnnouncementBackfillsThePublisherRead() {
+        GroupAnnouncementResponse old = announcement("旧公告", "上线前写的");
+        old.setPublisherInfo(UserBriefResponse.builder().userId("usr_admin").build());
+        when(readMapper.listIdsWithoutReads("grp_1")).thenReturn(List.of("ann_1"));
+        when(readMapper.countByUser("ann_1", "usr_admin")).thenReturn(0);
+        when(readMapper.listReadAnnouncementIds("grp_1", "usr_member")).thenReturn(List.of());
+
+        service.attach("grp_1", "usr_member", List.of(old));
+
+        verify(readMapper).insert(startsWith("anr_"), eq("ann_1"), eq("grp_1"), eq("usr_admin"));
+        assertEquals(Boolean.FALSE, old.getReadByMe());
+    }
+
+    @Test
+    void unpinPublishesPinnedFalse() {
+        GroupAnnouncementResponse before = announcement("标题", "正文");
+        before.setPinned(true);
+        GroupAnnouncementResponse after = announcement("标题", "正文");
+        after.setPinned(false);
+        when(readMapper.listReadAnnouncementIds("grp_1", "usr_admin")).thenReturn(List.of("ann_1"));
+
+        service.afterUpdated(before, after, "usr_admin");
+
+        verify(readMapper, never()).deleteByAnnouncement(anyString());
+        verify(redis).publishGroupMessage(eq(GroupAnnouncementReadService.STREAM_ANNOUNCEMENT), eq("usr_admin"),
+                argThat(body -> body.contains("\"action\":\"pinned\"") && body.contains("\"pinned\":false")),
+                eq(List.of("usr_admin", "usr_member")));
+    }
+
+    @Test
+    void clearedPinIsPushedOnItsOwn() {
+        GroupAnnouncementResponse old = announcement("旧置顶", "正文");
+        old.setPinned(false);
+        when(readMapper.listReadAnnouncementIds("grp_1", "usr_admin")).thenReturn(List.of());
+
+        service.publishPin(old, "usr_admin");
+
+        verify(redis).publishGroupMessage(eq(GroupAnnouncementReadService.STREAM_ANNOUNCEMENT), eq("usr_admin"),
+                argThat(body -> body.contains("\"action\":\"pinned\"")
+                        && body.contains("\"pinned\":false")
+                        && body.contains("\"announcement_id\":\"ann_1\"")),
+                eq(List.of("usr_admin", "usr_member")));
     }
 
     @Test

@@ -19,6 +19,19 @@ public interface GroupAnnouncementReadMapper {
     @Select("SELECT COUNT(*) FROM group_announcement_reads WHERE announcement_id = #{announcementId} AND user_id = #{userId}")
     int countByUser(@Param("announcementId") String announcementId, @Param("userId") String userId);
 
+    @Select("SELECT COUNT(*) FROM group_announcement_reads WHERE announcement_id = #{announcementId}")
+    int countByAnnouncement(@Param("announcementId") String announcementId);
+
+    /** 还没有任何已读行的公告（功能上线前的旧公告，或已读被清空后没人再确认） */
+    @Select("""
+            SELECT a.id FROM group_announcements a
+            WHERE a.group_id = #{groupId}
+              AND NOT EXISTS (
+                  SELECT 1 FROM group_announcement_reads r WHERE r.announcement_id = a.id
+              )
+            """)
+    List<String> listIdsWithoutReads(@Param("groupId") String groupId);
+
     @Select("SELECT COUNT(*) FROM group_members WHERE group_id = #{groupId} AND status = 1")
     int countActiveMembers(@Param("groupId") String groupId);
 

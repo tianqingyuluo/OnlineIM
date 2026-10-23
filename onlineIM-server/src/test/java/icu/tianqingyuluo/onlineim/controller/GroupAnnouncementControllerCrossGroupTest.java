@@ -1,6 +1,7 @@
 package icu.tianqingyuluo.onlineim.controller;
 
 import icu.tianqingyuluo.onlineim.mapper.GroupAnnouncementMapper;
+import icu.tianqingyuluo.onlineim.pojo.dto.response.GroupAnnouncementResponse;
 import icu.tianqingyuluo.onlineim.service.GroupAnnouncementReadService;
 import icu.tianqingyuluo.onlineim.service.GroupAnnouncementService;
 import icu.tianqingyuluo.onlineim.service.GroupMemberService;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -50,6 +52,23 @@ class GroupAnnouncementControllerCrossGroupTest {
         ResponseEntity<Map<String, String>> r = controller.pinAnnouncement("t", "grp_h", "ann_g", Map.of("pin", true));
         assertEquals(404, r.getStatusCode().value());
         verify(announcementService, never()).pinAnnouncement(any(), any(), anyBoolean(), any());
+    }
+
+    @Test
+    void pinningAnotherAnnouncementPushesThePreviousOneUnpinned() {
+        GroupAnnouncementResponse target = GroupAnnouncementResponse.builder()
+                .announcementID("ann_new").groupID("grp_h").pinned(true).title("新").content("c").build();
+        GroupAnnouncementResponse previous = GroupAnnouncementResponse.builder()
+                .announcementID("ann_old").groupID("grp_h").pinned(false).title("旧").content("c").build();
+        when(announcementService.getAnnouncementById("grp_h", "ann_new")).thenReturn(target);
+        when(announcementService.getAnnouncementById("grp_h", "ann_old")).thenReturn(previous);
+        when(announcementService.listPinnedIds("grp_h")).thenReturn(List.of("ann_old"));
+
+        ResponseEntity<Map<String, String>> r = controller.pinAnnouncement("t", "grp_h", "ann_new", Map.of("pin", true));
+
+        assertEquals(200, r.getStatusCode().value());
+        verify(readService).afterUpdated(target, target, "usr_x");
+        verify(readService).publishPin(previous, "usr_x");
     }
 
     @Test
