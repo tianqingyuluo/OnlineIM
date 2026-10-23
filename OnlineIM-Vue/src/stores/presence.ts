@@ -1,9 +1,60 @@
 import { defineStore } from 'pinia'
+import { effectScope, watch, type EffectScope } from 'vue'
 import { presenceService } from '@/services/presence.service'
 import type { PresenceRecord, PresenceUpdate } from '@/utils/presence'
 import { useListStore } from '@/stores/list'
 
 const BATCH = 100
+
+interface ContactLists {
+  friends?: Array<{ friend_info?: { user_id?: string | null } | null }> | null
+  userGroups?: Array<{ friends?: Array<{ user_id?: string | null }> | null }> | null
+}
+
+function collectContactIds(listStore: ContactLists): string[] {
+  const ids = new Set<string>()
+  for (const friend of listStore.friends || []) {
+    const userId = friend.friend_info?.user_id
+    if (userId) ids.add(userId)
+  }
+  for (const group of listStore.userGroups || []) {
+    for (const friend of group.friends || []) {
+      if (friend.user_id) ids.add(friend.user_id)
+    }
+  }
+  return [...ids]
+}
+
+let contactScope: EffectScope | null = null
+
+/**
+ * 好友第一次出现在列表里时补拉在线状态。登录时已经在列表里的人由 refreshContactPresence 负责。
+ * 脱离组件生命周期，避免侧栏卸掉后把监听一起卸掉。
+ */
+export function watchContactPresence() {
+  contactScope?.stop()
+  const listStore = useListStore()
+  const presenceStore = usePresenceStore()
+  let seen = new Set(collectContactIds(listStore))
+  contactScope = effectScope(true)
+  contactScope.run(() => {
+    watch(
+      () => collectContactIds(listStore).join('\0'),
+      (joined) => {
+        const ids = joined ? joined.split('\0') : []
+        const fresh = ids.filter(id => !seen.has(id) && presenceStore.byUserId[id] == null)
+        seen = new Set(ids)
+        if (fresh.length === 0) return
+        void presenceStore.refresh(fresh).catch(error => console.error('加载在线状态失败:', error))
+      },
+    )
+  })
+}
+
+export function stopWatchingContactPresence() {
+  contactScope?.stop()
+  contactScope = null
+}
 
 export const usePresenceStore = defineStore('presence', {
   state: () => ({
@@ -61,20 +112,13 @@ export const usePresenceStore = defineStore('presence', {
   },
 })
 
-/** 登录后拉一次好友的在线状态，作为 WebSocket 推送之前的初始值。 */
+/** 登录后拉一次好友的在线状态，作为 WebSocket 推送之前的初始值，并开始监听之后新出现的好友。 */
 export async function refreshContactPresence() {
   const listStore = useListStore()
   const presenceStore = usePresenceStore()
-  const ids = new Set<string>()
-  for (const friend of listStore.friends) {
-    if (friend.friend_info?.user_id) ids.add(friend.friend_info.user_id)
-  }
-  for (const group of listStore.userGroups) {
-    for (const friend of group.friends || []) {
-      if (friend.user_id) ids.add(friend.user_id)
-    }
-  }
-  if (ids.size > 0) {
-    await presenceStore.refresh([...ids])
+  watchContactPresence()
+  const ids = collectContactIds(listStore)
+  if (ids.length > 0) {
+    await presenceStore.refresh(ids)
   }
 }

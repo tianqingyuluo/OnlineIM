@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { nextTick } from 'vue'
+import { flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 vi.mock('@/services/presence.service', () => ({
@@ -9,15 +11,37 @@ vi.mock('@/services/presence.service', () => ({
   },
 }))
 
-vi.mock('@/stores/list', () => ({
-  useListStore: () => ({
-    friends: [{ friend_info: { user_id: 'usr_friend' } }],
-    userGroups: [{ friends: [{ user_id: 'usr_group' }, { user_id: 'usr_friend' }] }],
-  }),
+const listState = vi.hoisted(() => ({
+  current: null as null | {
+    friends: Array<{ friend_info?: { user_id?: string } }>
+    userGroups: Array<{ friends?: Array<{ user_id?: string }> }>
+  },
 }))
 
+vi.mock('@/stores/list', async () => {
+  const { reactive } = await import('vue')
+  const state = reactive({
+    friends: [{ friend_info: { user_id: 'usr_friend' } }],
+    userGroups: [{ friends: [{ user_id: 'usr_group' }, { user_id: 'usr_friend' }] }],
+  })
+  listState.current = state
+  return { useListStore: () => state }
+})
+
+function contacts() {
+  if (!listState.current) throw new Error('好友列表 mock 未就绪')
+  return listState.current
+}
+
 describe('presence store', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    const { stopWatchingContactPresence } = await import('@/stores/presence')
+    stopWatchingContactPresence()
+    const list = contacts()
+    list.friends.splice(0, list.friends.length, { friend_info: { user_id: 'usr_friend' } })
+    list.userGroups.splice(0, list.userGroups.length, {
+      friends: [{ user_id: 'usr_group' }, { user_id: 'usr_friend' }],
+    })
     setActivePinia(createPinia())
     vi.clearAllMocks()
   })
@@ -107,5 +131,37 @@ describe('presence store', () => {
     store.setSelf('usr_me', false)
     await store.refresh(['usr_me'])
     expect(store.byUserId.usr_me.status).toBe('offline')
+  })
+
+  it('fetches presence when a friend shows up for the first time', async () => {
+    const { presenceService } = await import('@/services/presence.service')
+    vi.mocked(presenceService.query).mockResolvedValue({
+      presences: [{ user_id: 'usr_new', status: 'online', visible: true, last_seen_at: null }],
+    })
+    const { usePresenceStore, watchContactPresence } = await import('@/stores/presence')
+    const store = usePresenceStore()
+    watchContactPresence()
+
+    contacts().friends.push({ friend_info: { user_id: 'usr_new' } })
+    await nextTick()
+    await flushPromises()
+
+    expect(presenceService.query).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(presenceService.query).mock.calls[0][0]).toEqual(['usr_new'])
+    expect(store.byUserId.usr_new.status).toBe('online')
+  })
+
+  it('does not query again when the new friend was just loaded', async () => {
+    const { presenceService } = await import('@/services/presence.service')
+    const { usePresenceStore, watchContactPresence } = await import('@/stores/presence')
+    const store = usePresenceStore()
+    store.byUserId.usr_new = { user_id: 'usr_new', status: 'offline', visible: true, last_seen_at: 1 }
+    watchContactPresence()
+
+    contacts().userGroups[0].friends?.push({ user_id: 'usr_new' })
+    await nextTick()
+    await flushPromises()
+
+    expect(presenceService.query).not.toHaveBeenCalled()
   })
 })

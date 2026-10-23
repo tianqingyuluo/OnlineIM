@@ -264,6 +264,31 @@ export const useListStore = defineStore('list', {
       }
     },
 
+    /**
+     * 同意申请后把新好友放进本地列表。updateFriendGroup 只搬已经在 friends 里的人，
+     * 所以要先放进去，默认分组和好友列表才能马上看到对方。
+     */
+    async rememberAcceptedFriend(friend: Friend, groupId?: string | null) {
+      const userId = friend.friend_info?.user_id
+      let current = this.friends.find(item =>
+        item.friendship_id === friend.friendship_id
+        || (!!userId && item.friend_info?.user_id === userId))
+      if (!current) {
+        this.friends.push(friend)
+        current = friend
+      } else {
+        current.friendship_id = friend.friendship_id || current.friendship_id
+        current.friend_info = { ...current.friend_info, ...friend.friend_info }
+      }
+      if (groupId) {
+        const group = this.userGroups.find(item => item.group_id === groupId)
+        if (group && !Array.isArray(group.friends)) group.friends = []
+        await this.updateFriendGroup(current.friendship_id, groupId)
+        return
+      }
+      await dbService.bulkPut(STORES.FRIENDS, this.friends)
+    },
+
     // 更新好友分组信息
     async updateFriendGroup(friendshipId: string, newGroupId: string) {
       // 更新userGroups数组中的好友分组信息
@@ -271,6 +296,7 @@ export const useListStore = defineStore('list', {
       if (!friend) return;
       // 从原分组中移除好友
       for (const group of this.userGroups) {
+        if (!Array.isArray(group.friends)) continue
         const index = group.friends.findIndex(f => f.friendship_id === friendshipId);
         if (index !== -1) {
           group.friends.splice(index, 1);
@@ -287,6 +313,7 @@ export const useListStore = defineStore('list', {
       // 将好友添加到新分组
       const newGroup = this.userGroups.find(g => g.group_id === newGroupId);
       if (newGroup) {
+        if (!Array.isArray(newGroup.friends)) newGroup.friends = []
         const friendInGroup: FriendInFriendGroup = {
           friendship_id: friend.friendship_id,
           user_id: friend.friend_info.user_id,

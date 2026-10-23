@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useListStore } from '@/stores/list';
+import { usePresenceStore } from '@/stores/presence';
 import { friendsService } from '@/services/friends.service';
 import { toast } from 'vue-sonner';
 
 const listStore = useListStore();
+const presenceStore = usePresenceStore();
 const requests = computed(() => (
   Array.isArray(listStore.FriendRequestsList) ? listStore.FriendRequestsList : []
 ))
@@ -12,6 +14,7 @@ const requests = computed(() => (
 
 const handleRequest = async (isAccept: boolean, requestId: string) => {
   try {
+    const pending = listStore.FriendRequestsList.find(r => r.request_id === requestId);
     const response = await friendsService.handleFriendRequest(requestId, isAccept ? 'accept' : 'reject');
     
     if (isAccept) {
@@ -22,7 +25,21 @@ const handleRequest = async (isAccept: boolean, requestId: string) => {
       const defaultGroup = listStore.userGroups.find(g => g.name === '我的好友');
       if (defaultGroup) {
         await friendsService.setFriendGroup(response.friend_id, defaultGroup.group_id);
-        await listStore.updateFriendGroup(response.friend_id, defaultGroup.group_id);
+      }
+      const sender = pending?.sender_info;
+      if (sender?.user_id) {
+        // 先写入在线状态，再放进列表，打开好友页时不用先闪成“离线”
+        await presenceStore.refresh([sender.user_id]).catch(error => console.error('加载在线状态失败:', error));
+        await listStore.rememberAcceptedFriend({
+          friendship_id: response.friend_id,
+          created_at: pending?.created_at || '',
+          friend_info: {
+            user_id: sender.user_id,
+            username: sender.username || '',
+            nickname: sender.nickname,
+            avatar_url: sender.avatar_url,
+          },
+        }, defaultGroup?.group_id);
       }
     }
     
