@@ -5,11 +5,14 @@ import { recallNoticeText } from '@/utils/message-recall'
 const props = withDefaults(defineProps<{
   isSelf: boolean
   senderName?: string | null
+  /** owner / admin：群管理撤回他人消息 */
+  operatorRole?: string | null
   /** 自己撤回的文本在本页面还留有原文时显示“重新编辑” */
   canReedit?: boolean
   timestamp?: string
 }>(), {
   senderName: '',
+  operatorRole: '',
   canReedit: false,
   timestamp: '',
 })
@@ -18,7 +21,7 @@ const emit = defineEmits<{
   reedit: []
 }>()
 
-const text = computed(() => recallNoticeText(props.isSelf, props.senderName))
+const text = computed(() => recallNoticeText(props.isSelf, props.senderName, props.operatorRole))
 </script>
 
 <template>

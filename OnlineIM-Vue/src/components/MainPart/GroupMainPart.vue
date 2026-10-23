@@ -53,6 +53,7 @@ import {
   insertMention,
   MENTION_ALL_ID,
   withMentionAll,
+  isGroupManager,
   type MentionCandidate,
 } from '@/utils/mention'
 import GroupAnnouncementBar from '@/components/MainPart/GroupAnnouncementBar.vue'
@@ -140,6 +141,7 @@ const recall = reactive(useMessageRecall(() => userStore.loggedInUser.user_id, {
   beforeRecall: message => {
     if (edit.editing?.messageId === message.message_id) cancelEdit()
   },
+  allowOthers: () => isGroupManager(currentGroup.value?.my_role),
 }))
 const deliveryLabels: Record<string, string> = {
   sending: '发送中',
@@ -159,6 +161,12 @@ function stateLabel(message: MessageResponse): string {
 
 function isOwn(message: MessageResponse): boolean {
   return message.sender_info.user_id === currentUser.value.user_id
+}
+
+/** 撤回提示里的“你”：操作者是自己；历史里没有操作者时退回发送者 */
+function recallByMe(message: MessageResponse): boolean {
+  if (message.recall_user_id) return message.recall_user_id === currentUser.value.user_id
+  return isOwn(message)
 }
 
 // 新消息到达时：自己发的总是滚到底部，别人的只在本来停在底部附近时滚动
@@ -662,10 +670,11 @@ onBeforeUnmount(() => {
           />
           <RecallNotice
             v-if="isRecalledMessage(message)"
-            :is-self="isOwn(message)"
+            :is-self="recallByMe(message)"
+            :operator-role="recallByMe(message) ? '' : message.recall_operator_role"
             :sender-name="message.sender_info?.nickname || message.sender_info?.username"
             :timestamp="message.timestamp"
-            :can-reedit="isOwn(message) && !!recall.original(message)"
+            :can-reedit="recallByMe(message) && isOwn(message) && !!recall.original(message)"
             @reedit="handleReedit(message)"
           />
           <template v-else>

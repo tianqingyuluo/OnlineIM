@@ -81,14 +81,12 @@ class ConversationReadStateServiceImplTest {
                 .thenReturn(mock(icu.tianqingyuluo.onlineim.pojo.document.Conversation.class));
         when(privateMessageRepository.findTopByConversationIdOrderBySeqIdDesc("conv_1"))
                 .thenReturn(PrivateMessage.builder().seqId("12").build());
-        when(privateMessageRepository.countUnreadByConversationIdAndReceiverIdAndSeqIdGreaterThan(
-                "conv_1", "usr_reader", "8")).thenReturn(2L);
+        when(conversationRecords.countUnread("conv_1", "usr_reader", "8")).thenReturn(2L);
 
         ReadStateResponse response = service.getReadState("conv_1", "usr_reader", null);
 
         assertEquals(2L, response.getUnreadCount());
-        verify(privateMessageRepository).countUnreadByConversationIdAndReceiverIdAndSeqIdGreaterThan(
-                "conv_1", "usr_reader", "8");
+        verify(conversationRecords).countUnread("conv_1", "usr_reader", "8");
     }
 
     @Test

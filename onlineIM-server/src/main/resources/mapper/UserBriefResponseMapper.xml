@@ -6,6 +6,8 @@
 <mapper namespace="icu.tianqingyuluo.onlineim.mapper.UserBriefResponseMapper">
     <resultMap id="UserBriefResponseMap" type="icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse">
         <id property="userId" column="id"/>
+        <result property="username" column="username"/>
+        <result property="nickname" column="nickname"/>
         <result property="avatarUrl" column="avatar"/>
     </resultMap>
     <!-- 根据username查询该用户简要信息 -->

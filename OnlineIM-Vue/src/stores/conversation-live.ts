@@ -5,6 +5,7 @@ import { useUserStore } from '@/stores/user'
 import { conversationService } from '@/services/conversation.service'
 import { parseTimestamp, toServerTimestamp } from '@/utils/conversation-time'
 import { compareSeqId, maxSeqId } from '@/utils/seq-id'
+import { isRecalledMessage } from '@/utils/message-recall'
 
 /**
  * 会话列表实时更新：收发消息、ACK、撤回、已读时立即修改侧栏（预览、时间、未读角标），
@@ -91,6 +92,15 @@ function clearExtras(conversationId: string): void {
   }
 }
 
+function displaySenderName(info?: MessageResponse['sender_info'] | null): string | undefined {
+  const nickname = info?.nickname?.trim()
+  if (nickname) return nickname
+  const username = info?.username?.trim()
+  if (username) return username
+  const userId = info?.user_id?.trim()
+  return userId || undefined
+}
+
 function bumpLatest(conversation: Conversation, seqId?: string): void {
   if (!seqId || seqId === '0') return
   conversation.latest_seq = maxSeqId(conversation.latest_seq, seqId)
@@ -119,11 +129,11 @@ export function applyMessageToConversation(
   const preview: MessagePreviewResponse = {
     message_id: message.message_id,
     sender_id: message.sender_info?.user_id || null,
-    sender_nickname: message.sender_info?.nickname || message.sender_info?.username,
+    sender_nickname: displaySenderName(message.sender_info),
     content_preview: previewOfMessage(message),
     message_type: message.message_type,
     timestamp,
-    is_recalled: false,
+    is_recalled: isRecalledMessage(message),
   }
   conversation.last_message = preview
   conversation.last_activity_time = timestamp
@@ -175,10 +185,12 @@ export function onConversationMessage(
 ): void {
   if (!message?.conversation_id) return
   const me = useUserStore().loggedInUser?.user_id
+  if (message.message_id && recalledMessageIds.has(message.message_id)) return
   const fromOther = !!message.sender_info?.user_id && message.sender_info.user_id !== me
   const viewing = isViewingConversation(message.conversation_id, activeConversationId)
   const firstTime = !!message.message_id && rememberCounted(message.message_id)
-  const countUnread = fromOther && !viewing && firstTime
+  const alreadyRecalled = isRecalledMessage(message)
+  const countUnread = fromOther && !viewing && firstTime && !alreadyRecalled
   const conversation = findConversation(message.conversation_id)
   if (!conversation) {
     // 列表里还没有（第一次收到该会话的消息，或之前删除过会话）：向服务端取权威记录（含 at_me）
@@ -199,6 +211,7 @@ export function onConversationMessage(
       atPersonal: mentionedPersonally,
     })
   }
+  if (alreadyRecalled && message.message_id) recalledMessageIds.add(message.message_id)
   applyMessageToConversation(conversation, message, { countUnread: countThis })
   if (countThis && mentioned) {
     // “[有人@我] / [@所有人]”：直到读到该消息（已读推进后服务端清除，本地在 onConversationRead 清除）
@@ -236,38 +249,50 @@ export function onConversationEdit(conversationId: string, message: MessageRespo
 export function onConversationRecall(
   conversationId: string,
   messageId: string,
-  options: { recallUserId?: string; seqId?: string; activeConversationId?: string | null; adjustUnread?: boolean } = {},
+  options: {
+    recallUserId?: string
+    senderId?: string
+    operatorRole?: string
+    seqId?: string
+    activeConversationId?: string | null
+    adjustUnread?: boolean
+  } = {},
 ): void {
   const conversation = findConversation(conversationId)
   if (conversation?.last_message?.message_id === messageId) {
     conversation.last_message = {
       ...conversation.last_message,
-      // 只能撤回自己发的消息，撤回者就是发送者
-      sender_id: conversation.last_message.sender_id || options.recallUserId || null,
+      // 发送者优先用帧上的 sender_id；没有时才退回撤回者（旧帧只能撤回自己的消息）
+      sender_id: options.senderId || conversation.last_message.sender_id || options.recallUserId || null,
+      recall_user_id: options.recallUserId || conversation.last_message.recall_user_id || null,
+      recall_operator_role: options.operatorRole || conversation.last_message.recall_operator_role || null,
       content_preview: RECALLED_PREVIEW,
       message_type: 'recalled',
       is_recalled: true,
     }
   }
-  // 别人撤回了我还没读到的消息：未读数立即减一（稍后以服务端值校正）
+  if (conversation && options.seqId) bumpLatest(conversation, options.seqId)
+  // 发送者还没被我读到的消息被撤回：未读立即减一（稍后以服务端值校正）。管理撤回时按发送者而不是撤回者。
   const me = useUserStore().loggedInUser?.user_id
   const firstRecall = !recalledMessageIds.has(messageId)
   recalledMessageIds.add(messageId)
   const mentionExtra = unreadExtras.get(messageId)
-  if (mentionExtra) {
-    mentionExtra.atMe = false
-    mentionExtra.atAll = false
-    mentionExtra.atPersonal = false
-  }
+  // 整条删掉，避免离线快照把这条已撤回消息的未读和 @我 / @所有人 / @个人再加回来
+  if (mentionExtra) unreadExtras.delete(messageId)
   if (recalledMessageIds.size > MAX_COUNTED) {
     const first = recalledMessageIds.values().next().value
     if (first) recalledMessageIds.delete(first)
   }
   const adjustUnread = options.adjustUnread !== false
-  if (adjustUnread && firstRecall && conversation && options.recallUserId && options.recallUserId !== me
+  const senderId = options.senderId || conversation?.last_message?.sender_id || options.recallUserId
+  const notYetRead = !!mentionExtra
+      || !options.seqId
+      || !conversation?.read_seq
+      || compareSeqId(options.seqId, conversation.read_seq) > 0
+  if (adjustUnread && firstRecall && conversation && senderId && senderId !== me
       && !isViewingConversation(conversationId, options.activeConversationId ?? null)
       && (conversation.unread_count || 0) > 0
-      && (!options.seqId || !conversation.read_seq || compareSeqId(options.seqId, conversation.read_seq) > 0)) {
+      && notYetRead) {
     conversation.unread_count = (conversation.unread_count || 0) - 1
     conversation.notreadednumber = conversation.unread_count
     if (conversation.at_me_message_id === messageId || conversation.at_all_message_id === messageId) {

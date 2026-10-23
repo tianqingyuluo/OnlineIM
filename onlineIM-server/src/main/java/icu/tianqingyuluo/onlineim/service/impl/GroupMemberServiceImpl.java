@@ -49,6 +49,14 @@ public class GroupMemberServiceImpl implements GroupMemberService {
     }
 
     @Override
+    public boolean isGroupOwner(String groupId, String userId) {
+        if (groupId == null || userId == null || userId.isBlank()) {
+            return false;
+        }
+        return groupMapper.isGroupOwner(groupId, userId);
+    }
+
+    @Override
     public GroupMemberResponse getMemberDetail(String groupId, String memberId, String operatorId) {
         if(groupMapper.isUserMember(groupId,operatorId)){
             return groupMemberMapper.getGroupMemberByMemberID(memberId, groupId);

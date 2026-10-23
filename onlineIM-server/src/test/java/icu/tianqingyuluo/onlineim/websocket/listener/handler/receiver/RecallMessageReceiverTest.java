@@ -32,7 +32,7 @@ class RecallMessageReceiverTest {
         boolean handled = receiver.handleMessage(WebSocketMessageEvent.builder()
                 .type("RECALL_MESSAGE")
                 .senderID("usr_me")
-                .message("{\"message_id\":\"msg_1\",\"conversation_id\":\"conv_1\",\"recall_user_id\":\"usr_me\",\"seq_id\":\"42\",\"timestamp\":1}")
+                .message("{\"message_id\":\"msg_1\",\"conversation_id\":\"grp_1\",\"recall_user_id\":\"usr_me\",\"sender_id\":\"usr_member\",\"recall_operator_role\":\"admin\",\"seq_id\":\"42\",\"timestamp\":1}")
                 .receiverIDs(List.of("usr_me", "usr_peer", "usr_offline"))
                 .build());
 
@@ -47,5 +47,7 @@ class RecallMessageReceiverTest {
         assertEquals("usr_me", mapper.readTree(theirs.getValue()).get("recall_user_id").asText());
         assertEquals("42", mapper.readTree(theirs.getValue()).get("seq_id").asText());
         assertEquals("42", mapper.readTree(mine.getValue()).get("seq_id").asText());
+        assertEquals("usr_member", mapper.readTree(theirs.getValue()).get("sender_id").asText());
+        assertEquals("admin", mapper.readTree(theirs.getValue()).get("recall_operator_role").asText());
     }
 }

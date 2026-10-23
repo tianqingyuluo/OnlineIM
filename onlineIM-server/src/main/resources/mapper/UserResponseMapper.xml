@@ -7,6 +7,8 @@
     <!-- 用户结果映射 -->
     <resultMap id="UserResponseMap" type="icu.tianqingyuluo.onlineim.pojo.dto.response.UserResponse">
         <id property="userId" column="id"/>
+        <result property="username" column="username"/>
+        <result property="nickname" column="nickname"/>
         <result property="avatarUrl" column="avatar"/>
         <result property="createdAt" column="created_at"/>
     </resultMap>

@@ -35,6 +35,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -505,6 +506,8 @@ class MessageServiceImplTest {
         assertEquals("msg_target", json.get("message_id").asText());
         assertEquals("conv_1", json.get("conversation_id").asText());
         assertEquals("usr_me", json.get("recall_user_id").asText());
+        assertEquals("usr_me", json.get("sender_id").asText());
+        assertTrue(json.path("recall_operator_role").isMissingNode());
     }
 
     @Test
@@ -552,7 +555,73 @@ class MessageServiceImplTest {
         MessageResponse response = service.convertPrivateMessageToResponse(message);
 
         assertEquals("usr_peer", response.getSenderInfo().getUserId());
+        assertEquals("usr_peer", response.getSenderInfo().getNickname());
         assertEquals(null, response.getSenderInfo().getAvatarUrl());
+    }
+
+    @Test
+    void senderNicknameFallsBackToUsernameWhenBlank() {
+        PrivateMessage message = privateMessage("msg_1", "100");
+        when(userService.getUserBriefInfoByID("usr_peer")).thenReturn(UserBriefResponse.builder()
+                .userId("usr_peer").username("peer_name").nickname("  ").build());
+
+        MessageResponse response = service.convertPrivateMessageToResponse(message);
+
+        assertEquals("peer_name", response.getSenderInfo().getNickname());
+    }
+
+    @Test
+    void groupOwnerCanRecallAnotherMembersMessageWithinTheWindow() throws Exception {
+        GroupMessage message = GroupMessage.builder()
+                .id("msg_member").groupId("grp_1").senderId("usr_member").messageType("text")
+                .content("成员消息").status(1).seqId("100").timestamp(new Date()).build();
+        when(privateMessageRepository.findById("msg_member")).thenReturn(Optional.empty());
+        when(groupMessageRepository.findById("msg_member")).thenReturn(Optional.of(message));
+        when(groupMemberService.isAdminOrOwner("grp_1", "usr_owner")).thenReturn(true);
+        when(groupMemberService.isGroupOwner("grp_1", "usr_owner")).thenReturn(true);
+        when(groupMemberService.getGroupMembers("grp_1")).thenReturn(List.of());
+
+        service.recallMessage("msg_member", "usr_owner");
+
+        assertEquals(3, message.getStatus());
+        ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
+        verify(redisStreamService).publishRecallLog(eq("RECALL_MESSAGE"), eq("usr_owner"), payload.capture(), any());
+        var json = new ObjectMapper().readTree(payload.getValue());
+        assertEquals("usr_member", json.get("sender_id").asText());
+        assertEquals("usr_owner", json.get("recall_user_id").asText());
+        assertEquals("owner", json.get("recall_operator_role").asText());
+        verify(conversationRecords).onMessageRecalled("grp_1", "msg_member", "100", "usr_member");
+    }
+
+    @Test
+    void groupAdminRecallUsesAdminRoleAndMemberStillCannotRecallOthers() {
+        GroupMessage message = GroupMessage.builder()
+                .id("msg_member").groupId("grp_1").senderId("usr_member").messageType("text")
+                .content("成员消息").status(1).seqId("100").timestamp(new Date()).build();
+        when(privateMessageRepository.findById("msg_member")).thenReturn(Optional.empty());
+        when(groupMessageRepository.findById("msg_member")).thenReturn(Optional.of(message));
+        when(groupMemberService.isAdminOrOwner("grp_1", "usr_admin")).thenReturn(true);
+        when(groupMemberService.isGroupOwner("grp_1", "usr_admin")).thenReturn(false);
+
+        service.recallMessage("msg_member", "usr_admin");
+        assertEquals(3, message.getStatus());
+
+        message.setStatus(1);
+        assertThrows(ForbiddenException.class, () -> service.recallMessage("msg_member", "usr_other"));
+    }
+
+    @Test
+    void groupManagerStillCannotRecallOutsideTheWindow() {
+        ((MessageServiceImpl) service).setRecallWindowSeconds(120);
+        GroupMessage message = GroupMessage.builder()
+                .id("msg_old").groupId("grp_1").senderId("usr_member").status(1).seqId("100")
+                .timestamp(new Date(System.currentTimeMillis() - 121_000)).build();
+        when(privateMessageRepository.findById("msg_old")).thenReturn(Optional.empty());
+        when(groupMessageRepository.findById("msg_old")).thenReturn(Optional.of(message));
+        when(groupMemberService.isAdminOrOwner("grp_1", "usr_owner")).thenReturn(true);
+
+        assertThrows(MessageRecallException.class, () -> service.recallMessage("msg_old", "usr_owner"));
+        verify(groupMessageRepository, never()).save(any());
     }
 
     private PrivateMessage privateMessage(String id, String seqId) {

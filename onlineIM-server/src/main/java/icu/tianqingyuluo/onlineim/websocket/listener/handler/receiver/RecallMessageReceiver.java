@@ -54,6 +54,8 @@ public class RecallMessageReceiver implements MessageReceiverHandler {
             long timestamp = node.hasNonNull("timestamp") ? node.get("timestamp").asLong() : System.currentTimeMillis();
             // 客户端用 seq_id 判断撤回的消息自己是否已读（未读数是否要减一）
             String seqId = text(node, "seq_id");
+            String senderId = text(node, "sender_id");
+            String operatorRole = text(node, "recall_operator_role");
 
             List<String> receivers = event.getReceiverIDs() == null ? List.of() : event.getReceiverIDs();
             for (String userId : receivers) {
@@ -70,6 +72,12 @@ public class RecallMessageReceiver implements MessageReceiverHandler {
                 frame.put("message_id", messageId);
                 frame.put("conversation_id", conversationId);
                 frame.put("recall_user_id", recallUserId);
+                if (senderId != null) {
+                    frame.put("sender_id", senderId);
+                }
+                if (operatorRole != null) {
+                    frame.put("recall_operator_role", operatorRole);
+                }
                 if (seqId != null) {
                     frame.put("seq_id", seqId);
                 }

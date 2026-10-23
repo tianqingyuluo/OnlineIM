@@ -226,13 +226,19 @@ public class ConversationServiceImpl implements ConversationService {
             if (other != null && other.getAvatarUrl() != null && !other.getAvatarUrl().isBlank()) {
                 avatarUrl = other.getAvatarUrl();
             }
-            // 备注是当前查看者给对方设置的
+            // 备注是当前查看者给对方设置的；没有备注时用昵称，昵称为空再用用户名
             String remark = userFriendMapper.getRemarkByUserIdAndFriendId(userId, otherUserId);
             if (remark != null && !remark.isBlank()) {
                 name = remark;
             }
+            else if (other != null && other.getNickname() != null && !other.getNickname().isBlank()) {
+                name = other.getNickname();
+            }
+            else if (other != null && other.getUsername() != null && !other.getUsername().isBlank()) {
+                name = other.getUsername();
+            }
             else {
-                name = other != null ? other.getNickname() : otherUserId;
+                name = otherUserId;
             }
         }
 
@@ -305,24 +311,30 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     /**
-     * 预览里的发送者名字：私聊对方用会话显示名（备注优先），其他情况用昵称（没有昵称用用户名）；
+     * 预览里的发送者名字：私聊对方用会话显示名（备注优先），其他情况用昵称（没有昵称用用户名，再没有用 user_id）。
      * 旧会话记录没有 senderId 时返回 null。
      */
     private String previewSenderName(String senderId, String targetId, String conversationName) {
         if (senderId == null || senderId.isBlank()) {
             return null;
         }
-        if (senderId.equals(targetId)) {
+        if (senderId.equals(targetId) && conversationName != null && !conversationName.isBlank()) {
             return conversationName;
         }
         try {
             UserResponse sender = userService.getUserInfoByUserID(senderId);
             if (sender == null) {
-                return null;
+                return senderId;
             }
-            return sender.getNickname() != null && !sender.getNickname().isBlank() ? sender.getNickname() : sender.getUsername();
+            if (sender.getNickname() != null && !sender.getNickname().isBlank()) {
+                return sender.getNickname();
+            }
+            if (sender.getUsername() != null && !sender.getUsername().isBlank()) {
+                return sender.getUsername();
+            }
+            return senderId;
         } catch (RuntimeException ex) {
-            return null;
+            return senderId;
         }
     }
 }

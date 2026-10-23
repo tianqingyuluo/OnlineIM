@@ -225,12 +225,7 @@ public class ConversationReadStateServiceImpl implements ConversationReadStateSe
     }
 
     private long unreadCount(String conversationId, String fromSeqId, String userId) {
-        if (conversationId.startsWith("grp_")) {
-            return groupMessageRepository.countUnreadByGroupIdAndUserIdAndSeqIdGreaterThan(
-                    conversationId, userId, fromSeqId);
-        }
-        return privateMessageRepository.countUnreadByConversationIdAndReceiverIdAndSeqIdGreaterThan(
-                conversationId, userId, fromSeqId);
+        return conversationRecords.countUnread(conversationId, userId, fromSeqId);
     }
 
     private String latestSeq(String conversationId) {

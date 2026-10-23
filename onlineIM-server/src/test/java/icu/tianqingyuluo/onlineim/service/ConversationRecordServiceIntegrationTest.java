@@ -276,6 +276,10 @@ class ConversationRecordServiceIntegrationTest {
                 .updatedAt(new Date()).build());
         assertEquals(2, record(GRP, B).getUnreadCount());
         assertEquals(2, record(GRP, C).getUnreadCount());
+        template.save(groupText("msg_u1", "1000000000000000301", null));
+        GroupMessage recalled = groupText("msg_u2", "1000000000000000302", null);
+        recalled.setStatus(3);
+        template.save(recalled);
 
         records.onMessageRecalled(GRP, "msg_u2", "1000000000000000302", A);
 

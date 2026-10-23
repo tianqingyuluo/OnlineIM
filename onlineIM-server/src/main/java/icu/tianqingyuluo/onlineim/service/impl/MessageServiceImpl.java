@@ -263,7 +263,7 @@ public class MessageServiceImpl implements MessageService {
         if (privateMessage != null) {
             assertRecallable(privateMessage.getSenderId(), privateMessage.getStatus(),
                     privateMessage.getTimestamp() != null ? privateMessage.getTimestamp() : privateMessage.getCreatedAt(),
-                    userId);
+                    userId, null);
             privateMessage.setStatus(3);
             privateMessage.setUpdatedAt(new Date());
             privateMessageRepository.save(privateMessage);
@@ -271,6 +271,7 @@ public class MessageServiceImpl implements MessageService {
             conversationRecords.onMessageRecalled(privateMessage.getConversationId(), messageId,
                     privateMessage.getSeqId(), privateMessage.getSenderId());
             saveRecallAndNotify(privateMessage.getConversationId(), privateMessage.getSeqId(), messageId, userId,
+                    privateMessage.getSenderId(), null,
                     List.of(privateMessage.getSenderId(), privateMessage.getReceiverId()));
             return true;
         }
@@ -279,14 +280,16 @@ public class MessageServiceImpl implements MessageService {
         if (groupMessage != null) {
             assertRecallable(groupMessage.getSenderId(), groupMessage.getStatus(),
                     groupMessage.getTimestamp() != null ? groupMessage.getTimestamp() : groupMessage.getCreatedAt(),
-                    userId);
+                    userId, groupMessage.getGroupId());
             groupMessage.setStatus(3);
             groupMessage.setUpdatedAt(new Date());
             groupMessageRepository.save(groupMessage);
             messageReplyService.markTargetRecalled(groupMessage.getGroupId(), messageId);
             conversationRecords.onMessageRecalled(groupMessage.getGroupId(), messageId,
                     groupMessage.getSeqId(), groupMessage.getSenderId());
+            String operatorRole = recallOperatorRole(groupMessage.getGroupId(), groupMessage.getSenderId(), userId);
             saveRecallAndNotify(groupMessage.getGroupId(), groupMessage.getSeqId(), messageId, userId,
+                    groupMessage.getSenderId(), operatorRole,
                     groupReceiverIds(groupMessage.getGroupId()));
             return true;
         }
@@ -295,10 +298,13 @@ public class MessageServiceImpl implements MessageService {
     }
 
     /**
-     * 撤回规则（REST 与 WebSocket 共用）：只能撤回自己发送的、未撤回的、仍在撤回时间窗内的消息。
+     * 撤回规则（REST 与 WebSocket 共用）：自己发送的消息，或群主/管理员撤回群内他人消息；
+     * 都要求未撤回且仍在撤回时间窗内。私聊只能撤回自己的。
      */
-    private void assertRecallable(String senderId, Integer status, Date sentAt, String userId) {
-        if (userId == null || !userId.equals(senderId)) {
+    private void assertRecallable(String senderId, Integer status, Date sentAt, String userId, String groupId) {
+        boolean self = userId != null && userId.equals(senderId);
+        boolean manager = !self && groupId != null && groupMemberService.isAdminOrOwner(groupId, userId);
+        if (!self && !manager) {
             throw new ForbiddenException("只能撤回自己发送的消息");
         }
         if (status != null && status == 3) {
@@ -310,12 +316,20 @@ public class MessageServiceImpl implements MessageService {
         }
     }
 
+    /** 群主/管理员撤回他人消息时带上角色，方便客户端写成“群主/管理员撤回了一条消息”；自己撤回不带。 */
+    private String recallOperatorRole(String groupId, String senderId, String userId) {
+        if (userId == null || userId.equals(senderId)) {
+            return null;
+        }
+        return groupMemberService.isGroupOwner(groupId, userId) ? "owner" : "admin";
+    }
+
     static String describeWindow(long seconds) {
         return seconds % 60 == 0 ? (seconds / 60) + "分钟" : seconds + "秒";
     }
 
     private void saveRecallAndNotify(String conversationId, String seqId, String messageId, String userId,
-                                     List<String> receiverIds) {
+                                     String senderId, String operatorRole, List<String> receiverIds) {
         Date now = new Date();
         RecallLog recallLog = RecallLog.builder()
                 .conversationId(conversationId)
@@ -326,11 +340,15 @@ public class MessageServiceImpl implements MessageService {
                 .build();
         recallLogRepository.save(recallLog);
 
-        // 通过 Redis Stream 实时通知：发送者收到 RECALL_MESSAGE_RESPONSE，其他人收到 MESSAGE_RECALLED
+        // 通过 Redis Stream 实时通知：撤回者收到 RECALL_MESSAGE_RESPONSE，其他人收到 MESSAGE_RECALLED
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("message_id", messageId);
         payload.put("conversation_id", conversationId);
         payload.put("recall_user_id", userId);
+        payload.put("sender_id", senderId);
+        if (operatorRole != null) {
+            payload.put("recall_operator_role", operatorRole);
+        }
         payload.put("seq_id", seqId);
         payload.put("timestamp", now.getTime());
         redisStreamService.publishRecallLog("RECALL_MESSAGE", userId, serializeMessage(payload),
@@ -567,11 +585,7 @@ public class MessageServiceImpl implements MessageService {
 
     private MessageResponse buildPrivateMessageResponse(
             PrivateMessage message, ReplyReferenceResponse replyReference) {
-        // 发送者信息：查询真实的用户名/昵称/头像；用户不存在时只返回 user_id，头像留空由前端兜底
-        UserBriefResponse senderInfo = userService.getUserBriefInfoByID(message.getSenderId());
-        if (senderInfo == null) {
-            senderInfo = UserBriefResponse.builder().userId(message.getSenderId()).build();
-        }
+        UserBriefResponse senderInfo = senderProfile(message.getSenderId());
         
         // 消息状态映射
         String status = message.getStatus() == 0 ? "1" : String.valueOf(message.getStatus());
@@ -613,8 +627,7 @@ public class MessageServiceImpl implements MessageService {
 
     private MessageResponse buildGroupMessageResponse(
             GroupMessage message, ReplyReferenceResponse replyReference) {
-        // 创建发送者信息
-        UserBriefResponse senderInfo = userService.getUserBriefInfoByID(message.getSenderId());
+        UserBriefResponse senderInfo = senderProfile(message.getSenderId());
         
         // 消息状态映射
         String status = message.getStatus() == 0 ? "1" : String.valueOf(message.getStatus());
@@ -646,6 +659,30 @@ public class MessageServiceImpl implements MessageService {
                 .isRecalled(message.getStatus() == 3)
                 .timestamp(formatTimestamp(message.getTimestamp()))
                 .build();
+    }
+
+    /**
+     * 发送者展示信息。昵称为空时用用户名，用户名也没有或用户不存在时用 user_id，避免会话和气泡里出现空白发送者。
+     */
+    private UserBriefResponse senderProfile(String senderId) {
+        UserBriefResponse brief = null;
+        try {
+            brief = userService.getUserBriefInfoByID(senderId);
+        } catch (RuntimeException ignored) {
+            brief = null;
+        }
+        if (brief == null) {
+            return UserBriefResponse.builder().userId(senderId).nickname(senderId).build();
+        }
+        if (brief.getNickname() == null || brief.getNickname().isBlank()) {
+            String fallback = brief.getUsername() != null && !brief.getUsername().isBlank()
+                    ? brief.getUsername() : senderId;
+            brief.setNickname(fallback);
+        }
+        if (brief.getUserId() == null || brief.getUserId().isBlank()) {
+            brief.setUserId(senderId);
+        }
+        return brief;
     }
 
     /** 已撤回的消息对任何人（包括发送者）都不再返回原文、@ 列表、引用与转发来源，只保留撤回占位 */

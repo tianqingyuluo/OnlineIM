@@ -10,6 +10,9 @@ export interface MessagePreviewResponse {
     sender_id?: string | null
     /** 发送者显示名：私聊对方为备注/昵称，其他为昵称 */
     sender_nickname?: string | null
+    /** 仅本地：谁撤回的（管理撤回时和 sender_id 不同）；服务端预览没有这两个字段 */
+    recall_user_id?: string | null
+    recall_operator_role?: string | null
     content_preview: string
     message_type?: string
     timestamp: string

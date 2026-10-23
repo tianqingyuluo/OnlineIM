@@ -469,7 +469,7 @@ export const useHistoryStore = defineStore('history', {
         sender_info: {
           user_id: currentUser.user_id,
           username: currentUser.username,
-          nickname: currentUser.nickname,
+          nickname: currentUser.nickname?.trim() || currentUser.username,
           avatar_url: currentUser.avatar_url,
         },
         message_type: messageType,
@@ -823,14 +823,19 @@ export const useHistoryStore = defineStore('history', {
       const me = useUserStore().loggedInUser.user_id;
       onConversationRecall(payload.conversation_id, payload.message_id, {
         recallUserId: payload.recall_user_id,
+        senderId: payload.sender_id,
+        operatorRole: payload.recall_operator_role,
         seqId: payload.seq_id,
         activeConversationId: this.activeConversationId,
         adjustUnread: options.adjustUnread,
       });
       for (const message of this.messagesForConversation(payload.conversation_id)) {
         if (message.message_id === payload.message_id) {
-          // 自己撤回的文本：记下原文，撤回提示里提供“重新编辑”
-          if (message.sender_info?.user_id === me && (message.message_type || 'text').toLowerCase() === 'text'
+          if (payload.recall_user_id) message.recall_user_id = payload.recall_user_id
+          if (payload.recall_operator_role) message.recall_operator_role = payload.recall_operator_role
+          // 自己撤回的文本才提供“重新编辑”；管理员撤回我的消息不算
+          const recalledByMe = payload.recall_user_id ? payload.recall_user_id === me : message.sender_info?.user_id === me
+          if (recalledByMe && message.sender_info?.user_id === me && (message.message_type || 'text').toLowerCase() === 'text'
             && typeof message.content === 'string' && message.content && !this.recalledOriginals[message.message_id]) {
             this.recalledOriginals[message.message_id] = {
               conversationId: payload.conversation_id,

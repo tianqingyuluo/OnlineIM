@@ -92,4 +92,7 @@ public interface GroupMemberService {
 
     /** 群主或管理员（成员 role 不为 0，或 groups.owner_id）。用于 @所有人等管理操作。 */
     boolean isAdminOrOwner(String groupId, String userId);
+
+    /** 是否群主（groups.owner_id）。 */
+    boolean isGroupOwner(String groupId, String userId);
 }

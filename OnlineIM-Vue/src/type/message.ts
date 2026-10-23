@@ -39,6 +39,9 @@ export interface MessageResponse {
     delivery_state?: DeliveryState;
     timestamp: string;
     is_recalled: boolean;
+    /** 本页收到撤回事件后记下操作者；历史重载没有这两项 */
+    recall_user_id?: string;
+    recall_operator_role?: string;
     client_message_id: string;
     reply_to?: ReplyReference;
     /** 逐条转发的消息：原作者（转发链上最初的发送者） */
@@ -122,6 +125,10 @@ export interface MessageRecalledPayload {
     message_id: string;
     conversation_id: string;
     recall_user_id?: string;
+    /** 被撤回消息的发送者。管理撤回时和 recall_user_id 不同，未读按发送者算 */
+    sender_id?: string;
+    /** owner / admin：群主或管理员撤回了别人的消息 */
+    recall_operator_role?: string;
     seq_id?: string;
     timestamp?: number;
 }

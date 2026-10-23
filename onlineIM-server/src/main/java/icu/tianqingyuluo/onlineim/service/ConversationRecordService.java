@@ -15,6 +15,8 @@ import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 
 import icu.tianqingyuluo.onlineim.util.SeqIdComparator;
+import org.bson.Document;
+import org.springframework.data.mongodb.core.aggregation.AggregationExpression;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -245,8 +247,16 @@ public class ConversationRecordService {
     }
 
     /**
-     * 消息被撤回：除 {@link #onMessageRecalled(String, String)} 外，还把这条消息从还没读到它的接收者的未读缓存里减掉
-     * （读游标 &lt; 该消息 seq 的成员，发送者本人除外）。权威未读数由读游标实时计算，并已排除撤回的消息。
+     * 该成员从读游标之后还有多少条未读：群聊排除自己发的，私聊只算发给自己的，已撤回（status=3）不计入。
+     * 会话列表和 {@code GET /conversations/unread} 用的缓存与读状态接口走同一条计数，避免撤回后角标对不上。
+     */
+    public long countUnread(String conversationId, String userId, String fromSeq) {
+        return countIncoming(conversationId, userId, fromSeq, null);
+    }
+
+    /**
+     * 消息被撤回：除 {@link #onMessageRecalled(String, String)} 外，把还没读到它的接收者的未读缓存
+     * 改成“去掉这条之后”的剩余条数（发送者本人除外，不会减成负数）。
      */
     public void onMessageRecalled(String conversationId, String messageId, String seqId, String senderId) {
         onMessageRecalled(conversationId, messageId);
@@ -262,19 +272,48 @@ public class ConversationRecordService {
                 if (record.getUserId() == null || !notYetRead(conversationId, record.getUserId(), seqId)) {
                     continue;
                 }
+                long remaining = countIncoming(conversationId, record.getUserId(),
+                        readSeqOf(conversationId, record.getUserId()), messageId);
                 mongoTemplate.updateFirst(Query.query(Criteria.where("_id").is(record.getId()).and("unreadCount").gt(0)),
-                        new Update().inc("unreadCount", -1), Conversation.class);
+                        new Update().set("unreadCount", Math.max(0, remaining)), Conversation.class);
             }
         } catch (RuntimeException ex) {
             log.warn("撤回后扣减未读缓存失败: conversationId={}, error={}", conversationId, ex.getMessage());
         }
     }
 
+    /**
+     * 未读计数。{@code excludeMessageId} 用于撤回当下：消息状态可能还没写成 3，这条也不能算进未读。
+     */
+    private long countIncoming(String conversationId, String userId, String fromSeq, String excludeMessageId) {
+        if (conversationId == null || conversationId.isBlank() || userId == null || userId.isBlank()) {
+            return 0;
+        }
+        String from = fromSeq == null || fromSeq.isBlank() ? "0" : fromSeq;
+        boolean group = conversationId.startsWith("grp_");
+        List<Criteria> parts = new ArrayList<>();
+        if (group) {
+            parts.add(Criteria.where("groupId").is(conversationId));
+            parts.add(Criteria.where("senderId").ne(userId));
+        } else {
+            parts.add(Criteria.where("conversationId").is(conversationId));
+            parts.add(Criteria.where("receiverId").is(userId));
+        }
+        parts.add(Criteria.where("status").ne(3));
+        if (excludeMessageId != null && !excludeMessageId.isBlank()) {
+            parts.add(Criteria.where("_id").ne(excludeMessageId));
+        }
+        parts.add(Criteria.expr((AggregationExpression) context -> new Document("$gt", List.of(
+                new Document("$toDecimal", "$seqId"),
+                new Document("$toDecimal", from)))));
+        Query query = new Query(new Criteria().andOperator(parts.toArray(Criteria[]::new)));
+        return mongoTemplate.count(query, group ? GroupMessage.class : PrivateMessage.class);
+    }
+
     /** 该成员的读游标是否还没到 seqId（没有读状态视为未读） */
     private boolean notYetRead(String conversationId, String userId, String seqId) {
-        ConversationReadState state = mongoTemplate.findById(recordId(conversationId, userId), ConversationReadState.class);
-        String readSeq = state == null ? null : state.getReadSeq();
-        if (readSeq == null || readSeq.isBlank()) {
+        String readSeq = readSeqOf(conversationId, userId);
+        if (readSeq == null || readSeq.isBlank() || "0".equals(readSeq)) {
             return true;
         }
         try {
@@ -282,6 +321,15 @@ public class ConversationRecordService {
         } catch (RuntimeException ex) {
             return true;
         }
+    }
+
+    /** 没有读状态时按 0，这样撤回后的剩余未读和读状态接口一致 */
+    private String readSeqOf(String conversationId, String userId) {
+        ConversationReadState state = mongoTemplate.findById(recordId(conversationId, userId), ConversationReadState.class);
+        if (state == null || state.getReadSeq() == null || state.getReadSeq().isBlank()) {
+            return "0";
+        }
+        return state.getReadSeq();
     }
 
     /**

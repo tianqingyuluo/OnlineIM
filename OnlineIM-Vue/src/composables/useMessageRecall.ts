@@ -11,20 +11,24 @@ import { isRecallable, recallErrorText, recallUntil as computeRecallUntil } from
  */
 export function useMessageRecall(
   currentUserId: () => string | undefined,
-  hooks: { beforeRecall?: (message: MessageResponse) => void } = {},
+  hooks: { beforeRecall?: (message: MessageResponse) => void; allowOthers?: () => boolean } = {},
 ) {
   const historyStore = useHistoryStore()
   const target = ref<MessageResponse | null>(null)
   const busy = ref(false)
   const confirmOpen = computed(() => target.value !== null)
 
+  function recallOptions() {
+    return { allowOthers: !!hooks.allowOthers?.() }
+  }
+
   function recallUntil(message: MessageResponse): number {
-    return computeRecallUntil(message, currentUserId())
+    return computeRecallUntil(message, currentUserId(), recallOptions())
   }
 
   /** 菜单选了“撤回”：先确认 */
   function request(message: MessageResponse) {
-    if (!isRecallable(message, currentUserId())) {
+    if (!isRecallable(message, currentUserId(), Date.now(), recallOptions())) {
       toast.error('消息发送已超过2分钟，无法撤回')
       return
     }

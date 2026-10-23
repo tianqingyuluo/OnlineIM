@@ -184,6 +184,44 @@ describe('conversation list live updates', () => {
     expect(list.conversations.find(c => c.conversation_id === 'conv_c')!.unread_count).toBe(3)
   })
 
+  it('admin recall drops unread for the sender and does not count a message recalled before it arrived', async () => {
+    const { list, live } = await setup([
+      conv('grp_1', {
+        unread_count: 1,
+        read_seq: '10',
+        latest_seq: '12',
+        last_message: { message_id: 'm_old', sender_id: 'usr_peer', content_preview: 'old', timestamp: '2026-10-21 22:00:00', is_recalled: false },
+      }),
+    ])
+    const g = () => list.conversations[0]
+    live.onConversationMessage(msg('m_late', 'grp_1', 'usr_peer', { seq_id: '13', sender_info: { user_id: 'usr_peer', nickname: '', username: 'peer' } }) as never, null)
+    expect(g().unread_count).toBe(2)
+    expect(g().last_message.sender_nickname).toBe('peer')
+    live.onConversationRecall('grp_1', 'm_late', {
+      recallUserId: 'usr_admin', senderId: 'usr_peer', operatorRole: 'admin', seqId: '13', activeConversationId: null,
+    })
+    expect(g().unread_count).toBe(1)
+    expect(g().last_message.sender_id).toBe('usr_peer')
+    expect(g().last_message.recall_user_id).toBe('usr_admin')
+    expect(g().last_message.recall_operator_role).toBe('admin')
+
+    live.onConversationRecall('grp_1', 'm_mine', {
+      recallUserId: 'usr_admin', senderId: 'usr_me', seqId: '14', activeConversationId: null,
+    })
+    expect(g().unread_count).toBe(1)
+
+    live.onConversationRecall('grp_1', 'm_early', {
+      recallUserId: 'usr_peer', senderId: 'usr_peer', seqId: '9', activeConversationId: null,
+    })
+    live.onConversationMessage(msg('m_early', 'grp_1', 'usr_peer', { seq_id: '9' }) as never, null)
+    expect(g().unread_count).toBe(1)
+
+    live.applyOfflineConversations([
+      conv('grp_1', { unread_count: 1, latest_seq: '12', read_seq: '10' }),
+    ], null)
+    expect(g().unread_count).toBe(1)
+  })
+
   it('does not count a group message again when it is already the list preview', async () => {
     const { list, live } = await setup([conv('grp_1', {
       unread_count: 1,
