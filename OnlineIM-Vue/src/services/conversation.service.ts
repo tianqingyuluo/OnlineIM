@@ -111,6 +111,41 @@ export const conversationService = {
     await api.delete(`/conversations/${conversationId}/draft`);
   },
 
+  /**
+   * 页面即将关闭时提交草稿。普通 axios 在刷新时会被浏览器取消；
+   * fetch keepalive 把请求留到文档卸载之后。调用方同时把正文记在本地，请求失败也能在下次打开时恢复。
+   * 不弹错误提示。
+   */
+  flushDraftKeepalive(
+    conversationId: string,
+    body: { content: string; reply_to_message_id: string | null; at_users: DraftMention[] },
+    token: string,
+  ): void {
+    if (!conversationId || !token || typeof fetch !== 'function') return;
+    const base = String(api.defaults?.baseURL || '').replace(/\/$/, '');
+    if (!base) return;
+    const url = `${base}/conversations/${encodeURIComponent(conversationId)}/draft`;
+    const blank = !body.content.trim();
+    try {
+      void fetch(url, {
+        method: blank ? 'DELETE' : 'PUT',
+        keepalive: true,
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+          ...(blank ? {} : { 'Content-Type': 'application/json' }),
+        },
+        body: blank ? undefined : JSON.stringify({
+          content: body.content,
+          reply_to_message_id: body.reply_to_message_id,
+          at_users: body.at_users,
+        }),
+      }).catch(() => {});
+    } catch {
+      // URL 非法等同步错误不能挡住页面关闭
+    }
+  },
+
   async createConversation(target_id: string, type: string): Promise<Conversation> {
     const response = await api.post<Conversation>('/conversations/create', {
       target_id,

@@ -5,6 +5,7 @@ const apiMock = {
   post: vi.fn(),
   put: vi.fn(),
   delete: vi.fn(),
+  defaults: { baseURL: 'http://api.example/api/v1' },
 }
 const listStore: { conversations: Array<Record<string, unknown>> } = { conversations: [] }
 
@@ -70,6 +71,35 @@ describe('conversationService 与后端 ConversationController 路由一致', ()
     await expect(conversationService.getDraft('conv_1')).resolves.toBeNull()
     await conversationService.clearDraft('conv_1')
     expect(apiMock.delete).toHaveBeenCalledWith('/conversations/conv_1/draft')
+  })
+
+  it('页面关闭时用 keepalive 提交或删除草稿，失败不抛出', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true })
+    vi.stubGlobal('fetch', fetchMock)
+    const { conversationService } = await import('@/services/conversation.service')
+    const body = { content: '刚打的', reply_to_message_id: null, at_users: [] as { user_id: string; name: string }[] }
+    conversationService.flushDraftKeepalive('conv_1', body, 'token-1')
+    expect(fetchMock).toHaveBeenCalledWith('http://api.example/api/v1/conversations/conv_1/draft', expect.objectContaining({
+      method: 'PUT',
+      keepalive: true,
+      body: JSON.stringify(body),
+      headers: expect.objectContaining({ Authorization: 'Bearer token-1' }),
+    }))
+
+    fetchMock.mockClear()
+    conversationService.flushDraftKeepalive('conv_1', { ...body, content: '   ' }, 'token-1')
+    expect(fetchMock).toHaveBeenCalledWith('http://api.example/api/v1/conversations/conv_1/draft', expect.objectContaining({
+      method: 'DELETE',
+      keepalive: true,
+      body: undefined,
+    }))
+
+    fetchMock.mockClear()
+    fetchMock.mockRejectedValueOnce(new Error('offline'))
+    expect(() => conversationService.flushDraftKeepalive('conv_1', body, 'token-1')).not.toThrow()
+    conversationService.flushDraftKeepalive('conv_1', body, '')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    vi.unstubAllGlobals()
   })
 
   it('打开会话走幂等的 POST /conversations/create', async () => {

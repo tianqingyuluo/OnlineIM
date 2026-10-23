@@ -2,20 +2,42 @@
 import { defineComponent, nextTick, ref } from 'vue'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useConversationDraft } from '@/composables/useConversationDraft'
 import { DRAFT_DEBOUNCE_MS } from '@/utils/draft'
+import { readPendingDraft, writePendingDraft } from '@/utils/draft-pending'
 
-const { getDraft, saveDraft, clearDraft } = vi.hoisted(() => ({
+const { getDraft, saveDraft, clearDraft, flushDraftKeepalive, userState } = vi.hoisted(() => ({
   getDraft: vi.fn(),
   saveDraft: vi.fn(),
   clearDraft: vi.fn(),
+  flushDraftKeepalive: vi.fn(),
+  userState: {
+    token: '',
+    loggedInUser: { user_id: '' },
+  },
 }))
 
 vi.mock('@/services/conversation.service', () => ({
-  conversationService: { getDraft, saveDraft, clearDraft },
+  conversationService: { getDraft, saveDraft, clearDraft, flushDraftKeepalive },
+}))
+vi.mock('@/stores/user', () => ({
+  useUserStore: () => userState,
 }))
 vi.mock('vue-sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
+
+const mounted: Array<{ unmount: () => void }> = []
+
+function track<T extends { unmount: () => void }>(wrapper: T): T {
+  mounted.push(wrapper)
+  const unmount = wrapper.unmount.bind(wrapper)
+  wrapper.unmount = () => {
+    const index = mounted.indexOf(wrapper)
+    if (index >= 0) mounted.splice(index, 1)
+    unmount()
+  }
+  return wrapper
+}
 
 async function setup(initial = '') {
   const draft = ref(initial)
@@ -38,7 +60,7 @@ async function setup(initial = '') {
     },
     template: '<div />',
   })
-  const wrapper = mount(Comp)
+  const wrapper = track(mount(Comp))
   return {
     draft,
     conversationId,
@@ -52,9 +74,16 @@ async function setup(initial = '') {
 }
 
 describe('useConversationDraft', () => {
+  afterEach(() => {
+    for (const wrapper of mounted.splice(0)) wrapper.unmount()
+  })
+
   beforeEach(() => {
     vi.useFakeTimers()
     vi.clearAllMocks()
+    localStorage.clear()
+    userState.token = ''
+    userState.loggedInUser.user_id = ''
     setActivePinia(createPinia())
     getDraft.mockResolvedValue(null)
     saveDraft.mockImplementation(async (_id: string, body: { content: string }) => ({
@@ -158,7 +187,7 @@ describe('useConversationDraft', () => {
       },
       template: '<div />',
     })
-    const wrapper = mount(Comp)
+    const wrapper = track(mount(Comp))
     await (wrapper.vm.reload as () => Promise<void>)()
     return { draft, conversationId, replies, wrapper }
   }
@@ -203,5 +232,111 @@ describe('useConversationDraft', () => {
     await vi.advanceTimersByTimeAsync(DRAFT_DEBOUNCE_MS * 2)
     expect(clearDraft).not.toHaveBeenCalledWith('conv_2')
     expect(saveDraft).not.toHaveBeenCalledWith('conv_2', expect.anything())
+  })
+
+  function signInUser() {
+    userState.loggedInUser.user_id = 'usr_me'
+    userState.token = 'token'
+  }
+
+  it('打字后 0.5 秒内刷新，输入框里的字还在', async () => {
+    signInUser()
+    const first = await setup()
+    await first.reload()
+    first.draft.value = '刚打的字'
+    expect(saveDraft).not.toHaveBeenCalled()
+
+    window.dispatchEvent(new Event('beforeunload'))
+    window.dispatchEvent(new Event('pagehide'))
+    expect(flushDraftKeepalive).toHaveBeenCalledTimes(1)
+    expect(flushDraftKeepalive).toHaveBeenCalledWith('conv_1', expect.objectContaining({
+      content: '刚打的字',
+    }), 'token')
+    expect(readPendingDraft('usr_me', 'conv_1')?.content).toBe('刚打的字')
+
+    // 刷新会取消还在飞的 axios；本地镜像留下，新页面再补写
+    saveDraft.mockRejectedValue({ status: 0, code: 'NETWORK_ERROR' })
+    first.wrapper.unmount()
+    await Promise.resolve()
+
+    getDraft.mockResolvedValue(null)
+    const second = await setup()
+    await second.reload()
+    expect(second.draft.value).toBe('刚打的字')
+    expect(saveDraft).toHaveBeenCalledWith('conv_1', expect.objectContaining({ content: '刚打的字' }))
+  })
+
+  it('重新编辑放回输入框后马上刷新，原文还在，不会被服务端旧草稿盖掉', async () => {
+    signInUser()
+    const first = await setup()
+    await first.reload()
+    first.draft.value = '已有'
+    await vi.advanceTimersByTimeAsync(DRAFT_DEBOUNCE_MS)
+    saveDraft.mockClear()
+    flushDraftKeepalive.mockClear()
+
+    // 和私聊/群聊 handleReedit 一样：已有内容时把撤回原文接在后面
+    first.draft.value = '已有撤回的原文'
+    expect(saveDraft).not.toHaveBeenCalled()
+    window.dispatchEvent(new Event('beforeunload'))
+    expect(flushDraftKeepalive).toHaveBeenCalledWith('conv_1', expect.objectContaining({
+      content: '已有撤回的原文',
+    }), 'token')
+
+    saveDraft.mockRejectedValue({ status: 0, code: 'NETWORK_ERROR' })
+    first.wrapper.unmount()
+    await Promise.resolve()
+
+    getDraft.mockResolvedValue({
+      conversation_id: 'conv_1',
+      content: '已有',
+      draft_preview: '已有',
+      updated_at: 1,
+    })
+    const second = await setup()
+    await second.reload()
+    expect(second.draft.value).toBe('已有撤回的原文')
+  })
+
+  it('切到后台时不等防抖就提交；编辑中的原文不当成草稿', async () => {
+    const api = await setup()
+    await api.reload()
+    api.draft.value = '切走了'
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' })
+    document.dispatchEvent(new Event('visibilitychange'))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(saveDraft).toHaveBeenCalledWith('conv_1', expect.objectContaining({ content: '切走了' }))
+
+    saveDraft.mockClear()
+    flushDraftKeepalive.mockClear()
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' })
+    api.isEditing.value = true
+    api.draft.value = '编辑原文'
+    window.dispatchEvent(new Event('beforeunload'))
+    document.dispatchEvent(new Event('visibilitychange'))
+    await vi.advanceTimersByTimeAsync(DRAFT_DEBOUNCE_MS)
+    expect(saveDraft).not.toHaveBeenCalled()
+    expect(flushDraftKeepalive).not.toHaveBeenCalled()
+  })
+
+  it('本地镜像和服务端一致时直接采用服务端，不再重复上传', async () => {
+    signInUser()
+    writePendingDraft('usr_me', 'conv_1', {
+      content: '刚打的字',
+      replyToMessageId: null,
+      atUsers: [],
+      savedAt: 1,
+    })
+    getDraft.mockResolvedValue({
+      conversation_id: 'conv_1',
+      content: '刚打的字',
+      draft_preview: '刚打的字',
+      updated_at: 2,
+    })
+    const api = await setup()
+    await api.reload()
+    expect(api.draft.value).toBe('刚打的字')
+    expect(saveDraft).not.toHaveBeenCalled()
+    expect(readPendingDraft('usr_me', 'conv_1')).toBeNull()
   })
 })

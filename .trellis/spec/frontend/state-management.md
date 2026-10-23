@@ -97,6 +97,12 @@ getters: {
 - Uses `pinia-plugin-persistedstate` → data stored in `localStorage`.
 - **Do not persist transient state** (WebSocket connection, message history being viewed) — use `persist: false` or omit.
 
+### Unsynced conversation drafts
+
+Server drafts are debounced (~500ms) through `PUT/DELETE /conversations/{id}/draft`. A refresh in that window aborts in-flight axios, and the next page's `GET` can win the race against an unload request, so the input comes back empty.
+
+`useConversationDraft` therefore mirrors every unsynced input (including text put back by 重新编辑, and a cleared input) into `localStorage` key `onlineim.draft.pending.<userId>` immediately. `visibilitychange` → hidden flushes with the normal request. `beforeunload` / `pagehide` send one `fetch` `keepalive` per signature (best-effort; cross-origin `Authorization` may still be dropped) and leave the mirror in place until a later save succeeds. On the next open, a mirror that differs from the server draft is restored and uploaded; a matching mirror is dropped so another device's newer draft is kept. Message-edit text is not mirrored.
+
 ---
 
 ## IndexedDB Integration
