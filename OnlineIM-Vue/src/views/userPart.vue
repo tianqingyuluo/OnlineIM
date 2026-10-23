@@ -9,6 +9,7 @@ import type { User } from '@/type/User'
 import type { Friend } from '@/type/Friends'
 import { Input } from "@/components/ui/input";
 import { friendsService } from '@/services/friends.service'
+import { useFriendGroupAssignment } from '@/composables/useFriendGroupAssignment'
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -104,22 +105,7 @@ async function saveRemark() {
   editingRemark.value = false;
 }
 
-async function handleGroupChange(newGroupId: string) {
-  if (friendInfo.value) {
-    try {
-      const response = await friendsService.setFriendGroup(
-        friendInfo.value.friendship_id,
-        newGroupId
-      );
-      friendInfo.value.friend_info.friend_group_id = response.friendship_group_id;
-
-      // 调用store的updateFriendGroup方法同步更新friends和groupedFriends数组
-      listStore.updateFriendGroup(friendInfo.value.friendship_id, response.friendship_group_id);
-    } catch (error) {
-      console.error('修改分组失败:', error);
-    }
-  }
-}
+const { selectedGroupId, selectKey, changeGroup } = useFriendGroupAssignment(friendInfo)
 async function handleSendMessage() {
   if (!user.value) return;
 
@@ -190,8 +176,9 @@ async function handleSendMessage() {
       <div class="info-item mb-6 flex items-center justify-between">
         <span class="label">分组:</span>
         <Select 
-          v-model="friendInfo.friend_info.friend_group_id"
-          @update:modelValue="handleGroupChange"
+          :key="selectKey"
+          :model-value="selectedGroupId"
+          @update:model-value="changeGroup"
           class="w-[180px]"
         >
           <SelectTrigger>

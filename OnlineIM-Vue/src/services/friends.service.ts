@@ -54,7 +54,7 @@ export const friendsService = {
     try {
       const response = await api.put(`/friends/${friendId}/group`, {
         friend_group_id: friendGroupId
-      });
+      }, { skipErrorToast: true });
       return response.data;
     } catch (error) {
       console.error('更新好友分组失败:', error);

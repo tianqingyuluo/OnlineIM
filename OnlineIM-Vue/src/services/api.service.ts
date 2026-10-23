@@ -14,6 +14,13 @@ export type ApiResponse<T = any> = {
   };
 };
 
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    /** 为 true 时不弹出全局错误提示，由调用方自己展示 */
+    skipErrorToast?: boolean
+  }
+}
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
@@ -60,11 +67,15 @@ api.interceptors.response.use(
       });
     }
 
+    const skipErrorToast = Boolean(error.config?.skipErrorToast)
+
     // 网络错误（无响应）
     if (!error.response) {
-      toast.error('网络错误', {
-        description: '请检查网络连接后重试'
-      });
+      if (!skipErrorToast) {
+        toast.error('网络错误', {
+          description: '请检查网络连接后重试'
+        });
+      }
       return Promise.reject({
         code: 'NETWORK_ERROR',
         message: error.message || '网络错误',
@@ -88,7 +99,7 @@ api.interceptors.response.use(
     };
 
 
-    if (status === 400 || status === 403) {
+    if (!skipErrorToast && (status === 400 || status === 403)) {
       toast.error(errorMessage);
     }
 
