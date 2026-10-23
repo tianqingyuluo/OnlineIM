@@ -17,12 +17,19 @@ const userStoreMock = {
 const messageServiceMock = {
   getMessageContext: vi.fn(),
 }
+const syncCursors = new Map<string, { seq: string, anchored: boolean }>()
 const dbServiceMock = {
   getHistoryMessage: vi.fn(),
   putHistory: vi.fn(),
   markMessageRecalled: vi.fn(),
   applyMessageEdit: vi.fn(),
   getLastHistorySeq: vi.fn(),
+  getSyncCursor: vi.fn(async (userId: string, conversationId: string) => (
+    syncCursors.get(`${userId}:${conversationId}`) ?? null
+  )),
+  putSyncCursor: vi.fn(async (userId: string, conversationId: string, cursor: { seq: string, anchored: boolean }) => {
+    syncCursors.set(`${userId}:${conversationId}`, { ...cursor })
+  }),
 }
 
 vi.mock('@/services/websocket.service', () => ({ websocketService: websocketMock }))
@@ -47,6 +54,7 @@ describe('history store message receipt flow', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.clearAllMocks()
+    syncCursors.clear()
     dbServiceMock.putHistory.mockResolvedValue(undefined)
     dbServiceMock.markMessageRecalled.mockResolvedValue(undefined)
     setActivePinia(createPinia())
@@ -532,6 +540,69 @@ describe('history store message receipt flow', () => {
         ],
         watch: [{ conversation_id: 'conv_1', message_ids: ['msg_a'] }],
       },
+    }, { persist: false })
+  })
+
+  it('没有本地历史的会话补齐成功后记住游标，再次连接不再从 0 全量拉取', async () => {
+    const { useHistoryStore } = await import('@/stores/history')
+    const { useListStore } = await import('@/stores/list')
+    const store = useHistoryStore()
+    useListStore().conversations = [
+      { conversation_id: 'conv_new', latest_seq: '0', type: 'private', target_info: { id: 'usr_peer', name: '对方' }, last_message: null, unread_count: 0, last_activity_time: '' },
+    ] as never
+    dbServiceMock.getLastHistorySeq.mockResolvedValue(null)
+
+    await store.requestOfflineSync()
+    expect(websocketMock.sendMessage).toHaveBeenCalledWith({
+      type: 'SYNC_REQUEST',
+      message: { conversations: [{ conversation_id: 'conv_new', last_seq: '0' }] },
+    }, { persist: false })
+
+    await store.applyOfflineSync({
+      conversations: [{
+        conversation_id: 'conv_new',
+        type: 'private',
+        target_info: { id: 'usr_peer', name: '对方' },
+        last_message: null,
+        unread_count: 2,
+        latest_seq: '0',
+        last_activity_time: '',
+      }],
+      revisions: [],
+      messages: [
+        {
+          message_id: 'msg_41',
+          conversation_id: 'conv_new',
+          sender_info: { user_id: 'usr_peer', nickname: '对方' },
+          message_type: 'text',
+          content: '较旧',
+          seq_id: '41',
+          status: 1,
+          timestamp: '2026-10-21 22:05:00',
+          is_recalled: false,
+        },
+        {
+          message_id: 'msg_50',
+          conversation_id: 'conv_new',
+          sender_info: { user_id: 'usr_peer', nickname: '对方' },
+          message_type: 'text',
+          content: '最新',
+          seq_id: '50',
+          status: 1,
+          timestamp: '2026-10-21 22:06:00',
+          is_recalled: false,
+        },
+      ],
+      truncated: false,
+    } as never)
+    // 本地从没打开过：正文仍然不写入历史缓存，避免只剩这一段、往上翻被当成到顶
+    expect(dbServiceMock.putHistory).not.toHaveBeenCalled()
+
+    websocketMock.sendMessage.mockClear()
+    await store.requestOfflineSync()
+    expect(websocketMock.sendMessage).toHaveBeenCalledWith({
+      type: 'SYNC_REQUEST',
+      message: { conversations: [{ conversation_id: 'conv_new', last_seq: '50' }] },
     }, { persist: false })
   })
 

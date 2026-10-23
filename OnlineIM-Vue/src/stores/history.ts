@@ -12,7 +12,7 @@ import type {
 } from '@/type/message';
 import type { Conversation } from '@/type/Conversation';
 import { advanceDeliveryState, type DeliveryState } from '@/utils/message-state';
-import { dbService } from '@/utils/indexedDB';
+import { dbService, type SyncCursor } from '@/utils/indexedDB';
 import { MessageService } from '@/services/message.service';
 import { useUserStore } from '@/stores/user';
 import { useListStore } from '@/stores/list';
@@ -106,7 +106,6 @@ export const useHistoryStore = defineStore('history', {
     noMoreInfo: false,
     lastHistorySeqId: null as string | null,
     inMyHistory: false,
-    hasInit: false,
     pendingMessagesInfo: [] as PendingMessageInfoItem[],
     activeConversationId: null as string | null,
     activeConversationIsGroup: false,
@@ -156,7 +155,6 @@ export const useHistoryStore = defineStore('history', {
       this.groupMessages = [];
       this.chatMessages = [];
       this.pendingMessages = {};
-      this.hasInit = false;
       this.replyTarget = null;
       this.failedReplyDraft = null;
     },
@@ -194,29 +192,54 @@ export const useHistoryStore = defineStore('history', {
       try {
         const currentMessages = isGroup ? this.groupMessages : this.chatMessages;
         const beforeSeqId = currentMessages.length > 0 ? currentMessages[0].seq_id : undefined;
-        const shouldFetch = this.shouldFetchFromServer(conversationId, beforeSeqId);
+        const userId = useUserStore().loggedInUser?.user_id;
         let messages: MessageResponse[] = [];
         let hasMore = false;
 
-        if (shouldFetch) {
-          const response = isGroup
-            ? await MessageService.getMessageHistory(conversationId, beforeSeqId)
-            : await MessageService.getPrivateHistory(conversationId, beforeSeqId);
-          messages = response.messages;
-          hasMore = response.has_more_before;
-          if (messages.length > 0) {
-            await this.updatePendingRanges(conversationId, messages, { hasMoreBefore: hasMore });
-            await dbService.putHistory(messages);
-            await this.sendDeliveredReceipts(messages);
+        if (beforeSeqId) {
+          if (this.shouldFetchOlderFromServer(conversationId, beforeSeqId)) {
+            const page = await this.ingestServerHistory(conversationId, isGroup, beforeSeqId);
+            messages = page.messages;
+            hasMore = page.hasMore;
+          } else {
+            const response = await MessageService.getHistoryByIndexDB(
+              conversationId,
+              this.lastHistorySeqId || '0',
+              beforeSeqId,
+            );
+            messages = response.messages;
+            hasMore = response.has_more_before || this.hasOlderGap(conversationId, this.earliestSeq(messages) || beforeSeqId);
           }
+        } else if (await this.needsInitialHistory(userId, conversationId)) {
+          // 还没锚定过：第一次打开（或本地只有几条实时消息）从服务端拉最近一页，并登记更早的缺口
+          const page = await this.ingestServerHistory(conversationId, isGroup);
+          messages = page.messages;
+          hasMore = page.hasMore;
         } else {
-          const response = await MessageService.getHistoryByIndexDB(
-            conversationId,
-            this.lastHistorySeqId || '0',
-            beforeSeqId,
-          );
-          messages = response.messages;
-          hasMore = response.has_more_before;
+          const localLast = userId ? await this.localHistorySeq(userId, conversationId) : null;
+          if (localLast) {
+            const response = await MessageService.getHistoryByIndexDB(
+              conversationId,
+              this.lastHistorySeqId || '0',
+            );
+            messages = response.messages;
+            const newer = await this.pullNewerThanLocal(conversationId, localLast);
+            if (newer.length > 0) {
+              await dbService.putHistory(newer);
+              await this.sendDeliveredReceipts(newer);
+              if (userId) await this.noteHistoryAnchor(userId, conversationId, newer);
+              messages = [...messages, ...newer];
+            }
+            hasMore = response.has_more_before || this.hasOlderGap(conversationId, this.earliestSeq(messages));
+          } else {
+            // 上次打开确认过是空会话。列表或游标显示有新消息时才再向服务端要
+            const known = userId ? await this.knownLatestSeq(userId, conversationId) : '0';
+            if (compareSeqId(known, '0') > 0) {
+              const page = await this.ingestServerHistory(conversationId, isGroup);
+              messages = page.messages;
+              hasMore = page.hasMore;
+            }
+          }
         }
 
         this.processMessages(messages, isGroup, beforeSeqId);
@@ -229,18 +252,64 @@ export const useHistoryStore = defineStore('history', {
       }
     },
 
-    shouldFetchFromServer(conversationId: string, beforeSeqId?: string): boolean {
-      if (!this.hasInit) {
-        this.hasInit = true;
-        return true;
-      }
-      if (!beforeSeqId) return true;
+    /**
+     * 往上翻时，只有当前边界落在已登记的缺口里才找服务端。
+     * 第一页不在这里决定：没有锚定过才整页拉取，锚定之后走本地，再按游标补更新的消息。
+     */
+    shouldFetchOlderFromServer(conversationId: string, beforeSeqId?: string): boolean {
+      if (!beforeSeqId) return false;
       const pendingInfo = this.pendingMessages[conversationId];
       if (!pendingInfo) return false;
       return pendingInfo.ranges.some(range =>
         compareSeqId(beforeSeqId, range.minSeqId) >= 0
         && compareSeqId(beforeSeqId, range.maxSeqId) <= 0,
       );
+    },
+
+    async ingestServerHistory(conversationId: string, isGroup: boolean, beforeSeqId?: string) {
+      const response = isGroup
+        ? await MessageService.getMessageHistory(conversationId, beforeSeqId)
+        : await MessageService.getPrivateHistory(conversationId, beforeSeqId);
+      const messages = response.messages || [];
+      const hasMore = response.has_more_before;
+      if (messages.length > 0) {
+        await this.updatePendingRanges(conversationId, messages, { hasMoreBefore: hasMore });
+        await dbService.putHistory(messages);
+        await this.sendDeliveredReceipts(messages);
+      }
+      const userId = useUserStore().loggedInUser?.user_id;
+      if (userId) await this.noteHistoryAnchor(userId, conversationId, messages);
+      return { messages, hasMore };
+    },
+
+    /** 还没做过一次成功的历史分页。本地有没有几条实时消息都不算，否则每次打开都会从服务端重拉整页 */
+    async needsInitialHistory(userId: string | undefined, conversationId: string): Promise<boolean> {
+      if (!userId) return true;
+      const cursor = await this.readSyncCursor(userId, conversationId);
+      return !cursor?.anchored;
+    },
+
+    earliestSeq(messages: MessageResponse[]): string | undefined {
+      return messages.reduce<string | undefined>((min, message) => {
+        if (!message?.seq_id) return min;
+        if (!min || compareSeqId(message.seq_id, min) < 0) return message.seq_id;
+        return min;
+      }, undefined);
+    },
+
+    hasOlderGap(conversationId: string, earliestSeq?: string): boolean {
+      const ranges = this.pendingMessages[conversationId]?.ranges || [];
+      if (!earliestSeq) return ranges.length > 0;
+      return ranges.some(range => compareSeqId(range.minSeqId, earliestSeq) < 0);
+    },
+
+    async localHistorySeq(userId: string, conversationId: string): Promise<string | null> {
+      try {
+        return await dbService.getLastHistorySeq(userId, conversationId);
+      } catch (error) {
+        console.warn('读取本地消息游标失败:', error);
+        return null;
+      }
     },
 
     async updatePendingRanges(
@@ -981,8 +1050,10 @@ export const useHistoryStore = defineStore('history', {
     },
 
     /**
-     * 每次连接或重连成功后上报本地游标。登录后、WebSocket 尚未连上时到达的消息，
-     * 会落在会话列表快照的 latest_seq（或 IndexedDB 里的最大 seq）之后，由服务端补推。
+     * 每次连接或重连成功后上报本地游标。优先用历史缓存、内存和已经记下的同步游标里最大的 seq；
+     * 三者都没有时才退回会话列表的 latest_seq。登录后、WebSocket 尚未连上时到达的消息，
+     * 会落在这个游标之后，由服务端补推。补齐成功后即使消息正文不写入历史缓存，也会推进同步游标，
+     * 避免没有本地缓存的会话每次连接都从 0 把同一段历史再拉一遍。
      */
     async requestOfflineSync(): Promise<void> {
       try {
@@ -1013,6 +1084,8 @@ export const useHistoryStore = defineStore('history', {
       for (const message of messages) {
         await this.absorbSyncedMessage(message, { cache: cacheable.has(message?.conversation_id) });
       }
+      // 正文可以不落历史缓存（无本地历史或被截断时会留下空洞），但最大 seq 必须记下
+      await this.rememberOfflineWatermarks(messages);
       applyOfflineConversations(payload?.conversations ?? [], this.activeConversationId);
       if (payload?.truncated) {
         await this.syncActiveConversation();
@@ -1050,10 +1123,81 @@ export const useHistoryStore = defineStore('history', {
       } catch (error) {
         console.warn('读取本地消息游标失败:', error);
       }
+      const watermark = (await this.readSyncCursor(userId, conversationId))?.seq || '0';
       const memory = this.messagesForConversation(conversationId)
         .reduce((max, message) => maxSeqId(max, message.seq_id), '0');
-      const local = maxSeqId(stored, memory);
+      const local = maxSeqId(maxSeqId(stored, memory), watermark);
       return local !== '0' ? local : (latestSeq || '0');
+    },
+
+    async readSyncCursor(userId: string, conversationId: string): Promise<SyncCursor | null> {
+      if (typeof dbService.getSyncCursor !== 'function') return null;
+      try {
+        return await dbService.getSyncCursor(userId, conversationId);
+      } catch (error) {
+        console.warn('读取同步游标失败:', error);
+        return null;
+      }
+    },
+
+    /** 只向前推进。anchored 一旦为真就保持，表示这个会话已经做过历史分页，下次打开不再整页重拉 */
+    async advanceSyncCursor(
+      userId: string,
+      conversationId: string,
+      seq: string | undefined,
+      options: { anchored?: boolean } = {},
+    ) {
+      if (!userId || !conversationId || typeof dbService.putSyncCursor !== 'function') return;
+      const current = await this.readSyncCursor(userId, conversationId);
+      const nextSeq = maxSeqId(current?.seq, seq);
+      const anchored = Boolean(options.anchored || current?.anchored);
+      if ((current?.seq || '0') === nextSeq && Boolean(current?.anchored) === anchored) return;
+      if (nextSeq === '0' && !anchored) return;
+      try {
+        await dbService.putSyncCursor(userId, conversationId, { seq: nextSeq, anchored });
+      } catch (error) {
+        console.warn('保存同步游标失败:', error);
+      }
+    },
+
+    async rememberOfflineWatermarks(messages: MessageResponse[]) {
+      const userId = useUserStore().loggedInUser?.user_id;
+      if (!userId) return;
+      const seqs = new Map<string, string>();
+      for (const message of messages) {
+        if (!message?.conversation_id || !message.seq_id) continue;
+        seqs.set(message.conversation_id, maxSeqId(seqs.get(message.conversation_id), message.seq_id));
+      }
+      for (const [conversationId, seq] of seqs) {
+        await this.advanceSyncCursor(userId, conversationId, seq);
+      }
+    },
+
+    async noteHistoryAnchor(userId: string, conversationId: string, messages: MessageResponse[]) {
+      const seq = messages.reduce((max, message) => maxSeqId(max, message?.seq_id), '0');
+      await this.advanceSyncCursor(userId, conversationId, seq, { anchored: true });
+    },
+
+    async knownLatestSeq(userId: string, conversationId: string): Promise<string> {
+      const cursor = await this.readSyncCursor(userId, conversationId);
+      const listed = (useListStore().conversations || [])
+        .find(item => item?.conversation_id === conversationId)?.latest_seq;
+      return maxSeqId(cursor?.seq, listed);
+    },
+
+    /** 本地已经有连续历史时，只补游标之后的新消息，不再把最近一页历史重新下载一遍 */
+    async pullNewerThanLocal(conversationId: string, localLast: string): Promise<MessageResponse[]> {
+      const userId = useUserStore().loggedInUser?.user_id;
+      if (!userId || !localLast || localLast === '0' || typeof MessageService.syncMessages !== 'function') return [];
+      const known = await this.knownLatestSeq(userId, conversationId);
+      if (compareSeqId(known, localLast) <= 0) return [];
+      try {
+        const missed = await MessageService.syncMessages(conversationId, localLast);
+        return Array.isArray(missed) ? missed : [];
+      } catch (error) {
+        console.error('增量补齐新消息失败:', error);
+        return [];
+      }
     },
 
     collectWatch(): { conversation_id: string, message_ids: string[] } | null {
@@ -1086,6 +1230,7 @@ export const useHistoryStore = defineStore('history', {
      *   正在看的会话还会让 HTTP 增量从最新一条开始而补不回空洞。所以截断时一条都不缓存，
      *   正在看的会话由 syncActiveConversation 按本地旧游标补全，其他会话打开时照旧从服务端分页。
      * - 本地还没有这个会话的历史时也不缓存（否则打开后只能翻到这几条），打开时照旧从服务端拉。
+     *   这些消息的最大 seq 仍写入同步游标，下次连接从这里增量，而不是再从 0 全量拉取。
      */
     async cacheableSyncConversations(messages: MessageResponse[], truncated: boolean): Promise<Set<string>> {
       const result = new Set<string>();

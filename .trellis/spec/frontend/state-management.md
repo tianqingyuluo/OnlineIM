@@ -110,7 +110,7 @@ Server drafts are debounced (~500ms) through `PUT/DELETE /conversations/{id}/dra
 `useListStore` and `useHistoryStore` use IndexedDB (via `@/utils/indexedDB.ts`) as a local cache layer:
 
 - **List store**: caches conversations, friends, groups, user groups, blacklist. On init, loads from IndexedDB first (fast display), then fetches from API and updates IndexedDB.
-- **History store**: caches messages per conversation, tracks "pending ranges" (gaps in message history) to know when to fetch from server vs. local cache.
+- **History store**: caches messages per conversation, tracks "pending ranges" (gaps in message history) to know when to fetch from server vs. local cache. Offline sync also stores a per-conversation cursor (`sync_cursors`: highest seq already caught up, plus an `anchored` flag once history paging has run). Message bodies for a conversation with no local history are still not written into the history cache, but the cursor is, so the next connect is incremental. After anchoring, opening the conversation reads IndexedDB and only calls the sync API when a known seq is newer.
 
 This dual-layer cache (Pinia + IndexedDB) enables offline-first message viewing.
 

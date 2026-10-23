@@ -4,13 +4,20 @@ import { compareSeqId } from '@/utils/seq-id';
 import type { MessageResponse } from '@/type/message';
 
 const DB_NAME = 'im_db';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const DB_PERSISTENCE_KEY = 'im_db_persistence';
 const IMAGE_STORE = 'images';
 const HISTORY_STORE = 'history';
 const PENDING_MESSAGES_STORE = 'pending_messages';
 const OUTBOUND_QUEUE_STORE = 'outbound_queue';
 const RECEIPT_QUEUE_STORE = 'receipt_queue';
+const SYNC_CURSOR_STORE = 'sync_cursors';
+
+/** 会话同步游标：seq 是已经成功补齐过的最大 seq；anchored 表示打开过并完成过分页锚定 */
+export interface SyncCursor {
+  seq: string;
+  anchored: boolean;
+}
 
 export const STORES = {
   CONVERSATIONS: 'conversations',
@@ -93,6 +100,12 @@ export const initDB = async (): Promise<IDBPDatabase> => {
         store.createIndex('user_id', 'user_id');
         store.createIndex('user_conversation', ['user_id', 'conversation_id']);
         store.createIndex('dedupe_key', 'dedupe_key');
+      }
+      // v4: 上线补齐游标。消息正文不一定写入 history（避免截断或无缓存会话留下空洞），
+      // 但最大 seq 必须记下，否则下次连接仍会从 0 把同一段历史再拉一遍。
+      if (!db.objectStoreNames.contains(SYNC_CURSOR_STORE)) {
+        const store = db.createObjectStore(SYNC_CURSOR_STORE, { keyPath: 'id' });
+        store.createIndex('user_id', 'user_id');
       }
     }
   });
@@ -386,6 +399,27 @@ export const dbService = {
         this.deletePendingRange(range.id)
     ))
   },
+  async getSyncCursor(userId: string, conversationId: string): Promise<SyncCursor | null> {
+    const db = await initDB();
+    const record = await db.get(SYNC_CURSOR_STORE, `${userId}:${conversationId}`);
+    if (!record) return null;
+    return {
+      seq: typeof record.seq === 'string' && record.seq ? record.seq : '0',
+      anchored: Boolean(record.anchored),
+    };
+  },
+
+  async putSyncCursor(userId: string, conversationId: string, cursor: SyncCursor): Promise<void> {
+    const db = await initDB();
+    await db.put(SYNC_CURSOR_STORE, {
+      id: `${userId}:${conversationId}`,
+      user_id: userId,
+      conversation_id: conversationId,
+      seq: cursor.seq || '0',
+      anchored: Boolean(cursor.anchored),
+    });
+  },
+
   async getLastHistorySeq(userId: string, conversationId: string): Promise<string | null> {
     const db = await initDB();
     const records = await db.getAllFromIndex(

@@ -5,7 +5,12 @@ import { compareSeqId } from '@/utils/seq-id'
 type Row = { message_id: string, conversation_id: string, seq_id: string, [key: string]: unknown }
 type Range = { id: number, user_id: string, conversation_id: string, min_seq_id: string, max_seq_id: string }
 
-const local: { history: Row[], ranges: Range[], nextId: number } = { history: [], ranges: [], nextId: 1 }
+const local: {
+  history: Row[],
+  ranges: Range[],
+  nextId: number,
+  cursors: Map<string, { seq: string, anchored: boolean }>,
+} = { history: [], ranges: [], nextId: 1, cursors: new Map() }
 const server: Row[] = []
 
 const dbServiceMock = {
@@ -31,6 +36,12 @@ const dbServiceMock = {
     .filter(r => r.conversation_id === c && (!before || compareSeqId(r.seq_id, before) < 0))
     .sort((a, b) => compareSeqId(a.seq_id, b.seq_id))
     .slice(-50)),
+  getSyncCursor: vi.fn(async (userId: string, conversationId: string) => (
+    local.cursors.get(`${userId}:${conversationId}`) ?? null
+  )),
+  putSyncCursor: vi.fn(async (userId: string, conversationId: string, cursor: { seq: string, anchored: boolean }) => {
+    local.cursors.set(`${userId}:${conversationId}`, { ...cursor })
+  }),
   addImageFromUrl: vi.fn(),
 }
 const page = (before?: string) => {
@@ -45,6 +56,7 @@ const messageServiceMock = {
     const messages = await dbServiceMock.getHistory('usr_me', c, last, before)
     return { messages, has_more_before: messages.length === 50 }
   }),
+  syncMessages: vi.fn(async () => [] as Row[]),
 }
 
 vi.mock('@/services/websocket.service', () => ({ websocketService: { sendMessage: vi.fn(), sendReceipt: vi.fn(), sendReadReceipt: vi.fn() } }))
@@ -83,6 +95,7 @@ describe('history paging', () => {
     vi.clearAllMocks()
     local.history = []
     local.ranges = []
+    local.cursors.clear()
     server.length = 0
     for (let n = 1; n <= 45; n++) server.push(row(n))
     setActivePinia(createPinia())
@@ -104,5 +117,52 @@ describe('history paging', () => {
     setActivePinia(createPinia())
     const ids = await scrollToTop()
     expect(ids).toEqual(server.map(m => m.message_id))
+  })
+
+  it('第一次打开没有缓存的会话会拉历史；再次打开不再整段重拉', async () => {
+    server.length = 0
+    for (let n = 1; n <= 5; n++) server.push(row(n))
+    const { useHistoryStore } = await import('@/stores/history')
+    const store = useHistoryStore()
+    await store.init()
+    await store.loadInitialHistory('usr_me', 'conv_1')
+    expect(messageServiceMock.getPrivateHistory).toHaveBeenCalledTimes(1)
+    const first = store.chatMessages.map(m => m.message_id)
+    expect(first).toEqual(server.map(m => m.message_id))
+
+    messageServiceMock.getPrivateHistory.mockClear()
+    messageServiceMock.syncMessages.mockClear()
+    setActivePinia(createPinia())
+    const again = useHistoryStore()
+    await again.init()
+    await again.loadInitialHistory('usr_me', 'conv_1')
+    expect(messageServiceMock.getPrivateHistory).not.toHaveBeenCalled()
+    expect(messageServiceMock.syncMessages).not.toHaveBeenCalled()
+    expect(again.chatMessages.map(m => m.message_id)).toEqual(first)
+  })
+
+  it('再次打开时只有游标之后有新消息才按 seq 增量拉取', async () => {
+    server.length = 0
+    for (let n = 1; n <= 5; n++) server.push(row(n))
+    const { useHistoryStore } = await import('@/stores/history')
+    const { useListStore } = await import('@/stores/list')
+    const store = useHistoryStore()
+    await store.init()
+    await store.loadInitialHistory('usr_me', 'conv_1')
+    messageServiceMock.getPrivateHistory.mockClear()
+    messageServiceMock.syncMessages.mockClear()
+
+    const newer = row(6)
+    messageServiceMock.syncMessages.mockResolvedValue([newer])
+    setActivePinia(createPinia())
+    useListStore().conversations = [{ conversation_id: 'conv_1', latest_seq: newer.seq_id }] as never
+    const again = useHistoryStore()
+    await again.init()
+    await again.loadInitialHistory('usr_me', 'conv_1')
+
+    expect(messageServiceMock.getPrivateHistory).not.toHaveBeenCalled()
+    expect(messageServiceMock.syncMessages).toHaveBeenCalledTimes(1)
+    expect(messageServiceMock.syncMessages).toHaveBeenCalledWith('conv_1', '1005')
+    expect(again.chatMessages.map(m => m.message_id)).toEqual([...server.map(m => m.message_id), newer.message_id])
   })
 })
