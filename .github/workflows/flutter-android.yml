@@ -33,7 +33,12 @@ jobs:
           channel: stable
           cache: true
 
+      # v3 默认会安装已经下线的 tools 包，sdkmanager 会以
+      # “Failed to find package 'tools'” 直接失败。命令行工具由该 action
+      # 单独安装，这里只保留 platform-tools。
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
 
       - name: Resolve dependencies
         run: flutter pub get
