@@ -20,6 +20,9 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // flutter_local_notifications 的 AAR 标记了需要脱糖，release 的
+        // checkReleaseAarMetadata 会在未开启时直接失败。
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -30,6 +33,7 @@ android {
         targetSdk = 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        multiDexEnabled = true
     }
 
     signingConfigs {
@@ -63,4 +67,9 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // AGP 9 不能使用插件旧文档里的 1.2.2，2.1.4 才覆盖 java.time 并与当前插件要求一致。
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
