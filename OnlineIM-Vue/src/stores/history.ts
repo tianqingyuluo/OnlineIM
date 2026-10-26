@@ -647,6 +647,9 @@ export const useHistoryStore = defineStore('history', {
         // 否则会混进正在查看的聊天窗口
         this.processMessages([normalized], isGroup);
       }
+      if (normalized.conversation_id === this.activeConversationId) {
+        hydrateReplyPreviews(isGroup ? this.groupMessages : this.chatMessages);
+      }
       const shown = existing && existing !== normalized ? existing : normalized;
       onConversationMessage(shown, this.activeConversationId, atMe, atAll);
       void dbService.putHistory([wireCopy(shown)])
@@ -662,7 +665,11 @@ export const useHistoryStore = defineStore('history', {
     },
 
     async redecryptVisible(): Promise<void> {
-      const visible = [...this.chatMessages, ...this.groupMessages];
+      const visible = [...this.chatMessages, ...this.groupMessages].map(message =>
+        message.e2ee_envelope
+          ? { ...message, content: message.e2ee_envelope, is_encrypted: true, e2ee_status: undefined }
+          : message,
+      );
       if (!visible.some(needsDecrypt)) {
         hydrateReplyPreviews(this.chatMessages);
         hydrateReplyPreviews(this.groupMessages);

@@ -51,12 +51,18 @@ export function hydrateReplyPreviews(messages: MessageResponse[]): MessageRespon
     const reference = message.reply_to
     if (!reference) continue
     const preview = reference.preview_text || ''
-    const placeholder = !preview || preview === ENCRYPTED_PREVIEW || looksLikeEnvelope(preview)
-    if (!placeholder) continue
     const target = byId.get(reference.message_id)
     if (target?.e2ee_status === 'decrypted' && target.content && !looksLikeEnvelope(target.content)) {
       reference.preview_text = truncatePreview(target.content)
-    } else if (looksLikeEnvelope(preview)) {
+      continue
+    }
+    if (target?.e2ee_status === 'locked') {
+      reference.preview_text = ENCRYPTED_PREVIEW
+      continue
+    }
+    const placeholder = !preview || preview === ENCRYPTED_PREVIEW || looksLikeEnvelope(preview)
+    if (!placeholder) continue
+    if (looksLikeEnvelope(preview)) {
       reference.preview_text = ENCRYPTED_PREVIEW
     }
   }

@@ -222,8 +222,8 @@ export async function importKeyBackup(payload: string, passphrase: string): Prom
 }
 
 /** TS 5.7 的 Uint8Array 泛型不能直接当 BufferSource。拷一份 ArrayBuffer。 */
-function asBuffer(bytes: Uint8Array): ArrayBuffer {
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+function asBuffer(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
+  return new Uint8Array(bytes)
 }
 
 async function importPublicSpki(spkiBase64: string): Promise<CryptoKey> {

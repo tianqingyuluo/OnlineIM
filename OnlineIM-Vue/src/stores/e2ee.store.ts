@@ -157,10 +157,14 @@ export const useE2eeStore = defineStore('e2ee', {
       const conversationId = payload?.conversation_id
       if (!conversationId) return
       const current = this.sessions[conversationId]
+      const peerUserId = current?.peerUserId || ''
       this.sessions[conversationId] = {
         enabled: payload.enabled === true,
-        peerUserId: current?.peerUserId || '',
+        peerUserId,
         updatedAt: Date.now(),
+      }
+      if (payload.enabled === true && peerUserId && !this.peerKeys[peerUserId]) {
+        void this.ensurePeerKey(peerUserId).catch(() => {})
       }
     },
 
@@ -267,7 +271,21 @@ export const useE2eeStore = defineStore('e2ee', {
       if (!envelope) return markLocked(message, raw)
       const identity = await e2eeStorage.load()
       if (!identity) return markLocked(message, raw)
-      const peer = this.peerForEnvelope(envelope, identity.keyId, message.conversation_id)
+      let peer = this.peerForEnvelope(envelope, identity.keyId, message.conversation_id)
+      const expectedPeerKeyId = envelope.sender_key_id === identity.keyId
+        ? envelope.recipient_key_id
+        : envelope.sender_key_id
+      if (!peer || (expectedPeerKeyId && peer.key_id !== expectedPeerKeyId)) {
+        const peerUserId = this.resolvePeerUserId(message, envelope, identity.keyId)
+        if (peerUserId) {
+          try {
+            await this.ensurePeerKey(peerUserId)
+            peer = this.peerForEnvelope(envelope, identity.keyId, message.conversation_id)
+          } catch {
+            // 读取失败时回退已有缓存或锁定态
+          }
+        }
+      }
       if (!peer) return markLocked(message, raw)
       try {
         const plaintext = await decryptText({
@@ -291,6 +309,27 @@ export const useE2eeStore = defineStore('e2ee', {
       if (!messages.some(needsDecrypt)) return hydrateReplyPreviews(messages)
       const revealed = await Promise.all(messages.map(message => this.decryptForDisplay(message)))
       return hydrateReplyPreviews(revealed)
+    },
+
+    resolvePeerUserId(
+      message: MessageResponse,
+      envelope: { sender_key_id: string, recipient_key_id: string },
+      myKeyId: string,
+    ): string {
+      const conversationId = message.conversation_id
+      const fromSession = conversationId ? this.sessions[conversationId]?.peerUserId : ''
+      if (fromSession) return fromSession
+      const senderId = message.sender_info?.user_id || ''
+      if (envelope.sender_key_id === myKeyId && conversationId?.startsWith("conv_")) {
+        const parts = conversationId.slice("conv_".length).split("usr_")
+        if (parts.length === 3 && parts[1] && parts[2]) {
+          const first = "usr_" + parts[1]
+          const second = "usr_" + parts[2]
+          if (senderId === first) return second
+          if (senderId === second) return first
+        }
+      }
+      return senderId
     },
 
     peerForEnvelope(envelope: { sender_key_id: string, recipient_key_id: string }, myKeyId: string, conversationId?: string) {
