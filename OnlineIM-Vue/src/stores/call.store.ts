@@ -242,6 +242,13 @@ export const useCallStore = defineStore('call', {
       this.pendingOffer = payload.sdp
       this.cameraOn = this.callType === 'video'
       this.minimized = false
+      const callerName = profile.name || '好友'
+      const callLabel = this.callType === 'audio' ? '邀请你语音通话' : '邀请你视频通话'
+      void import('@/services/tauri-bridge').then(({ notifyIncomingCall }) => notifyIncomingCall({
+        title: callerName,
+        body: callLabel,
+        conversationId: this.conversationId,
+      })).catch(error => console.error('来电通知失败:', error))
       this.send('CALL_RINGING', { call_id: callId })
       this.armRingTimer()
     },

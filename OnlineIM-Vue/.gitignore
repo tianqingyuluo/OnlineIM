@@ -21,8 +21,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-config.ts
+/config.ts
 shared/config.js
+src-tauri/target
+src-tauri/gen
 ignore
 test
 memory-bank

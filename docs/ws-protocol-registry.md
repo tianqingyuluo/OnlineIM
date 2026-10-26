@@ -1226,7 +1226,7 @@ PUT /api/v1/e2ee/sessions/{targetUserId}
 | 端 | 私钥放哪 | 对齐方式 |
 |----|----------|----------|
 | Web | IndexedDB 库 `onlineim-e2ee`，对象仓库 `identity`，键 `current`。Pinia / localStorage 只存公钥、指纹、会话开关和已验证指纹 | 本文件的信封、指纹和备份 JSON |
-| Tauri | 优先系统钥匙串或 stronghold；WebView IndexedDB 也可以，但换机必须靠口令备份 | 同一 REST、同一 `E2EE_STATE_CHANGED`、同一备份 JSON 可导入 Web |
+| Tauri | IndexedDB `onlineim-e2ee` 与应用数据目录 `e2ee/{user_id}.json` 双写。Unix 上目录 `0700`、密钥文件 `0600`。WebView 被清空时从本机文件恢复。换机仍靠口令备份 | 同一 REST、同一 `E2EE_STATE_CHANGED`、同一备份 JSON 可导入 Web |
 | Flutter | `flutter_secure_storage`（或等价安全存储） | 同上。不要把私钥放进普通 SharedPreferences |
 
 安全码：把双方指纹转成小写后按字典序用 `|` 拼接，SHA-256，再把摘要当成大整数对 10^60 取模，左侧补零到 60 位。界面每 5 位空一格。用户在两边对过安全码后，把对方当前指纹标成「已验证」。指纹变化则取消验证并提示。

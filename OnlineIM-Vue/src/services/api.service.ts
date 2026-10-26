@@ -1,6 +1,6 @@
 // src/services/api.service.ts
 import axios from 'axios';
-import { API_BASE_URL } from '../../shared/endpoints.js';
+import { API_BASE_URL, getApiBaseUrl } from '../../shared/endpoints.js';
 import { useUserStore } from '@/stores/user';
 import { toast } from 'vue-sonner';
 // 定义标准API响应格式
@@ -34,6 +34,7 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const userStore=useUserStore();
+    config.baseURL = getApiBaseUrl()
     // 从 localStorage 获取 token
     const token = userStore.token
     if (token) {

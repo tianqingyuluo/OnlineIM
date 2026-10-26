@@ -13,6 +13,7 @@ import {
 } from '@/crypto/e2ee'
 import { e2eeStorage } from '@/crypto/e2ee-storage'
 import { e2eeService, type E2eeKeyBundle } from '@/services/e2ee.service'
+import { isTauriRuntime, loadE2eeKeyBundle, mergeE2eeBundleSources, saveE2eeKeyBundle } from '@/services/tauri-bridge'
 import type { MessageResponse } from '@/type/message'
 import { hydrateReplyPreviews, markLocked, needsDecrypt } from '@/utils/e2ee-message'
 
@@ -62,6 +63,69 @@ export const e2eeDialog = reactive({
 
 let uploadedThisPage = false
 
+function currentUserId(): string | null {
+  try {
+    const raw = localStorage.getItem('user')
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { loggedInUser?: { user_id?: string } }
+    const id = parsed.loggedInUser?.user_id?.trim()
+    return id || null
+  } catch {
+    return null
+  }
+}
+
+function parseStoredIdentity(raw: string): StoredIdentity | null {
+  try {
+    const parsed = JSON.parse(raw) as StoredIdentity
+    if (!parsed?.keyId || !parsed.identityPrivateJwk) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+/** IndexedDB 与 Tauri 本机密钥文件互为备份。浏览器里第二步是空操作。 */
+async function loadIdentity(): Promise<StoredIdentity | null> {
+  const local = await e2eeStorage.load()
+  if (!isTauriRuntime()) return local
+  const userId = currentUserId()
+  if (!userId) return local
+  let native: string | null = null
+  try {
+    native = await loadE2eeKeyBundle(userId)
+  } catch (error) {
+    console.error('读取本机端到端密钥失败:', error)
+  }
+  const merged = mergeE2eeBundleSources(local ? JSON.stringify(local) : null, native)
+  if (merged.persistLocal && merged.bundle) {
+    const restored = parseStoredIdentity(merged.bundle)
+    if (restored) {
+      await e2eeStorage.save(restored)
+      return restored
+    }
+  }
+  if (merged.persistNative && local) {
+    try {
+      await saveE2eeKeyBundle(userId, JSON.stringify(local))
+    } catch (error) {
+      console.error('备份端到端密钥失败:', error)
+    }
+  }
+  return local
+}
+
+async function mirrorIdentity(identity: StoredIdentity): Promise<void> {
+  if (!isTauriRuntime()) return
+  const userId = currentUserId()
+  if (!userId) return
+  try {
+    await saveE2eeKeyBundle(userId, JSON.stringify(identity))
+  } catch (error) {
+    console.error('写入本机端到端密钥失败:', error)
+  }
+}
+
 export const useE2eeStore = defineStore('e2ee', {
   state: () => ({
     publicProfile: null as PublicIdentity | null,
@@ -79,10 +143,11 @@ export const useE2eeStore = defineStore('e2ee', {
 
   actions: {
     async ensureIdentity(): Promise<StoredIdentity> {
-      let stored = await e2eeStorage.load()
+      let stored = await loadIdentity()
       if (!stored) {
         stored = await generateIdentity()
         await e2eeStorage.save(stored)
+        await mirrorIdentity(stored)
       }
       const fingerprint = await fingerprintOfSpki(stored.identityPublicSpki)
       this.publicProfile = {
@@ -269,7 +334,7 @@ export const useE2eeStore = defineStore('e2ee', {
         || (typeof message.content === 'string' ? message.content : '')
       const envelope = parseEnvelope(raw)
       if (!envelope) return markLocked(message, raw)
-      const identity = await e2eeStorage.load()
+      const identity = await loadIdentity()
       if (!identity) return markLocked(message, raw)
       let peer = this.peerForEnvelope(envelope, identity.keyId, message.conversation_id)
       const expectedPeerKeyId = envelope.sender_key_id === identity.keyId
@@ -351,6 +416,7 @@ export const useE2eeStore = defineStore('e2ee', {
     async importBackup(payload: string, passphrase: string): Promise<void> {
       const identity = await importKeyBackup(payload, passphrase)
       await e2eeStorage.save(identity)
+      await mirrorIdentity(identity)
       uploadedThisPage = false
       await this.ensureIdentity()
       notifyKeysChanged()

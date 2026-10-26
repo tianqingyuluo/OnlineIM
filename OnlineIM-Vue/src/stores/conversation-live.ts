@@ -199,6 +199,17 @@ export function onConversationMessage(
   const firstTime = !!message.message_id && rememberCounted(message.message_id)
   const alreadyRecalled = isRecalledMessage(message)
   const countUnread = fromOther && !viewing && firstTime && !alreadyRecalled
+  if (fromOther && firstTime && !alreadyRecalled) {
+    const title = displaySenderName(message.sender_info) || '新消息'
+    const body = previewOfMessage(message)
+    const conversationId = message.conversation_id
+    void import('@/services/tauri-bridge').then(({ notifyIncomingMessage }) => notifyIncomingMessage({
+      title,
+      body,
+      conversationId,
+      viewing,
+    })).catch(error => console.error('桌面通知失败:', error))
+  }
   const conversation = findConversation(message.conversation_id)
   if (!conversation) {
     // 列表里还没有（第一次收到该会话的消息，或之前删除过会话）：向服务端取权威记录（含 at_me）

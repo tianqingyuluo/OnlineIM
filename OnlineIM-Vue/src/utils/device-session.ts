@@ -23,6 +23,17 @@ export function normalizeDeviceType(value?: string | null): DeviceType | null {
   }
 }
 
+/** Tauri 桌面壳上报的设备名，和后端设备列表里的可读名称对齐。 */
+export function tauriDesktopDeviceName(os?: string | null): string {
+  const value = (os || '').toLowerCase()
+  if (value.includes('win')) return 'Tauri Desktop (Windows)'
+  if (value.includes('linux') || value.includes('ubuntu') || value.includes('debian') || value.includes('fedora') || value.includes('arch')) {
+    return 'Tauri Desktop (Linux)'
+  }
+  if (value.includes('mac')) return 'Tauri Desktop (macOS)'
+  return 'Tauri Desktop'
+}
+
 /** 浏览器按 UA 区分网页和手机；桌面壳可以通过 onlineim.device_type 指定 desktop。 */
 export function detectDeviceType(uaDeviceType?: string | null, override?: string | null): DeviceType {
   return normalizeDeviceType(override) ?? (uaDeviceType === 'mobile' || uaDeviceType === 'tablet' || uaDeviceType === 'wearable'
@@ -118,14 +129,20 @@ export function buildDeviceLoginFields(options: {
   os?: string | null
   /** 桌面壳等可以另给名称，例如 localStorage 的 onlineim.device_name */
   clientName?: string | null
+  /** Tauri 运行时强制记为 desktop，并使用 Tauri Desktop (系统) 作为默认名称 */
+  shell?: 'tauri' | null
   storage?: Pick<Storage, 'getItem' | 'setItem'>
   random?: string
   now?: number
 } = {}): { device_id: string; device_type: DeviceType; device_name: string } {
-  const deviceType = detectDeviceType(options.uaDeviceType, options.override)
+  const tauri = options.shell === 'tauri'
+  const deviceType = tauri ? 'desktop' : detectDeviceType(options.uaDeviceType, options.override)
   const storage = options.storage ?? localStorage
   const deviceId = getOrCreateDeviceId(deviceType, storage, options.random, options.now)
   const supplied = sanitizeDeviceName(options.clientName)
+  const clientName = supplied && supplied !== deviceId
+    ? supplied
+    : (tauri ? tauriDesktopDeviceName(options.os) : null)
   return {
     device_id: deviceId,
     device_type: deviceType,
@@ -133,7 +150,7 @@ export function buildDeviceLoginFields(options: {
       deviceType,
       browser: options.browser,
       os: options.os,
-      clientName: supplied === deviceId ? null : supplied,
+      clientName,
     }),
   }
 }

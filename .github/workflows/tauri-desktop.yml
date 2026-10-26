@@ -1,0 +1,74 @@
+name: Tauri Desktop
+
+on:
+  push:
+    branches: [v1]
+    paths:
+      - "OnlineIM-Vue/**"
+      - ".github/workflows/tauri-desktop.yml"
+  pull_request:
+    branches: [v1]
+    paths:
+      - "OnlineIM-Vue/**"
+      - ".github/workflows/tauri-desktop.yml"
+  workflow_dispatch:
+
+jobs:
+  rust:
+    name: Rust tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: OnlineIM-Vue/src-tauri
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cargo test
+        run: cargo test
+      - name: Cargo check
+        run: cargo check
+
+  bundle:
+    name: Desktop bundle (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            bundles: msi,nsis
+          - os: ubuntu-latest
+            bundles: deb,appimage
+    defaults:
+      run:
+        working-directory: OnlineIM-Vue
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: OnlineIM-Vue/package-lock.json
+      - name: Install Linux system dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Build desktop bundles
+        run: npm run tauri:build -- --bundles ${{ matrix.bundles }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: onlineim-desktop-${{ matrix.os }}
+          if-no-files-found: error
+          path: |
+            OnlineIM-Vue/src-tauri/target/release/bundle/**/*.msi
+            OnlineIM-Vue/src-tauri/target/release/bundle/**/*.exe
+            OnlineIM-Vue/src-tauri/target/release/bundle/**/*.deb
+            OnlineIM-Vue/src-tauri/target/release/bundle/**/*.AppImage

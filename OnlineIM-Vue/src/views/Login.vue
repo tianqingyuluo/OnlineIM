@@ -13,6 +13,7 @@ import { useForm } from 'vee-validate'
 import * as z from 'zod'
 import { LoginService } from '@/services/login.service'
 import {LogIn } from 'lucide-vue-next'
+import ServerEndpointSettings from '@/components/settings/ServerEndpointSettings.vue'
 
 
 
@@ -69,6 +70,7 @@ const onSubmit = handleSubmit(async (values) => {
           </div>
           <span class="font-medium text-gray-800">用户登录</span>
         </div>
+        <ServerEndpointSettings />
       </div>
 
       <!-- 表单内容 -->

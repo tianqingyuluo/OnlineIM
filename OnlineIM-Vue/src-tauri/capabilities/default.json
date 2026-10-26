@@ -1,0 +1,15 @@
+{
+  "identifier": "default",
+  "description": "OnlineIM 桌面端默认权限",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-unminimize",
+    "core:window:allow-set-focus",
+    "core:window:allow-close",
+    "core:event:default",
+    "notification:default"
+  ]
+}

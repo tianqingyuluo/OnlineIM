@@ -12,9 +12,12 @@
     "test": "vitest run",
     "test:unit": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.8.0",
     "@tailwindcss/vite": "^4.1.1",
     "@vee-validate/zod": "^4.15.0",
     "@vueuse/core": "^13.2.0",
@@ -40,6 +43,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
+    "@tauri-apps/cli": "^2.8.0",
     "@types/lodash": "^4.17.17",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-vue": "^5.2.1",

@@ -1,0 +1,32 @@
+[package]
+name = "onlineim-desktop"
+version = "1.0.0"
+description = "OnlineIM 桌面客户端"
+authors = ["tianqingyuluo"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "onlineim_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "onlineim-desktop"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = ["tray-icon", "image-png", "image-ico"] }
+tauri-plugin-notification = "2"
+tauri-plugin-single-instance = "2"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

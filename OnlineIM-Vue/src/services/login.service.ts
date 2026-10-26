@@ -6,6 +6,7 @@ import router from "@/router";
 import { websocketService } from '@/services/websocket.service';
 import { UAParser } from 'ua-parser-js';
 import { buildDeviceLoginFields, rememberDeviceId, type DeviceType } from '@/utils/device-session';
+import { isTauriRuntime } from '@/services/tauri-bridge';
 
 export const LoginService = {
     validationRules: {
@@ -39,12 +40,14 @@ export const LoginService = {
         try {
             const parser = new UAParser;
             const uaResult = parser.getResult();
+            const tauri = isTauriRuntime();
             const device = buildDeviceLoginFields({
                 uaDeviceType: uaResult.device.type,
-                override: localStorage.getItem('onlineim.device_type'),
+                override: tauri ? null : localStorage.getItem('onlineim.device_type'),
                 browser: uaResult.browser.name,
                 os: uaResult.os.name,
                 clientName: localStorage.getItem('onlineim.device_name'),
+                shell: tauri ? 'tauri' : null,
             });
             const requestBody = {
                 ...credentials,

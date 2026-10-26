@@ -29,6 +29,11 @@ export const useListStore = defineStore('list', {
     blacklist: [] as BlacklistUser[],
     
   }),
+  getters: {
+    totalUnread(state): number {
+      return state.conversations.reduce((sum, conversation) => sum + (Number(conversation.unread_count) || 0), 0)
+    },
+  },
   actions: {
     async fetchUserData() {
       const userStore = useUserStore();
