@@ -6,6 +6,8 @@ import '../protocol/preview_text.dart';
 import '../protocol/protocol_engine.dart';
 import '../state/im_session.dart';
 import '../state/providers.dart';
+import '../widgets/friend_picker.dart';
+import '../widgets/group_settings_sheet.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/safety_number_sheet.dart';
 
@@ -79,6 +81,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             itemBuilder: (context) => [
               if (!group) CheckedPopupMenuItem(value: 'e2ee', checked: conversation?.e2eeEnabled == true, child: const Text('端到端加密')),
               if (!group) const PopupMenuItem(value: 'safety', child: Text('查看安全码')),
+              if (group) const PopupMenuItem(value: 'group-settings', child: Text('群设置')),
             ],
           ),
         ],
@@ -279,40 +282,20 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   Future<void> _forward(ImSession session, String messageId) async {
-    final targets = <String>[
-      for (final friend in session.friends) friend['friend_id']?.toString() ?? friend['user_id']?.toString() ?? '',
-      for (final group in session.groups) group['group_id']?.toString() ?? '',
-    ].where((id) => id.isNotEmpty).take(9).toList();
-    if (targets.isEmpty || !mounted) return;
-    String? selected;
-    await showDialog<void>(
+    final targets = <({String id, String label})>[
+      for (final friend in session.friends)
+        if (friendIdOf(friend).isNotEmpty) (id: friendIdOf(friend), label: friendLabelOf(friend)),
+      for (final group in session.groups)
+        if ((group['group_id']?.toString() ?? '').isNotEmpty)
+          (id: group['group_id'].toString(), label: group['name']?.toString().isNotEmpty == true ? group['name'].toString() : '群聊'),
+    ];
+    if (!mounted) return;
+    final selected = await showDialog<List<String>>(
       context: context,
-      builder: (context) => AlertDialog(
-        key: const Key('forward-dialog'),
-        title: const Text('转发到'),
-        content: SizedBox(
-          width: 280,
-          child: ListView(
-            shrinkWrap: true,
-            children: [
-              for (final target in targets)
-                ListTile(title: Text(target), onTap: () => selected = target),
-            ],
-          ),
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () async {
-              if (selected != null) {
-                await session.forward(sourceConversationId: widget.conversationId, messageIds: [messageId], targets: [selected!]);
-              }
-              if (context.mounted) Navigator.pop(context);
-            },
-            child: const Text('发送'),
-          ),
-        ],
-      ),
+      builder: (context) => _ForwardDialog(targets: targets),
     );
+    if (selected == null || selected.isEmpty) return;
+    await session.forward(sourceConversationId: widget.conversationId, messageIds: [messageId], targets: selected);
   }
 
   Future<void> _mention(ImSession session) async {
@@ -338,6 +321,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (value == 'e2ee') {
       final enabled = session.engine.conversations[widget.conversationId]?.e2eeEnabled == true;
       await session.toggleE2ee(widget.conversationId, !enabled);
+    }
+    if (!mounted) return;
+    if (value == 'group-settings') {
+      await showGroupSettings(
+        context,
+        session,
+        groupId: widget.conversationId,
+        name: session.engine.conversations[widget.conversationId]?.name,
+      );
     }
     if (value == 'safety') {
       final code = await session.safetyCode(widget.conversationId);
@@ -373,5 +365,65 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   String _callType(MessageRecord message) {
     if (message.content.contains('audio')) return 'audio';
     return 'video';
+  }
+}
+
+class _ForwardDialog extends StatefulWidget {
+  const _ForwardDialog({required this.targets});
+
+  final List<({String id, String label})> targets;
+
+  @override
+  State<_ForwardDialog> createState() => _ForwardDialogState();
+}
+
+class _ForwardDialogState extends State<_ForwardDialog> {
+  static const _maxTargets = 9;
+  final _selected = <String>[];
+
+  void _toggle(String id, bool checked) {
+    setState(() {
+      if (checked) {
+        if (_selected.length >= _maxTargets || _selected.contains(id)) return;
+        _selected.add(id);
+      } else {
+        _selected.remove(id);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      key: const Key('forward-dialog'),
+      title: const Text('转发到'),
+      content: SizedBox(
+        width: double.maxFinite,
+        height: 320,
+        child: widget.targets.isEmpty
+            ? const Center(child: Text('没有可转发的会话'))
+            : ListView(
+                children: [
+                  for (final target in widget.targets)
+                    CheckboxListTile(
+                      key: Key('forward-target-${target.id}'),
+                      value: _selected.contains(target.id),
+                      title: Text(target.label),
+                      controlAffinity: ListTileControlAffinity.leading,
+                      contentPadding: EdgeInsets.zero,
+                      onChanged: (checked) => _toggle(target.id, checked == true),
+                    ),
+                ],
+              ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+        FilledButton(
+          key: const Key('forward-send'),
+          onPressed: _selected.isEmpty ? null : () => Navigator.pop(context, List<String>.from(_selected)),
+          child: const Text('发送'),
+        ),
+      ],
+    );
   }
 }
