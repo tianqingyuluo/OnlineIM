@@ -3,7 +3,7 @@
   "name": "v1-release",
   "title": "OnlineIM v1 基础功能完整实现",
   "description": "v1 release 分支目标：在 v1 分支上完成 IM 全部基础功能闭环。父任务统一管理需求集、跨子任务验收标准、最终集成评审。子任务覆盖 A-E 五项提案功能 + 1-17 中除 15/17 外的全部增强项。每个子任务需与开发者探讨用户旅程，先写 e2e 测试，再补充单元/集成/UI 测试。15(举报审核)和17(i18n)排除在 v1 外。",
-  "status": "planning",
+  "status": "completed",
   "dev_type": null,
   "scope": null,
   "package": null,
@@ -11,7 +11,7 @@
   "creator": "tianqingyuluo",
   "assignee": "tianqingyuluo",
   "createdAt": "2026-06-26",
-  "completedAt": null,
+  "completedAt": "2026-10-26",
   "branch": "v1",
   "base_branch": "v1",
   "worktree_path": null,
@@ -42,6 +42,6 @@
   ],
   "parent": null,
   "relatedFiles": [],
-  "notes": "",
+  "notes": "2026-10-26 完成集成评审。发布说明见 README.md、docs/v1-deployment-guide.md、docs/v1-changelog.md。",
   "meta": {}
 }

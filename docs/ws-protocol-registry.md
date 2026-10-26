@@ -24,8 +24,9 @@
 | `MESSAGE_RECALLED` | S→C | 业务·撤回通知·兼容 | v1 | message-reply |
 | `EDIT_MESSAGE_REQUEST` | C→S | 业务·编辑 | v1 | message-edit |
 | `MESSAGE_EDITED` | S→C | 业务·编辑通知 | v1 | message-edit |
-| `NOTICE_MESSAGE_REQUEST` | C→S | 业务·发送 | v1 | — |
-| `NOTICE_MESSAGE` | S→C | 业务·接收 | v1 | — |
+| `NOTICE_MESSAGE_REQUEST` | C→S | 业务·发送·遗留 | v1 | 发送处理器直接返回 false，三端不发送 |
+| `NOTICE_MESSAGE` | Stream | 业务·遗留内部类型 | v1 | Redis Stream 类型名，不直接下发给客户端 |
+| `NOTICE_MESSAGE_RESPONSE` | S→C | 业务·接收·遗留 | v1 | `NoticeMessageReceiver` 把 `NOTICE_MESSAGE` 改写成此帧；Web / Tauri / Flutter 无专用界面 |
 | `SYNC_REQUEST` | C→S | 控制·上线补齐 | v1 | offline-push |
 | `OFFLINE_SYNC` | S→C | 控制·上线补齐 | v1 | offline-push |
 | `HEARTBEAT` | C→S | 控制·心跳 | v1 | ws-heartbeat-reconnect |
@@ -48,6 +49,32 @@
 | `CALL_END` | C→S→C | 业务·1v1 通话 | v1 | webrtc-video-call |
 | `CALL_HANGUP` | C→S→C | 业务·1v1 通话 | v1 | webrtc-video-call |
 | `CALL_HANDLED_ELSEWHERE` | S→C | 业务·1v1 通话 | v1 | webrtc-video-call |
+
+## 三端对齐（2026-10-26）
+
+Web 与 Tauri 共用 `OnlineIM-Vue` 的 WebSocket 客户端（`OnlineIM-Vue/src/services/websocket.service.ts` 及通话、加密 store）。Tauri 不另写协议栈。Flutter 的正式帧名在 `OnlineIM-Flutter/lib/protocol/frame_types.dart`，与上表一一对应。
+
+- **出站**：三端都发送 `{ "type": "<上表类型>", "message": { ... } }`。Flutter 出站只用登记名，不用下面的别名。
+- **入站别名**：只有 Flutter 会把旧名归一到登记名。Web / Tauri 只认登记名。
+
+| 入站别名（仅 Flutter） | 登记名 |
+|------------------------|--------|
+| `PING`、`HEARTBEAT_PING` | `HEARTBEAT` |
+| `PONG`、`HEARTBEAT_PONG` | `HEARTBEAT_ACK` |
+| `CLIENT_MESSAGE_SEND` | `PRIVATE_MESSAGE_REQUEST` |
+| `MESSAGE_RECEIVE` | `PRIVATE_MESSAGE_RESPONSE` |
+| `DELIVERED_ACK` | `RECEIPT` |
+| `READ_SYNC` | `READ_RECEIPT` |
+| `PRESENCE_EVENT` | `PRESENCE_UPDATE` |
+| `GROUP_ANNOUNCEMENT_EVENT` | `GROUP_ANNOUNCEMENT` |
+| `GROUP_ANNOUNCEMENT_READ_EVENT` | `GROUP_ANNOUNCEMENT_READ` |
+| `EDIT_MESSAGE_RESPONSE` | `MESSAGE_EDITED` |
+
+服务端不发送 `CONNECT_RESPONSE`。连接是否成功以 WebSocket 打开为准。Flutter 若收到该帧，只把它记成一次握手标记，不改变业务状态。
+
+心跳间隔：Web / Tauri 每 30 秒发送 `HEARTBEAT`；Flutter 每 25 秒发送。服务端 90 秒无入站帧则断开。两端都是连续两个本端周期没有 `HEARTBEAT_ACK` 就主动关闭（Web / Tauri 约 60 秒，Flutter 约 50 秒）。`HEARTBEAT_ACK.message.serverTime` 保持 camelCase，这是该帧的既有字段名。
+
+图片 / 文件的 `thumbnail_url`、语音 `duration_ms`、表情 `emoji_id`、通话信令与 E2EE 信封的字段，三端都按本文件对应章节解析，不另起一套键名。
 
 ## 引用回复协议
 
@@ -1237,7 +1264,7 @@ PUT /api/v1/e2ee/sessions/{targetUserId}
 
 - **方向**：客户端 → 服务端
 - **载荷**：`{}`（空对象）
-- **语义**：客户端每 30s 发送一次，用于应用层活性检测
+- **语义**：客户端周期发送，用于应用层活性检测。Web / Tauri 间隔 30s，Flutter 间隔 25s，都低于 90s 超时
 - **处理**：服务端收到后刷新 `WebSocketSession.lastActiveAt` + Redis `user:sessions:{userId}:{deviceId}` 的 `activeTime`，并给在线状态连接键 `presence:conn:{connectionId}` 续期（超时与 `websocket.heartbeat.timeout` 相同），回复 `HEARTBEAT_ACK`
 - **不持久化**、**不进 Redis Stream**、**不进业务 registry**
 - **兼容性**：旧客户端不发心跳 → 90s 后被服务端判死、强制断连 → 触发重连循环。v1 三端同步升级，可接受
@@ -1247,7 +1274,7 @@ PUT /api/v1/e2ee/sessions/{targetUserId}
 - **方向**：服务端 → 客户端
 - **载荷**：`{ "serverTime": <epoch_millis> }`
 - **语义**：纯活性回执。`serverTime` 用于诊断/时钟偏差
-- **客户端行为**：收到 ACK 重置“未收到 ACK 计数”。连续 2 周期（约 60s）未收到 → 判定连接已死，主动 `close()` 进入重连
+- **客户端行为**：收到 ACK 重置“未收到 ACK 计数”。连续 2 个本端周期未收到 → 判定连接已死，主动 `close()` 进入重连。Web / Tauri 约 60s，Flutter 约 50s
 
 ## 配置参数
 

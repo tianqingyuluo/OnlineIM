@@ -34,17 +34,23 @@
 
 跨孙任务的最终集成评审口径：
 
-- [ ] Tauri 桌面端在其目标平台可登录并完成 v1 全功能旅程
-- [ ] Flutter 安卓端在其目标设备可登录并完成 v1 全功能旅程
-- [ ] 三端协议实现一致，行为与 Web 端对齐（按各协议任务冻结结论）
-- [ ] 三端功能集一致（v1 全功能，无裁剪）
-- [ ] 三端原生能力（桌面通知/托盘/自启、安卓保活/推送/权限）按各自孙任务结论生效
-- [ ] 跨端协同正确：多端共存、消息投递一致性、已读回执同步、presence 聚合
-- [ ] 各孙任务自身验收标准全绿，且本父级集成评审通过
+- [x] Tauri 桌面端在其目标平台可登录并完成 v1 全功能旅程
+- [x] Flutter 安卓端在其目标设备可登录并完成 v1 全功能旅程
+- [x] 三端协议实现一致，行为与 Web 端对齐（按各协议任务冻结结论）
+- [x] 三端功能集一致（v1 全功能，无裁剪）
+- [x] 三端原生能力（桌面通知/托盘/自启、安卓保活/推送/权限）按各自孙任务结论生效
+- [x] 跨端协同正确：多端共存、消息投递一致性、已读回执同步、presence 聚合
+- [x] 各孙任务自身验收标准全绿，且本父级集成评审通过
+
+2026-10-26 集成评审（基线 `v1` @ `ca10bf1`）：
+
+- Tauri 桌面端 `d23df82`，[PR #25](https://github.com/tianqingyuluo/OnlineIM/pull/25)。复用 `OnlineIM-Vue`，不另写协议栈。Windows 产物为 `msi` / `nsis`，Linux 产物为 `deb` / `AppImage`。通知、托盘、单实例已落地；开机自启按孙任务结论延后。
+- Flutter 安卓端 `c3af0e2`，[PR #26](https://github.com/tianqingyuluo/OnlineIM/pull/26)，合入 `ca10bf1`。出站帧使用登记表正式名称，入站别名归一到同一名称。前台保活、通知以及麦克风 / 摄像头 / 存储权限按孙任务结论生效。
+- 协议以 `docs/ws-protocol-registry.md` 为准。`web` / `desktop` / `phone` 可同时在线，同类型挤下线走 `SESSION_KICKED`；消息、已读回执和 `PRESENCE_UPDATE` 按多连接扇出。
 
 ## 依赖
 
-- **v1 收尾里程碑**：建议在后端 API + WS 协议冻结后批量对接；当前所有 v1 协议任务仍处 planning，协议未冻结。
+- **v1 收尾里程碑**：后端 API 与 WS 协议已冻结在 `docs/ws-protocol-registry.md`，两个孙任务已按该清单对接并合入 `v1`。
 - 依赖 [[v1-ws-heartbeat-reconnect]]、[[v1-message-ack-read]]、[[v1-redis-stream-consumer-group]] 等地基任务完成。
 - 与 [[v1-multi-device-login]]、[[v1-user-presence]]、[[v1-offline-push]]、[[v1-webrtc-video-call]]、[[v1-e2ee]] 协同。
 - 依赖协议的细节（通知/保活/推送/WebRTC/E2EE 密钥存储）由各孙任务 PRD 逐项声明，不在此处臆造。
