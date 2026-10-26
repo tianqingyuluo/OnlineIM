@@ -384,13 +384,13 @@ class ImSession extends ChangeNotifier {
     required List<String> targets,
     String mode = 'separate',
   }) async {
-    final result = await api.forward({
-      'source_conversation_id': sourceConversationId,
-      'message_ids': messageIds,
-      'targets': targets,
-      'mode': mode,
-      'client_request_id': 'fwd_${_uuid.v4().replaceAll('-', '').substring(0, 16)}',
-    });
+    final result = await api.forwardMessages(
+      sourceConversationId: sourceConversationId,
+      messageIds: messageIds,
+      targetConversationIds: targets,
+      mode: mode,
+      clientRequestId: 'fwd_${_uuid.v4().replaceAll('-', '').substring(0, 16)}',
+    );
     final results = result['results'];
     if (results is List) {
       for (final item in results.whereType<Map>()) {

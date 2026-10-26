@@ -163,7 +163,31 @@ class ApiService {
     return _data('PUT', '/messages/${Uri.encodeComponent(messageId)}', body: body);
   }
 
-  Future<Map<String, dynamic>> forward(Map<String, dynamic> body) => _data('POST', '/messages/forward', body: body);
+  /// 转发消息。后端 [MessageForwardRequest] 只认 `targets`（好友 user_id 或群 group_id）。
+  /// 只传 `target_conversation_ids` 时服务端会返回 HTTP 400「请选择转发目标」。
+  /// 这里同时带上旧字段，避免网关或旧客户端只认会话列表键名。
+  Future<Map<String, dynamic>> forwardMessages({
+    required String sourceConversationId,
+    required List<String> messageIds,
+    required List<String> targetConversationIds,
+    String mode = 'separate',
+    String? clientRequestId,
+  }) {
+    return _data('POST', '/messages/forward', body: {
+      'source_conversation_id': sourceConversationId,
+      'message_ids': messageIds,
+      'targets': targetConversationIds,
+      'target_conversation_ids': targetConversationIds,
+      'mode': mode,
+      if (clientRequestId != null && clientRequestId.isNotEmpty) 'client_request_id': clientRequestId,
+    });
+  }
+
+  Future<Map<String, dynamic>> inviteToGroup(String groupId, List<String> userIds) {
+    return _data('POST', '/groups/${Uri.encodeComponent(groupId)}/invite', body: {
+      'user_ids': userIds,
+    });
+  }
 
   Future<Map<String, dynamic>> upload({required String type, required List<int> bytes, required String filename, int? durationMs}) async {
     final form = FormData.fromMap({

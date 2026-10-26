@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../protocol/conversation_id.dart';
 import '../protocol/protocol_engine.dart';
 import '../state/providers.dart';
+import '../widgets/friend_picker.dart';
+import '../widgets/group_settings_sheet.dart';
 
 class ContactsPage extends ConsumerStatefulWidget {
   const ContactsPage({super.key});
@@ -89,6 +91,17 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
               ListTile(
                 title: Text(group['name']?.toString() ?? '群聊'),
                 subtitle: Text('${group['member_count'] ?? ''}'),
+                trailing: IconButton(
+                  key: Key('group-settings-${group['group_id']}'),
+                  tooltip: '群设置',
+                  onPressed: () => showGroupSettings(
+                    context,
+                    session,
+                    groupId: group['group_id']?.toString() ?? '',
+                    name: group['name']?.toString(),
+                  ),
+                  icon: const Icon(Icons.settings_outlined),
+                ),
                 onTap: () {
                   final id = group['group_id']?.toString() ?? '';
                   session.engine.conversations[id] = ConversationRecord(conversationId: id, type: 'group', name: group['name']?.toString() ?? '群聊');
@@ -124,31 +137,18 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
   }
 
   Future<void> _createGroup(BuildContext context) async {
-    final name = TextEditingController();
-    final created = await showDialog<bool>(
+    final session = ref.read(imSessionProvider);
+    final created = await showDialog<({String name, List<String> members})>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('创建群聊'),
-        content: TextField(key: const Key('group-name'), controller: name, decoration: const InputDecoration(labelText: '群名称')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-          FilledButton(
-            key: const Key('group-create'),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('创建'),
-          ),
-        ],
-      ),
+      builder: (context) => _CreateGroupDialog(friends: session.friends),
     );
-    if (created == true && name.text.trim().isNotEmpty) {
-      final session = ref.read(imSessionProvider);
-      await session.api.createGroup(
-        name: name.text.trim(),
-        memberIds: [if (session.selfId.isNotEmpty) session.selfId],
-      );
-      await session.loadContacts();
-    }
-    name.dispose();
+    if (created == null || !context.mounted) return;
+    final members = <String>{
+      if (session.selfId.isNotEmpty) session.selfId,
+      ...created.members.where((id) => id.isNotEmpty && id != session.selfId),
+    };
+    await session.api.createGroup(name: created.name, memberIds: members.toList());
+    await session.loadContacts();
   }
 
   Future<void> _searchUser(BuildContext context) async {
@@ -175,5 +175,65 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
       ),
     );
     keyword.dispose();
+  }
+}
+
+class _CreateGroupDialog extends StatefulWidget {
+  const _CreateGroupDialog({required this.friends});
+
+  final List<Map<String, dynamic>> friends;
+
+  @override
+  State<_CreateGroupDialog> createState() => _CreateGroupDialogState();
+}
+
+class _CreateGroupDialogState extends State<_CreateGroupDialog> {
+  final _name = TextEditingController();
+  var _selected = <String>{};
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      key: const Key('create-group-dialog'),
+      title: const Text('创建群聊'),
+      content: SizedBox(
+        width: double.maxFinite,
+        height: 360,
+        child: Column(
+          children: [
+            TextField(key: const Key('group-name'), controller: _name, decoration: const InputDecoration(labelText: '群名称')),
+            const SizedBox(height: 8),
+            const Align(alignment: Alignment.centerLeft, child: Text('选择初始成员')),
+            Expanded(
+              child: FriendCheckList(
+                friends: widget.friends,
+                selected: _selected,
+                keyPrefix: 'group-member',
+                emptyText: '还没有可加入的好友',
+                onChanged: (next) => setState(() => _selected = next),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+        FilledButton(
+          key: const Key('group-create'),
+          onPressed: () {
+            final name = _name.text.trim();
+            if (name.isEmpty) return;
+            Navigator.pop(context, (name: name, members: _selected.toList()));
+          },
+          child: const Text('创建'),
+        ),
+      ],
+    );
   }
 }
