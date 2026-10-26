@@ -1,6 +1,7 @@
 import type { MessageResponse, ReplyReference } from '@/type/message'
 import { callPreviewText } from '@/utils/call-message'
 import { formatVoiceClock, parseMediaContent } from '@/utils/media-message'
+import { ENCRYPTED_PREVIEW, looksLikeEnvelope } from '@/utils/e2ee-message'
 
 const MAX_PREVIEW_CODE_POINTS = 80
 
@@ -45,14 +46,25 @@ export function buildReplyReference(message: MessageResponse): ReplyReference | 
       || message.sender_info.username
       || message.sender_info.user_id,
     message_type: message.message_type,
-    preview_text: getReplyPreviewText(
-      message.message_type,
-      typeof message.content === 'string' ? message.content : '',
-      parseMediaContent(message.message_type, message.content)?.name,
-      parseMediaContent(message.message_type, message.content)?.duration_ms,
-    ),
+    preview_text: replyPreviewOf(message),
     state: 'active',
   }
+}
+
+function replyPreviewOf(message: MessageResponse): string {
+  const content = typeof message.content === 'string' ? message.content : ''
+  if (message.e2ee_status === 'decrypted' && content && !looksLikeEnvelope(content)) {
+    return getReplyPreviewText(message.message_type, content)
+  }
+  if (message.e2ee_status === 'locked' || message.is_encrypted || looksLikeEnvelope(content) || looksLikeEnvelope(message.e2ee_envelope)) {
+    return ENCRYPTED_PREVIEW
+  }
+  return getReplyPreviewText(
+    message.message_type,
+    content,
+    parseMediaContent(message.message_type, message.content)?.name,
+    parseMediaContent(message.message_type, message.content)?.duration_ms,
+  )
 }
 
 function truncatePreview(value: string): string {

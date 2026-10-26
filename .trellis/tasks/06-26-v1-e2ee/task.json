@@ -2,8 +2,8 @@
   "id": "v1-e2ee",
   "name": "v1-e2ee",
   "title": "端到端加密(私聊可选)",
-  "description": "",
-  "status": "planning",
+  "description": "私聊可选端到端加密：客户端 ECDH P-256 + AES-GCM，服务端只存公钥与密文。",
+  "status": "completed",
   "dev_type": null,
   "scope": null,
   "package": null,
@@ -11,8 +11,8 @@
   "creator": "tianqingyuluo",
   "assignee": "tianqingyuluo",
   "createdAt": "2026-06-26",
-  "completedAt": null,
-  "branch": null,
+  "completedAt": "2026-10-26",
+  "branch": "cursor/e2ee-private-chat-72c9",
   "base_branch": "v1",
   "worktree_path": null,
   "commit": null,
@@ -20,7 +20,14 @@
   "subtasks": [],
   "children": [],
   "parent": "06-26-v1-release",
-  "relatedFiles": [],
-  "notes": "",
+  "relatedFiles": [
+    "onlineIM-server/src/main/java/icu/tianqingyuluo/onlineim/service/E2eeService.java",
+    "onlineIM-server/src/main/java/icu/tianqingyuluo/onlineim/controller/E2eeKeyController.java",
+    "onlineIM-server/src/main/java/icu/tianqingyuluo/onlineim/controller/E2eeSessionController.java",
+    "OnlineIM-Vue/src/crypto/e2ee.ts",
+    "OnlineIM-Vue/src/stores/e2ee.store.ts",
+    "docs/ws-protocol-registry.md"
+  ],
+  "notes": "v1 使用静态 ECDH P-256 + HKDF-SHA256 + AES-256-GCM，群聊与媒体不加密。",
   "meta": {}
 }

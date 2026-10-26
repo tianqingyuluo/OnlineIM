@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyCollection;
@@ -110,6 +111,30 @@ class MessageReplyServiceImplTest {
         MessageReplySnapshot snapshot = service.createSnapshot("grp_1", "msg_file", "usr_me");
 
         assertEquals("[文件] 报告.pdf", snapshot.getPreviewText());
+    }
+
+    @Test
+    void encryptedPrivateQuoteStoresPlaceholderInsteadOfCiphertext() {
+        when(conversationRepository.findByConversationIdAndUserId("conv_1", "usr_me"))
+                .thenReturn(Conversation.builder().id("conv_1").userId("usr_me").targetId("usr_peer").build());
+        PrivateMessage target = PrivateMessage.builder()
+                .id("msg_secret")
+                .conversationId("conv_1")
+                .senderId("usr_peer")
+                .messageType("text")
+                .content("{\"ciphertext\":\"秘密计划的密文\",\"iv\":\"abcd\",\"sender_key_id\":\"k\"}")
+                .isEncrypted(true)
+                .status(1)
+                .seqId("102")
+                .build();
+        when(privateMessageRepository.findByIdAndConversationId("msg_secret", "conv_1")).thenReturn(target);
+        when(userService.getUserBriefInfoByID("usr_peer")).thenReturn(UserBriefResponse.builder()
+                .userId("usr_peer").nickname("小明").build());
+
+        MessageReplySnapshot snapshot = service.createSnapshot("conv_1", "msg_secret", "usr_me");
+
+        assertEquals("[加密消息]", snapshot.getPreviewText());
+        assertFalse(snapshot.getPreviewText().contains("秘密计划"));
     }
 
     @Test

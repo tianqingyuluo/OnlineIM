@@ -333,10 +333,15 @@ export const dbService = {
       let changed = false;
       if (record.message_id === edited.message_id
         && (edited.content_revision ?? 1) >= (record.content_revision ?? 1)) {
-        record.content = edited.content;
+        record.content = edited.e2ee_envelope || edited.content;
         record.edited = true;
         record.edited_at = edited.edited_at ?? null;
         record.content_revision = edited.content_revision;
+        if (edited.is_encrypted) {
+          record.is_encrypted = true;
+          record.e2ee_envelope = edited.e2ee_envelope || edited.content;
+          delete record.e2ee_status;
+        }
         if (edited.at_users !== undefined) record.at_users = edited.at_users;
         changed = true;
       }

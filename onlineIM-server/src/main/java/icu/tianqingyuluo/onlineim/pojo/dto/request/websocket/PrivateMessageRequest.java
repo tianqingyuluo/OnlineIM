@@ -26,6 +26,10 @@ public class PrivateMessageRequest {
 
     private String content;        // 文本内容或媒体文件引用
 
+    /** 私聊文本的端到端加密标记。群聊请求没有这个字段。 */
+    @JsonProperty("is_encrypted")
+    private Boolean isEncrypted;
+
     @JsonProperty("client_message_id")
     private String clientMessageId;
 

@@ -42,6 +42,11 @@ import PresenceLabel from '@/components/common/PresenceLabel.vue'
 import { usePresenceStore } from '@/stores/presence'
 import { useCallStore } from '@/stores/call.store'
 import type { CallType } from '@/type/call'
+import E2eeSettings from '@/components/e2ee/E2eeSettings.vue'
+import E2eeLockedMessage from '@/components/e2ee/E2eeLockedMessage.vue'
+import E2eeVerifyDialog from '@/components/e2ee/E2eeVerifyDialog.vue'
+import E2eeKeyBackupDialog from '@/components/e2ee/E2eeKeyBackupDialog.vue'
+import { e2eeDialog, onE2eeKeysChanged, useE2eeStore } from '@/stores/e2ee.store'
 
 const route = useRoute()
 const userStore = useUserStore()
@@ -49,6 +54,7 @@ const listStore = useListStore()
 const historyStore = useHistoryStore()
 const presenceStore = usePresenceStore()
 const callStore = useCallStore()
+const e2eeStore = useE2eeStore()
 const emojiStore = useEmojiStore()
 const currentUser = ref<User | null>(null)
 const conversation = ref<Conversation | null>(null)
@@ -78,7 +84,17 @@ const loadedConversation = useLoadedConversation(id => historyStore.leaveConvers
 /** 转发：右键“转发”/“多选”，多选后逐条或合并转发 */
 const forward = reactive(useMessageForward(() => conversationId.value, () => historyStore.chatMessages))
 /** 编辑：右键“编辑”把原文放进输入框，回车 / 保存提交 */
-const edit = reactive(useMessageEdit(draft, () => userStore.loggedInUser.user_id, () => inputElement()?.focus()))
+const edit = reactive(useMessageEdit(draft, () => userStore.loggedInUser.user_id, () => inputElement()?.focus(), {
+  protectContent: async (content, state) => {
+    const original = historyStore.chatMessages.find(message => message.message_id === state.messageId)
+    return e2eeStore.protectEdit(
+      state.conversationId,
+      targetUserId.value,
+      content,
+      original?.is_encrypted === true || original?.e2ee_status === 'decrypted' || original?.e2ee_status === 'locked',
+    )
+  },
+}))
 const draftSync = useConversationDraft({
   conversationId,
   draft,
@@ -116,6 +132,17 @@ const targetUserId = computed(() =>
 watch(targetUserId, id => {
   if (id) void presenceStore.refresh([id]).catch(error => console.error('加载对方在线状态失败:', error))
 }, { immediate: true })
+
+watch([conversationId, targetUserId], ([id, peer]) => {
+  if (id && peer) void e2eeStore.bindConversation(id, peer)
+}, { immediate: true })
+
+let stopE2eeRefresh = () => {}
+onMounted(() => {
+  stopE2eeRefresh = onE2eeKeysChanged(() => {
+    void historyStore.redecryptVisible()
+  })
+})
 
 const deliveryLabels: Record<string, string> = {
   sending: '发送中',
@@ -233,6 +260,11 @@ function handleSaveEmoji(message: MessageResponse) {
 }
 
 async function beginEdit(message: MessageResponse) {
+  if (message.e2ee_status === 'locked') {
+    toast.error('当前设备无法解密这条消息，请先导入密钥')
+    e2eeStore.openBackup()
+    return
+  }
   if (!edit.isEditing) await draftSync.flush()
   edit.start(message)
 }
@@ -244,7 +276,20 @@ async function handleSendClick() {
   }
   const content = draft.value.trim()
   if (!content || !conversation.value) return
-  historyStore.sendMessage(conversation.value.conversation_id, targetUserId.value, 'text', content, false)
+  let wire = content
+  let encrypted = false
+  try {
+    const prepared = await e2eeStore.prepareOutgoingText(conversation.value.conversation_id, targetUserId.value, content)
+    wire = prepared.wire
+    encrypted = prepared.encrypted
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : '加密失败，消息未发送')
+    return
+  }
+  historyStore.sendMessage(conversation.value.conversation_id, targetUserId.value, 'text', wire, false, undefined, {
+    encrypted,
+    displayContent: content,
+  })
   draft.value = ''
   await draftSync.flush()
   await nextTick()
@@ -394,6 +439,7 @@ onUpdated(() => {
 })
 
 onBeforeUnmount(() => {
+  stopE2eeRefresh()
   messageObserver?.disconnect()
   visibleTimers.forEach(timer => clearTimeout(timer))
   visibleTimers.clear()
@@ -412,6 +458,7 @@ onBeforeUnmount(() => {
       <div class="min-w-0">
         <div class="text-lg font-semibold truncate">{{ currentUser.nickname || currentUser.username }}</div>
         <PresenceLabel :user-id="targetUserId" data-testid="chat-header-presence" />
+        <E2eeSettings compact :conversation-id="conversation.conversation_id" :peer-user-id="targetUserId" :peer-name="peerName" />
       </div>
       <div class="flex items-center gap-2">
         <button
@@ -495,7 +542,9 @@ onBeforeUnmount(() => {
           <div :class="['flex', isOwn(message) ? 'justify-end' : 'justify-start']">
             <div v-if="!isOwn(message)" class="flex items-start max-w-[80%]">
               <img :src="currentUser.avatar_url" :alt="currentUser.username" class="w-10 h-10 rounded-full mr-2 object-cover" />
+              <E2eeLockedMessage v-if="message.e2ee_status === 'locked'" @import="e2eeStore.openBackup()" />
               <UserTextArea
+                v-else
                 :message="message.content"
                 :message-type="message.message_type"
                 :is-self="false"
@@ -529,7 +578,9 @@ onBeforeUnmount(() => {
                   {{ stateLabel(message) }}
                 </span>
               </div>
+              <E2eeLockedMessage v-if="message.e2ee_status === 'locked'" @import="e2eeStore.openBackup()" />
               <UserTextArea
+                v-else
                 :message="message.content"
                 :message-type="message.message_type"
                 :is-self="true"
@@ -606,6 +657,13 @@ onBeforeUnmount(() => {
       @close="forward.closePicker()"
       @confirm="forward.confirm"
     />
+    <E2eeVerifyDialog
+      :open="e2eeDialog.verify"
+      :peer-user-id="e2eeDialog.peerUserId || targetUserId"
+      :peer-name="peerName"
+      @close="e2eeDialog.verify = false"
+    />
+    <E2eeKeyBackupDialog :open="e2eeDialog.backup" @close="e2eeDialog.backup = false" />
   </div>
   <div v-else class="flex flex-col items-center justify-center h-full gap-3 text-gray-500" data-testid="chat-loading">
     <template v-if="loadError">

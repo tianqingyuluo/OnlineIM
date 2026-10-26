@@ -278,4 +278,17 @@ class MessageSearchServiceIntegrationTest {
                 .append("messageType", "text")).sort(new Document("timestamp", -1)).explain();
         assertTrue(plan.toJson().contains("idx_search_conversation_type_time_id"));
     }
+
+    @Test
+    void skipsEncryptedCiphertextEvenWhenTheKeywordAppearsInsideIt() {
+        priv("msg_plain", AB, A, "text", "秘密计划在周五", 1);
+        PrivateMessage flagged = priv("msg_flag", AB, B, "text", "秘密计划", 1);
+        flagged.setIsEncrypted(true);
+        template.save(flagged);
+        priv("msg_envelope", AB, A, "text",
+                "{\"e2ee\":true,\"ciphertext\":\"秘密计划AAAA\",\"iv\":\"abcd\",\"sender_key_id\":\"k1\"}", 1);
+        grp("msg_group", G1, "群里的秘密计划");
+
+        assertEquals(List.of("msg_group", "msg_plain"), ids(search.search(A, "秘密计划", null, null, null)));
+    }
 }

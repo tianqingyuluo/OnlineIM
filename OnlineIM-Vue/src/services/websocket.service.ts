@@ -201,6 +201,11 @@ export class WebSocketService {
           case 'PRESENCE_UPDATE':
             usePresenceStore().applyUpdate(payload as unknown as PresenceUpdate);
             break;
+          case 'E2EE_STATE_CHANGED':
+            void import('@/stores/e2ee.store').then(({ useE2eeStore }) => {
+              useE2eeStore().applyRemoteState(payload as { conversation_id?: string, enabled?: boolean, updated_by?: string });
+            });
+            break;
           case 'OFFLINE_SYNC':
             void historyStore.applyOfflineSync(payload as unknown as OfflineSyncPayload);
             break;

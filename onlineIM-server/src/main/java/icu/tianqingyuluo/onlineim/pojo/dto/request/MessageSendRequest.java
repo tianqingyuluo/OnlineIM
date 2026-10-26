@@ -45,6 +45,13 @@ public class MessageSendRequest {
     private String content;
 
     /**
+     * 私聊文本是否已在客户端加密。为 true 时 content 必须是密文信封。
+     */
+    @JsonProperty("is_encrypted")
+    @JsonAlias("isEncrypted")
+    private Boolean isEncrypted;
+
+    /**
      * 引用的消息ID
      */
     @JsonProperty("reply_to_message_id")

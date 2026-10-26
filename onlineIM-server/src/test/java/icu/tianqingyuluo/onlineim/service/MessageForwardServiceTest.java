@@ -285,4 +285,17 @@ class MessageForwardServiceTest {
     void chatRecordPreviewIsShownInConversationList() {
         assertEquals("[聊天记录]", ConversationRecordService.preview("chat_record", "{\"title\":\"x\"}"));
     }
+
+    @Test
+    void encryptedPrivateMessageCannotBeForwarded() {
+        PrivateMessage secret = source("msg_secret", ME, "text",
+                "{\"ciphertext\":\"秘密计划\",\"iv\":\"abcd\",\"sender_key_id\":\"k\"}", "400", 1);
+        secret.setIsEncrypted(true);
+        privateSources.add(secret);
+        MessageForwardException error = assertThrows(MessageForwardException.class,
+                () -> service.forward(request(List.of("msg_secret"), List.of(FRIEND), null), ME));
+        assertEquals(HttpStatus.BAD_REQUEST, error.getStatus());
+        assertTrue(error.getMessage().contains("端到端加密"));
+        verify(privateRepo, never()).save(any());
+    }
 }

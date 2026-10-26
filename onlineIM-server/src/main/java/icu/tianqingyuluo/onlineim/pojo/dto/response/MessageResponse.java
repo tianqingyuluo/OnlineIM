@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.pojo.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -46,6 +47,13 @@ public class MessageResponse {
      * 消息内容
      */
     private Object content;
+
+    /**
+     * 私聊端到端加密。为 true 时 content 是密文，明文只存在于客户端。
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonProperty("is_encrypted")
+    private Boolean isEncrypted;
 
     @JsonProperty("reply_to")
     private ReplyReferenceResponse replyTo;

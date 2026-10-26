@@ -4,6 +4,7 @@ import icu.tianqingyuluo.onlineim.pojo.document.Conversation;
 import icu.tianqingyuluo.onlineim.pojo.document.ConversationReadState;
 import icu.tianqingyuluo.onlineim.pojo.document.GroupMessage;
 import icu.tianqingyuluo.onlineim.service.call.CallMessageTexts;
+import icu.tianqingyuluo.onlineim.util.E2eeEnvelope;
 import icu.tianqingyuluo.onlineim.util.MentionUtil;
 import icu.tianqingyuluo.onlineim.pojo.document.PrivateMessage;
 import lombok.extern.slf4j.Slf4j;
@@ -132,7 +133,7 @@ public class ConversationRecordService {
         }
         try {
             Conversation.LastMessage last = lastMessage(message.getId(), message.getMessageType(),
-                    message.getContent(), message.getTimestamp(), message.getSenderId());
+                    message.getContent(), message.getTimestamp(), message.getSenderId(), message.getIsEncrypted());
             Map<String, Conversation> existing = loadRecords(message.getConversationId(),
                     List.of(message.getSenderId(), message.getReceiverId()));
             BulkOperations bulk = mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, Conversation.class);
@@ -171,7 +172,7 @@ public class ConversationRecordService {
         }
         try {
             Conversation.LastMessage last = lastMessage(message.getId(), message.getMessageType(),
-                    message.getContent(), message.getTimestamp(), message.getSenderId());
+                    message.getContent(), message.getTimestamp(), message.getSenderId(), null);
             Map<String, Conversation> existing = loadRecords(message.getGroupId(), members);
             BulkOperations bulk = mongoTemplate.bulkOps(BulkOperations.BulkMode.UNORDERED, Conversation.class);
             Set<String> mentioned = MentionUtil.notifiedUserIds(message.getSenderId(), message.getAtUsers(), members);
@@ -442,6 +443,9 @@ public class ConversationRecordService {
     }
 
     static String preview(String messageType, String content) {
+        if (E2eeEnvelope.looksLikeEnvelope(content)) {
+            return E2eeEnvelope.PREVIEW;
+        }
         String type = messageType == null ? "" : messageType.toLowerCase();
         return switch (type) {
             case "text", "" -> {
@@ -499,12 +503,13 @@ public class ConversationRecordService {
     }
 
     private Conversation.LastMessage lastMessage(String messageId, String messageType, String content, Date timestamp,
-                                                 String senderId) {
+                                                 String senderId, Boolean encrypted) {
+        String shown = Boolean.TRUE.equals(encrypted) ? E2eeEnvelope.PREVIEW : preview(messageType, content);
         return Conversation.LastMessage.builder()
                 .messageId(messageId)
                 .senderId(senderId)
                 .messageType(messageType)
-                .content(preview(messageType, content))
+                .content(shown)
                 .timestamp(timestamp == null ? new Date() : timestamp)
                 .build();
     }

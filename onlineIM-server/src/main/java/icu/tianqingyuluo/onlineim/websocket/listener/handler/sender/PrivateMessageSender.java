@@ -18,6 +18,7 @@ import icu.tianqingyuluo.onlineim.service.FriendService;
 import icu.tianqingyuluo.onlineim.service.MessageReplyService;
 import icu.tianqingyuluo.onlineim.service.RedisStreamService;
 import icu.tianqingyuluo.onlineim.util.ConversationIdUtil;
+import icu.tianqingyuluo.onlineim.util.E2eeEnvelope;
 import icu.tianqingyuluo.onlineim.websocket.handler.WebSocketFrameSender;
 import icu.tianqingyuluo.onlineim.websocket.session.WebSocketSession;
 import lombok.extern.slf4j.Slf4j;
@@ -81,6 +82,10 @@ public class PrivateMessageSender implements MessageSenderHandler {
                     || !isConversationParticipant(request.getConversationId(), session.getUserId(), request.getReceiverId())) {
                 return false;
             }
+            boolean encrypted = E2eeEnvelope.isEncrypted(request.getIsEncrypted(), request.getContent());
+            if (encrypted && !"text".equalsIgnoreCase(request.getMessageType())) {
+                throw new IllegalArgumentException("端到端加密目前只支持文本消息");
+            }
 
             String senderId = session.getUserId();
             PrivateMessage existing = privateMessageRepository.findBySenderIdAndClientMessageId(
@@ -111,6 +116,7 @@ public class PrivateMessageSender implements MessageSenderHandler {
                 privateMessage.setContent(request.getContent());
             }
             chatMediaService.attachToConversation(privateMessage.getContent(), request.getConversationId());
+            privateMessage.setIsEncrypted(encrypted ? Boolean.TRUE : null);
             privateMessage.setReplyTo(replyTo);
             privateMessage.setContentRevision(1);
             privateMessage.setStatus(0);

@@ -5,6 +5,7 @@ import { useListStore } from '@/stores/list';
 import type { Conversation } from '@/type/Conversation';
 import { conversationService } from '@/services/conversation.service';
 import { blacklistService } from '@/services/blacklist.service';
+import E2eeSettings from '@/components/e2ee/E2eeSettings.vue';
 
 // 修改 props，同时接收 conversation 和 userId
 const props = defineProps<{
@@ -108,6 +109,11 @@ const handleBlockedChange = async (isBlocked: boolean) => {
       <span class="text-gray-500">消息免打扰</span>
       <Switch v-model="settings.isMuted" @update:modelValue="handleMutedChange"/>
     </div>
+    <E2eeSettings
+      :conversation-id="conversation.conversation_id"
+      :peer-user-id="String(userId)"
+      :peer-name="conversation.target_info?.name"
+    />
     <div class="flex items-center justify-between py-2 border-b border-gray-100">
       <span class="text-gray-500">屏蔽此人</span>
       <Switch v-model="settings.isBlocked" @update:modelValue="handleBlockedChange"/>

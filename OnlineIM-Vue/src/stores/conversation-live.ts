@@ -7,6 +7,7 @@ import { parseTimestamp, toServerTimestamp } from '@/utils/conversation-time'
 import { compareSeqId, maxSeqId } from '@/utils/seq-id'
 import { isRecalledMessage } from '@/utils/message-recall'
 import { callPreviewText } from '@/utils/call-message'
+import { ENCRYPTED_PREVIEW, looksLikeEnvelope } from '@/utils/e2ee-message'
 
 /**
  * 会话列表实时更新：收发消息、ACK、撤回、已读时立即修改侧栏（预览、时间、未读角标），
@@ -28,6 +29,11 @@ const PREVIEW_MAX_LENGTH = 100
 /** 与服务端 ConversationRecordService.preview 保持一致，刷新前后显示相同 */
 export function previewOfMessage(message: MessageResponse): string {
   if (message.is_recalled || String(message.status) === '3') return RECALLED_PREVIEW
+  const content = typeof message.content === 'string' ? message.content : ''
+  const stillCipher = looksLikeEnvelope(content)
+    || (message.is_encrypted === true && message.e2ee_status !== 'decrypted')
+    || message.e2ee_status === 'locked'
+  if (stillCipher) return ENCRYPTED_PREVIEW
   switch ((message.message_type || 'text').toLowerCase()) {
     case 'text':
     case '': {

@@ -22,6 +22,7 @@ import { compareSeqId, maxSeqId } from '@/utils/seq-id';
 import { buildReplyReference } from '@/utils/reply-preview';
 import { toServerTimestamp } from '@/utils/conversation-time';
 import { isNewerRevision } from '@/utils/message-edit';
+import { hydrateReplyPreviews, LOCKED_TEXT, looksLikeEnvelope, needsDecrypt } from '@/utils/e2ee-message';
 import {
   applyOfflineConversations,
   hasMentionMark,
@@ -58,6 +59,9 @@ interface PendingMessageInfoItem {
   isGroup: boolean;
   atUsers?: string[];
   replyTo?: ReplyReference;
+  /** 加密发送时 content 是线上密文，displayContent 是本机明文（失败重发草稿用） */
+  displayContent?: string;
+  encrypted?: boolean;
   attempts: number;
   state: DeliveryState;
   timeoutId?: ReturnType<typeof setTimeout>;
@@ -242,7 +246,8 @@ export const useHistoryStore = defineStore('history', {
           }
         }
 
-        this.processMessages(messages, isGroup, beforeSeqId);
+        const revealed = await this.revealForDisplay(messages);
+        this.processMessages(revealed, isGroup, beforeSeqId);
         await this.refreshReadState(conversationId);
         this.updateLoadState(hasMore);
       } catch (error) {
@@ -381,12 +386,26 @@ export const useHistoryStore = defineStore('history', {
       if (!messages.length) return;
       const existing = isGroup ? this.groupMessages : this.chatMessages;
       const merged = new Map<string, MessageResponse>();
-      for (const message of [...existing, ...messages]) {
+        for (const message of [...existing, ...messages]) {
         const normalized = normalizeMessage(message);
         const key = normalized.client_message_id || normalized.message_id;
-        merged.set(key, normalized);
+        const previous = merged.get(key);
+        if (previous?.e2ee_status === 'decrypted' && needsDecrypt(normalized)) {
+          merged.set(key, {
+            ...normalized,
+            content: previous.content,
+            is_encrypted: true,
+            e2ee_status: 'decrypted',
+            e2ee_envelope: normalized.e2ee_envelope
+              || (looksLikeEnvelope(normalized.content) ? normalized.content : previous.e2ee_envelope),
+          });
+        } else {
+          merged.set(key, normalized);
+        }
       }
-      const sorted = [...merged.values()].sort((left, right) => compareSeqId(left.seq_id, right.seq_id));
+      const sorted = hydrateReplyPreviews(
+        [...merged.values()].sort((left, right) => compareSeqId(left.seq_id, right.seq_id)),
+      );
       if (isGroup) this.groupMessages = sorted;
       else this.chatMessages = sorted;
 
@@ -456,10 +475,13 @@ export const useHistoryStore = defineStore('history', {
       content: string,
       isGroup: boolean,
       atUsers?: string[],
+      transport?: { encrypted?: boolean, displayContent?: string },
     ): string {
       const clientId = this.generateClientId();
       const timestamp = toServerTimestamp();
       const currentUser = useUserStore().loggedInUser;
+      const encrypted = !isGroup && transport?.encrypted === true;
+      const visible = encrypted ? (transport?.displayContent ?? content) : content;
       const replyTo = this.replyTarget?.conversationId === conversationId
         ? { ...this.replyTarget.reference }
         : undefined;
@@ -473,13 +495,18 @@ export const useHistoryStore = defineStore('history', {
           avatar_url: currentUser.avatar_url,
         },
         message_type: messageType,
-        content,
+        content: visible,
         timestamp,
         seq_id: '0',
         status: 0,
         delivery_state: 'sending',
         is_recalled: false,
         client_message_id: clientId,
+        ...(encrypted ? {
+          is_encrypted: true,
+          e2ee_status: 'decrypted' as const,
+          e2ee_envelope: content,
+        } : {}),
         ...(isGroup && atUsers?.length ? { at_users: atUsers } : {}),
         reply_to: replyTo,
       };
@@ -490,6 +517,8 @@ export const useHistoryStore = defineStore('history', {
       const item: PendingMessageInfoItem = {
         clientId,
         content,
+        displayContent: encrypted ? visible : undefined,
+        encrypted,
         messageType,
         timestamp,
         createAt: timestamp,
@@ -519,6 +548,7 @@ export const useHistoryStore = defineStore('history', {
             message_type: messageType,
             content,
             client_message_id: clientId,
+            ...(encrypted ? { is_encrypted: true } : {}),
             ...(replyTo ? { reply_to_message_id: replyTo.message_id } : {}),
           };
       websocketService.sendMessage({
@@ -541,9 +571,12 @@ export const useHistoryStore = defineStore('history', {
         return;
       }
 
+      const encrypted = !isGroup && (message.is_encrypted === true || !!message.e2ee_envelope);
       const item: PendingMessageInfoItem = {
         clientId: message.client_message_id,
-        content: message.content,
+        content: encrypted && message.e2ee_envelope ? message.e2ee_envelope : message.content,
+        displayContent: message.e2ee_status === 'decrypted' ? message.content : undefined,
+        encrypted,
         messageType: message.message_type,
         timestamp: toServerTimestamp(),
         createAt: message.timestamp,
@@ -568,17 +601,81 @@ export const useHistoryStore = defineStore('history', {
     handleIncomingMessage(message: MessageResponse, isGroup: boolean, atMe?: boolean, atAll?: boolean) {
       const normalized = normalizeMessage(message);
       const existing = this.findMessage(normalized.client_message_id, normalized.message_id);
-      if (existing) {
+      if (existing?.e2ee_status === 'decrypted' && needsDecrypt(normalized)) {
+        this.keepLocalPlaintext(existing, normalized, isGroup, atMe, atAll);
+        return;
+      }
+      if (!needsDecrypt(normalized)) {
+        this.commitIncoming(normalized, isGroup, atMe, atAll);
+        return;
+      }
+      void this.revealForDisplay([normalized]).then(([revealed]) => {
+        const current = this.findMessage(revealed.client_message_id, revealed.message_id);
+        if (current?.e2ee_status === 'decrypted' && revealed.e2ee_status !== 'decrypted') {
+          this.keepLocalPlaintext(current, revealed, isGroup, atMe, atAll);
+          return;
+        }
+        this.commitIncoming(revealed, isGroup, atMe, atAll);
+      }).catch(error => console.error('解密实时消息失败:', error));
+    },
+
+    keepLocalPlaintext(
+      existing: MessageResponse,
+      incoming: MessageResponse,
+      isGroup: boolean,
+      atMe?: boolean,
+      atAll?: boolean,
+    ) {
+      const envelope = incoming.e2ee_envelope
+        || (looksLikeEnvelope(incoming.content) ? incoming.content : existing.e2ee_envelope);
+      Object.assign(existing, {
+        ...incoming,
+        content: existing.content,
+        is_encrypted: true,
+        e2ee_status: 'decrypted',
+        e2ee_envelope: envelope,
+      });
+      this.commitIncoming(existing, isGroup, atMe, atAll);
+    },
+
+    commitIncoming(normalized: MessageResponse, isGroup: boolean, atMe?: boolean, atAll?: boolean) {
+      const existing = this.findMessage(normalized.client_message_id, normalized.message_id);
+      if (existing && existing !== normalized) {
         Object.assign(existing, normalized);
-      } else if (normalized.conversation_id === this.activeConversationId) {
+      } else if (!existing && normalized.conversation_id === this.activeConversationId) {
         // 只有当前打开的会话才放进消息列表；其他会话的消息只更新侧栏并写入本地缓存，
         // 否则会混进正在查看的聊天窗口
         this.processMessages([normalized], isGroup);
       }
-      onConversationMessage(normalized, this.activeConversationId, atMe, atAll);
-      void dbService.putHistory([normalized])
-        .then(() => this.sendDeliveredReceipts([normalized]))
+      const shown = existing && existing !== normalized ? existing : normalized;
+      onConversationMessage(shown, this.activeConversationId, atMe, atAll);
+      void dbService.putHistory([wireCopy(shown)])
+        .then(() => this.sendDeliveredReceipts([shown]))
         .catch(error => console.error('保存实时消息失败:', error));
+    },
+
+    /** 明文消息原样返回；只有带密文信封的才动态加载密钥库，避免普通消息测试拉起加密模块。 */
+    async revealForDisplay(messages: MessageResponse[]): Promise<MessageResponse[]> {
+      if (!messages.some(needsDecrypt)) return hydrateReplyPreviews(messages);
+      const { useE2eeStore } = await import('@/stores/e2ee.store');
+      return useE2eeStore().revealMessages(messages);
+    },
+
+    async redecryptVisible(): Promise<void> {
+      const visible = [...this.chatMessages, ...this.groupMessages];
+      if (!visible.some(needsDecrypt)) {
+        hydrateReplyPreviews(this.chatMessages);
+        hydrateReplyPreviews(this.groupMessages);
+        return;
+      }
+      const revealed = await this.revealForDisplay(visible);
+      for (const message of revealed) {
+        const existing = this.findMessage(message.client_message_id, message.message_id);
+        if (existing) Object.assign(existing, message);
+        if (message.e2ee_status) onConversationEdit(message.conversation_id, existing || message);
+      }
+      hydrateReplyPreviews(this.chatMessages);
+      hydrateReplyPreviews(this.groupMessages);
     },
 
     async sendDeliveredReceipts(messages: MessageResponse[]) {
@@ -677,6 +774,7 @@ export const useHistoryStore = defineStore('history', {
             message_type: item.messageType,
             content: item.content,
             client_message_id: item.clientId,
+            ...(item.encrypted ? { is_encrypted: true } : {}),
             ...(item.replyTo ? { reply_to_message_id: item.replyTo.message_id } : {}),
           };
       websocketService.sendMessage({
@@ -749,7 +847,8 @@ export const useHistoryStore = defineStore('history', {
         || (this.activeConversationId === conversationId && this.activeConversationIsGroup);
       const cached = await dbService.getHistoryMessage(userId, conversationId, messageId);
       if (cached) {
-        this.processMessages([cached], isGroup);
+        const [revealed] = await this.revealForDisplay([cached]);
+        this.processMessages([revealed], isGroup);
         return this.messagesForConversation(conversationId)
           .find(message => message.message_id === messageId) || null;
       }
@@ -757,7 +856,7 @@ export const useHistoryStore = defineStore('history', {
       const context = await MessageService.getMessageContext(conversationId, messageId);
       if (context.messages.length > 0) {
         await dbService.putHistory(context.messages);
-        this.processMessages(context.messages, isGroup);
+        this.processMessages(await this.revealForDisplay(context.messages), isGroup);
       }
       return this.messagesForConversation(conversationId)
         .find(message => message.message_id === messageId) || null;
@@ -770,6 +869,11 @@ export const useHistoryStore = defineStore('history', {
      */
     async handleMessageEdited(edited: MessageResponse, atMe?: boolean, atAll?: boolean): Promise<void> {
       if (!edited?.message_id || !edited.conversation_id) return;
+      const incoming = edited;
+      if (needsDecrypt(incoming)) {
+        const [revealed] = await this.revealForDisplay([normalizeMessage(incoming)]);
+        edited = revealed;
+      }
       const me = useUserStore().loggedInUser.user_id;
       const mentioned = (ids?: string[] | null) => !!me && !!ids && (ids.includes(me) || ids.includes('all'));
       const personally = (ids?: string[] | null) => !!me && !!ids && ids.includes(me);
@@ -781,6 +885,9 @@ export const useHistoryStore = defineStore('history', {
           const before = mentioned(message.at_users);
           const beforePersonal = personally(message.at_users);
           message.content = edited.content;
+          message.is_encrypted = edited.is_encrypted;
+          message.e2ee_status = edited.e2ee_status;
+          message.e2ee_envelope = edited.e2ee_envelope;
           message.edited = true;
           message.edited_at = edited.edited_at ?? null;
           message.content_revision = edited.content_revision;
@@ -798,13 +905,17 @@ export const useHistoryStore = defineStore('history', {
         && this.replyTarget.reference.state === 'active') {
         this.replyTarget.reference = { ...this.replyTarget.reference, state: 'edited' };
       }
+      hydrateReplyPreviews(this.messagesForConversation(edited.conversation_id));
       onConversationEdit(edited.conversation_id, edited);
       // @我 变化（被新 @ 或不再被 @）以服务端会话记录为准
       if (mentionChanged && edited.sender_info?.user_id !== me) {
         scheduleConversationRefresh(edited.conversation_id, 600);
       }
       try {
-        await dbService.applyMessageEdit(me, edited);
+        const stored = edited.e2ee_envelope
+          ? { ...edited, content: edited.e2ee_envelope, e2ee_status: undefined, is_encrypted: true as const }
+          : incoming;
+        await dbService.applyMessageEdit(me, stored);
       } catch (error) {
         console.warn('更新本地缓存的编辑失败:', error);
       }
@@ -835,8 +946,10 @@ export const useHistoryStore = defineStore('history', {
           if (payload.recall_operator_role) message.recall_operator_role = payload.recall_operator_role
           // 自己撤回的文本才提供“重新编辑”；管理员撤回我的消息不算
           const recalledByMe = payload.recall_user_id ? payload.recall_user_id === me : message.sender_info?.user_id === me
+          const lockedPlaceholder = message.e2ee_status === 'locked' || message.content === LOCKED_TEXT;
           if (recalledByMe && message.sender_info?.user_id === me && (message.message_type || 'text').toLowerCase() === 'text'
-            && typeof message.content === 'string' && message.content && !this.recalledOriginals[message.message_id]) {
+            && typeof message.content === 'string' && message.content && !lockedPlaceholder
+            && !this.recalledOriginals[message.message_id]) {
             this.recalledOriginals[message.message_id] = {
               conversationId: payload.conversation_id,
               content: message.content,
@@ -943,7 +1056,7 @@ export const useHistoryStore = defineStore('history', {
         clientId: pending.clientId,
         conversationId: pending.conversationId,
         receiverId: pending.receiverId,
-        content: pending.content,
+        content: pending.displayContent ?? pending.content,
         messageType: pending.messageType,
         isGroup: pending.isGroup,
         atUsers: pending.atUsers,
@@ -1259,28 +1372,39 @@ export const useHistoryStore = defineStore('history', {
       const normalized = normalizeMessage(message);
       const isGroup = normalized.conversation_id.startsWith('grp_')
         || (normalized.conversation_id === this.activeConversationId && this.activeConversationIsGroup);
-      const existing = this.findMessage(normalized.client_message_id, normalized.message_id);
-      if (existing) {
-        if (normalized.is_recalled || String(normalized.status) === '3') {
-          await this.handleMessageRecalled({
-            message_id: normalized.message_id,
-            conversation_id: normalized.conversation_id,
-            recall_user_id: normalized.sender_info?.user_id,
-            seq_id: normalized.seq_id,
-          }, { adjustUnread: false });
-        } else if (normalized.edited) {
-          await this.handleMessageEdited(normalized);
-        } else {
-          Object.assign(existing, normalized);
-        }
-      } else if (normalized.conversation_id === this.activeConversationId) {
-        this.processMessages([normalized], isGroup);
-      }
       try {
-        if (options.cache !== false) await dbService.putHistory([normalized]);
-        await this.sendDeliveredReceipts([normalized]);
+        if (options.cache !== false) await dbService.putHistory([wireCopy(normalized)]);
       } catch (error) {
         console.error('保存补齐消息失败:', error);
+      }
+      const [revealed] = await this.revealForDisplay([normalized]);
+      const existing = this.findMessage(revealed.client_message_id, revealed.message_id);
+      if (existing?.e2ee_status === 'decrypted' && needsDecrypt(normalized)) {
+        this.keepLocalPlaintext(existing, revealed, isGroup);
+      } else if (existing) {
+        if (revealed.is_recalled || String(revealed.status) === '3') {
+          await this.handleMessageRecalled({
+            message_id: revealed.message_id,
+            conversation_id: revealed.conversation_id,
+            recall_user_id: revealed.sender_info?.user_id,
+            seq_id: revealed.seq_id,
+          }, { adjustUnread: false });
+        } else if (revealed.edited) {
+          await this.handleMessageEdited(revealed);
+        } else {
+          Object.assign(existing, revealed);
+          onConversationMessage(existing, this.activeConversationId);
+        }
+      } else if (revealed.conversation_id === this.activeConversationId) {
+        this.processMessages([revealed], isGroup);
+        onConversationMessage(revealed, this.activeConversationId);
+      } else {
+        onConversationMessage(revealed, this.activeConversationId);
+      }
+      try {
+        await this.sendDeliveredReceipts([revealed]);
+      } catch (error) {
+        console.error('补齐消息回执失败:', error);
       }
     },
 
@@ -1295,9 +1419,9 @@ export const useHistoryStore = defineStore('history', {
         }
         const missed = await MessageService.syncMessages(this.activeConversationId, maxSeqId);
         if (missed.length > 0) {
-          await dbService.putHistory(missed);
+          await dbService.putHistory(missed.map(wireCopy));
           await this.sendDeliveredReceipts(missed);
-          this.processMessages(missed, this.activeConversationIsGroup);
+          this.processMessages(await this.revealForDisplay(missed), this.activeConversationIsGroup);
         }
         await this.refreshReadState(this.activeConversationId);
       } catch (error) {
@@ -1328,6 +1452,18 @@ export const useHistoryStore = defineStore('history', {
     },
   },
 });
+
+/** 本地缓存只留密文。已经解开的气泡把信封写回 content，避免明文进 IndexedDB。 */
+function wireCopy(message: MessageResponse): MessageResponse {
+  if (!message.e2ee_envelope) return message;
+  if (message.e2ee_status !== 'decrypted' && message.e2ee_status !== 'locked') return message;
+  return {
+    ...message,
+    content: message.e2ee_envelope,
+    is_encrypted: true,
+    e2ee_status: undefined,
+  };
+}
 
 function normalizeDeliveryState(state: DeliveryState | undefined): DeliveryState {
   return state || 'sent';

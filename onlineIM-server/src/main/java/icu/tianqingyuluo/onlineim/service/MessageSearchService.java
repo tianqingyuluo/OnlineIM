@@ -9,6 +9,7 @@ import icu.tianqingyuluo.onlineim.pojo.dto.response.GroupBriefResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.GroupResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageSearchResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserResponse;
+import icu.tianqingyuluo.onlineim.util.E2eeEnvelope;
 import icu.tianqingyuluo.onlineim.util.SearchSnippet;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Sort;
@@ -39,6 +40,7 @@ import java.util.regex.Pattern;
  *
  * <p>检索：关键字去首尾空白后按字面量转义为正则，忽略大小写的子串匹配（中文无需分词）；
  * 先用 (conversationId|groupId, messageType, timestamp) 索引圈定会话与类型，再在这些消息上做正则过滤。
+ * 端到端加密消息（is_encrypted 或密文信封）不参与匹配，避免 Base64 密文被当成明文命中。
  * 结果按时间倒序，游标分页（游标 = 最后一条的 时间毫秒:消息ID）。</p>
  */
 @Slf4j
@@ -93,12 +95,18 @@ public class MessageSearchService {
         if (!privateIds.isEmpty()) {
             for (PrivateMessage message : mongoTemplate.find(
                     pageQuery("conversationId", privateIds, regex, after, pageSize + 1), PrivateMessage.class)) {
+                if (E2eeEnvelope.isEncrypted(message.getIsEncrypted(), message.getContent())) {
+                    continue;
+                }
                 hits.add(new Hit(message.getTimestamp(), message.getId(), message, null));
             }
         }
         if (!groupIds.isEmpty()) {
             for (GroupMessage message : mongoTemplate.find(
                     pageQuery("groupId", groupIds, regex, after, pageSize + 1), GroupMessage.class)) {
+                if (E2eeEnvelope.looksLikeEnvelope(message.getContent())) {
+                    continue;
+                }
                 hits.add(new Hit(message.getTimestamp(), message.getId(), null, message));
             }
         }
@@ -156,6 +164,7 @@ public class MessageSearchService {
                 Criteria.where("messageType").is(TEXT),
                 Criteria.where("status").ne(RECALLED),
                 Criteria.where("content").regex(regex, "i"),
+                E2eeEnvelope.notEncryptedCriteria(),
                 after == null ? new Criteria() : new Criteria().orOperator(
                         Criteria.where("timestamp").lt(after.timestamp()),
                         new Criteria().andOperator(

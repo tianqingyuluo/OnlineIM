@@ -34,6 +34,7 @@
 | `SESSION_KICKED` | S→C | 控制·会话 | v1 | multi-device-login |
 | `ERROR` | S→C | 控制·错误 | v1 | — |
 | `DRAFT_UPDATED` | S→C | 业务·草稿 | v1 | draft-sync |
+| `E2EE_STATE_CHANGED` | S→C | 业务·私聊端到端加密 | v1 | e2ee |
 | `GROUP_ANNOUNCEMENT` | S→C | 业务·群公告 | v1 | group-at-all-announce-read |
 | `GROUP_ANNOUNCEMENT_READ` | S→C | 业务·群公告已读 | v1 | group-at-all-announce-read |
 | `CALL_INVITE` | C→S→C | 业务·1v1 通话 | v1 | webrtc-video-call |
@@ -1114,6 +1115,121 @@ GET /api/v1/calls/ice-servers
 | `busy` | `[对方忙线]` | `[对方忙线]` |
 
 时长格式为 `mm:ss`。`client_message_id` 等于 `call_id`，重复终态不会再落一条。点击会话里的通话气泡按原来的 `call_type` 重拨。
+
+## 私聊可选端到端加密（v1）
+
+仅私聊。群聊发送或编辑带 `is_encrypted` / 密文信封时，服务端拒绝。图片、文件、语音、视频、表情不加密。
+
+客户端用 Web Crypto 生成两把 P-256 密钥：ECDH 身份密钥（密钥协商）和 ECDSA 签名密钥。私钥只留在本机，服务端只保存公钥包。算法名固定为 `ECDH-P256+ECDSA-P256`。指纹是身份公钥 SPKI 字节的 SHA-256，小写十六进制；上传时服务端按同一规则校验，不一致则拒绝。
+
+v1 不是 Signal / 双棘轮。双方用身份公钥做静态 ECDH，再用 HKDF-SHA256 派生 AES-256-GCM 密钥。每条消息带新的 16 字节 salt、12 字节 IV，以及一把临时 ECDH 公钥（SPKI）。临时私钥用完即丢，解密不需要它：它的 SPKI 字节只混进 HKDF 的 info。双方只要持有自己的身份私钥和对方的身份公钥，就能解开历史消息。
+
+HKDF：
+
+- ikm：ECDH 共享秘密（256 bit）
+- salt：信封里的 16 字节 salt
+- info：UTF-8 `OnlineIM-E2EE-v1|{counter}|` 再拼接临时公钥 SPKI 字节
+- 输出：AES-256-GCM
+
+### 公钥目录
+
+需要登录。读取别人的公钥还必须是好友；读自己的公钥允许。对方还没上传时 `404`。
+
+```http
+PUT /api/v1/e2ee/keys
+GET /api/v1/e2ee/keys/{userId}
+```
+
+```json
+{
+  "user_id": "usr_a",
+  "key_id": "key_0123abcd",
+  "identity_public_key": "<SPKI base64>",
+  "signing_public_key": "<SPKI base64>",
+  "algorithm": "ECDH-P256+ECDSA-P256",
+  "fingerprint": "<sha256 hex>",
+  "updated_at": 1710000000000
+}
+```
+
+请求体字段用 snake_case：`identity_public_key`、`signing_public_key`、`key_id`、`algorithm`、`fingerprint`。未知字段（包括误传的私钥）会被忽略。`key_id` 为 1–64 位 `[A-Za-z0-9_-]`。客户端可以用签名私钥对指纹做 ECDSA（Web Crypto P1363）；v1 服务端不校验该签名。
+
+### 会话开关
+
+```http
+GET /api/v1/conversations/{conversationId}/e2ee
+PUT /api/v1/conversations/{conversationId}/e2ee
+PUT /api/v1/e2ee/sessions/{targetUserId}
+```
+
+`PUT` 体：`{ "enabled": true }`。会话必须是私聊 `conv_`，双方已是好友，且都已上传公钥，否则不能开启。成功后向双方当前在线设备推送：
+
+```json
+{
+  "type": "E2EE_STATE_CHANGED",
+  "message": {
+    "conversation_id": "conv_usr_a_usr_b",
+    "enabled": true,
+    "updated_by": "usr_a",
+    "updated_at": 1710000000000
+  }
+}
+```
+
+### 密文信封
+
+开启后，文本（含回复正文）在客户端加密。WebSocket `PRIVATE_MESSAGE_REQUEST` / HTTP 发送 / `EDIT_MESSAGE_REQUEST` 带 `is_encrypted: true`，`content` 是下面的 JSON 字符串。服务端原样写入 MongoDB，不解密。
+
+```json
+{
+  "e2ee": true,
+  "version": 1,
+  "ciphertext": "<base64>",
+  "iv": "<12 字节 base64>",
+  "sender_key_id": "key_sender",
+  "recipient_key_id": "key_recipient",
+  "ephemeral_public_key": "<临时公钥 SPKI base64>",
+  "salt": "<16 字节 base64>",
+  "counter": 1
+}
+```
+
+未加密消息不带 `is_encrypted` 字段（`null` 不出现在 JSON 里）。
+
+服务端看到 `is_encrypted: true`，或 `content` 同时含非空 `ciphertext` 与 `iv` 时：
+
+- 会话 `last_message` 预览写成 `[加密消息]`，不存明文。
+- 引用快照的 `preview_text` 写成 `[加密消息]`。客户端只提交 `reply_to_message_id`，在本地把占位符换成已解密的原文。
+- `GET /api/v1/messages/search` 跳过这些消息，避免 base64 被当成明文命中。
+- 转发直接拒绝：`400`，文案「端到端加密消息不能转发，请在原会话中查看」。
+- 编辑加密消息时重新加密；即使后来关掉了会话开关，原先的密文也不能改成明文上传。密文长度上限放宽到 `max(编辑长度上限 × 8, 65536)`。
+- 撤回、ACK、送达和已读回执不读正文，行为与明文消息相同。撤回后的预览仍是 `[消息已撤回]`。
+
+本机解不开时，界面显示 `🔒 [加密消息 · 当前设备无密钥，请导入密钥恢复]`，并提供导入入口。
+
+### 密钥备份与多端存储
+
+备份文件是口令加密的 JSON，算法 PBKDF2-SHA256（100000 次）+ AES-256-GCM。明文是包含私钥的 JWK，不会上传到服务器。
+
+```json
+{
+  "version": 1,
+  "kdf": "PBKDF2-SHA256",
+  "iterations": 100000,
+  "salt": "<base64>",
+  "iv": "<base64>",
+  "ciphertext": "<base64>",
+  "algorithm": "AES-256-GCM"
+}
+```
+
+| 端 | 私钥放哪 | 对齐方式 |
+|----|----------|----------|
+| Web | IndexedDB 库 `onlineim-e2ee`，对象仓库 `identity`，键 `current`。Pinia / localStorage 只存公钥、指纹、会话开关和已验证指纹 | 本文件的信封、指纹和备份 JSON |
+| Tauri | 优先系统钥匙串或 stronghold；WebView IndexedDB 也可以，但换机必须靠口令备份 | 同一 REST、同一 `E2EE_STATE_CHANGED`、同一备份 JSON 可导入 Web |
+| Flutter | `flutter_secure_storage`（或等价安全存储） | 同上。不要把私钥放进普通 SharedPreferences |
+
+安全码：把双方指纹转成小写后按字典序用 `|` 拼接，SHA-256，再把摘要当成大整数对 10^60 取模，左侧补零到 60 位。界面每 5 位空一格。用户在两边对过安全码后，把对方当前指纹标成「已验证」。指纹变化则取消验证并提示。
 
 ## 控制帧详情
 

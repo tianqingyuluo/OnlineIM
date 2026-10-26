@@ -29,6 +29,11 @@ public class MessageEditRequest {
     @JsonProperty("content")
     private String content;
 
+    /** 编辑后的正文是否仍是端到端密文 */
+    @JsonProperty("is_encrypted")
+    @JsonAlias("isEncrypted")
+    private Boolean isEncrypted;
+
     /**
      * 群聊：编辑后的 @ 列表（会按当前成员重新清洗）；省略（null）表示保持原列表。私聊忽略。
      */

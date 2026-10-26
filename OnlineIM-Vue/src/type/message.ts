@@ -33,6 +33,12 @@ export interface MessageResponse {
     message_type: string;
     seq_id: string;
     content: string;
+    /** 服务端只看到密文时为 true；未加密消息省略该字段 */
+    is_encrypted?: boolean;
+    /** 本机解密结果。不上传服务端 */
+    e2ee_status?: 'decrypted' | 'locked';
+    /** 原始密文信封，便于换密钥后重解、以及本地缓存不落明文 */
+    e2ee_envelope?: string;
     /** 群聊 @提及 的成员 ID（服务端已清洗，仅文本消息） */
     at_users?: string[] | null;
     status: number | string;
@@ -164,6 +170,8 @@ export interface MessageEditRequest {
     content: string;
     /** 群聊：编辑后的 @ 列表；省略表示保持原列表 */
     at_users?: string[];
+    /** 编辑后的正文仍是密文信封 */
+    is_encrypted?: boolean;
 }
 
 /** WebSocket MESSAGE_EDITED 帧（message 与历史接口格式相同） */

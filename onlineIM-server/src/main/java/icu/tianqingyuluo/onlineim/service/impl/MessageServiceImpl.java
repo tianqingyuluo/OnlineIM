@@ -31,6 +31,7 @@ import icu.tianqingyuluo.onlineim.service.RedisStreamService;
 import icu.tianqingyuluo.onlineim.service.UserService;
 import icu.tianqingyuluo.onlineim.util.MentionUtil;
 import icu.tianqingyuluo.onlineim.util.ConversationIdUtil;
+import icu.tianqingyuluo.onlineim.util.E2eeEnvelope;
 import icu.tianqingyuluo.onlineim.util.SeqIdComparator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -411,6 +412,13 @@ public class MessageServiceImpl implements MessageService {
     public MessageResponse sendMessage(MessageSendRequest request, String userId) {
         validateSendRequest(request, userId);
         String targetId = request.getTargetId();
+        boolean encrypted = E2eeEnvelope.isEncrypted(request.getIsEncrypted(), request.getContent());
+        if (encrypted && targetId.startsWith("grp_")) {
+            throw new IllegalArgumentException("群聊暂不支持端到端加密");
+        }
+        if (encrypted && !"text".equalsIgnoreCase(request.getMessageType())) {
+            throw new IllegalArgumentException("端到端加密目前只支持文本消息");
+        }
 
         if (targetId.startsWith("usr_")) {
             if (userId.equals(targetId)) {
@@ -435,6 +443,7 @@ public class MessageServiceImpl implements MessageService {
             message.setConversationId(conversationId);
             message.setMessageType(request.getMessageType());
             message.setReplyTo(createReplySnapshot(conversationId, request.getReplyToMessageId(), userId));
+            message.setIsEncrypted(encrypted ? Boolean.TRUE : null);
             message.setContentRevision(1);
             message.setClientMessageId(request.getClientMsgId());
             message.setStatus(0);
@@ -604,6 +613,7 @@ public class MessageServiceImpl implements MessageService {
                 .senderInfo(senderInfo)
                 .messageType(message.getMessageType())
                 .content(recalled(message.getStatus()) ? "" : message.getContent())
+                .isEncrypted(Boolean.TRUE.equals(message.getIsEncrypted()) ? Boolean.TRUE : null)
                 .replyTo(recalled(message.getStatus()) ? null : replyReference)
                 .forwardedFrom(recalled(message.getStatus()) ? null : forwardedFrom(message.getForwardFrom()))
                 .edited(message.getEditedAt() != null)

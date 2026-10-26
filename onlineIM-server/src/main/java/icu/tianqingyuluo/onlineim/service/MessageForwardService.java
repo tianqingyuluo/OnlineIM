@@ -17,6 +17,7 @@ import icu.tianqingyuluo.onlineim.repository.ConversationRepository;
 import icu.tianqingyuluo.onlineim.repository.GroupMessageRepository;
 import icu.tianqingyuluo.onlineim.repository.PrivateMessageRepository;
 import icu.tianqingyuluo.onlineim.util.ConversationIdUtil;
+import icu.tianqingyuluo.onlineim.util.E2eeEnvelope;
 import icu.tianqingyuluo.onlineim.util.SeqIdComparator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -110,7 +111,8 @@ public class MessageForwardService {
 
     /** 统一的来源消息视图（私聊 / 群聊） */
     record Source(String id, String senderId, String messageType, String content, Map<String, Object> ext,
-                  String seqId, Date timestamp, Integer status, MessageForwardSnapshot forwardFrom) {
+                  String seqId, Date timestamp, Integer status, MessageForwardSnapshot forwardFrom,
+                  Boolean encrypted) {
     }
 
     /** 准备写入目标会话的内容 */
@@ -212,7 +214,7 @@ public class MessageForwardService {
         if (groupSource) {
             for (GroupMessage m : groupMessageRepository.findByGroupIdAndIdIn(sourceId, ids)) {
                 found.add(new Source(m.getId(), m.getSenderId(), m.getMessageType(), m.getContent(), m.getExt(),
-                        m.getSeqId(), m.getTimestamp(), m.getStatus(), m.getForwardFrom()));
+                        m.getSeqId(), m.getTimestamp(), m.getStatus(), m.getForwardFrom(), null));
             }
         } else {
             for (PrivateMessage m : privateMessageRepository.findByConversationIdAndIdIn(sourceId, ids)) {
@@ -220,7 +222,7 @@ public class MessageForwardService {
                     continue;
                 }
                 found.add(new Source(m.getId(), m.getSenderId(), m.getMessageType(), m.getContent(), m.getExt(),
-                        m.getSeqId(), m.getTimestamp(), m.getStatus(), m.getForwardFrom()));
+                        m.getSeqId(), m.getTimestamp(), m.getStatus(), m.getForwardFrom(), m.getIsEncrypted()));
             }
         }
         if (found.size() != ids.size()) {
@@ -232,6 +234,9 @@ public class MessageForwardService {
             }
             if (source.messageType() == null || !FORWARDABLE_TYPES.contains(source.messageType())) {
                 throw MessageForwardException.badRequest("该类型的消息不能转发");
+            }
+            if (E2eeEnvelope.isEncrypted(source.encrypted(), source.content())) {
+                throw MessageForwardException.badRequest("端到端加密消息不能转发，请在原会话中查看");
             }
         }
         found.sort((a, b) -> compareSeq(a.seqId(), b.seqId()));

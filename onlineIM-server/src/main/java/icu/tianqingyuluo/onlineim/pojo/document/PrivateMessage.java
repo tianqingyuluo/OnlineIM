@@ -1,5 +1,6 @@
 package icu.tianqingyuluo.onlineim.pojo.document;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -28,6 +29,10 @@ public class PrivateMessage {
     private String receiverId;     // 接收者ID，格式为：usr_+UUID
     private String messageType;    // 消息类型：text, image, voice, file, etc.
     private String content;
+    /** 为 true 时 content 是客户端密文，服务端不能当明文展示或搜索 */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonProperty("is_encrypted")
+    private Boolean isEncrypted;
     private MessageReplySnapshot replyTo; // 直接引用快照，可空
     private MessageForwardSnapshot forwardFrom; // 逐条转发的溯源（原作者），可空
     private Date editedAt; // 最近一次编辑时间，未编辑为 null

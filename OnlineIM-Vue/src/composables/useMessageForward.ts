@@ -9,6 +9,7 @@ import {
   isForwardable,
   type ForwardMode,
 } from '@/utils/chat-record'
+import { isEncryptedMessage } from '@/utils/e2ee-message'
 
 /** 只含 [A-Za-z0-9_-]，与服务端 client_request_id 校验一致 */
 function newRequestId(): string {
@@ -52,6 +53,11 @@ export function useMessageForward(
   }
 
   function openPicker(ids: string[], mode: ForwardMode) {
+    const selected = messages().filter(message => ids.includes(message.message_id))
+    if (selected.some(isEncryptedMessage)) {
+      toast.error('端到端加密消息不能转发，请在原会话里查看')
+      return
+    }
     const max = mode === 'merged' ? FORWARD_MAX_MERGED : FORWARD_MAX_SEPARATE
     if (!ids.length) {
       toast.info('请先选择要转发的消息')
@@ -69,6 +75,10 @@ export function useMessageForward(
 
   /** 右键菜单“转发”：单条 */
   function forwardOne(message: MessageResponse) {
+    if (isEncryptedMessage(message)) {
+      toast.error('端到端加密消息不能转发，请在原会话里查看')
+      return
+    }
     if (!isForwardable(message)) {
       toast.info('这条消息不能转发')
       return

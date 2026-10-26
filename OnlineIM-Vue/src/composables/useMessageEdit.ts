@@ -25,7 +25,14 @@ export function useMessageEdit(
   draft: Ref<string>,
   currentUserId: () => string | undefined,
   focusInput: () => void,
-  hooks?: { beforeRestore?: () => void },
+  hooks?: {
+    beforeRestore?: () => void
+    /** 明文长度校验之后、提交之前。加密会话在这里把正文换成密文。 */
+    protectContent?: (
+      content: string,
+      state: EditingState,
+    ) => Promise<{ content: string, is_encrypted?: boolean }>
+  },
 ) {
   const historyStore = useHistoryStore()
   const editing = ref<EditingState | null>(null)
@@ -106,9 +113,21 @@ export function useMessageEdit(
     }
     saving.value = true
     try {
+      let payload = content
+      let encrypted = false
+      if (hooks?.protectContent) {
+        try {
+          const protectedContent = await hooks.protectContent(content, state)
+          payload = protectedContent.content
+          encrypted = protectedContent.is_encrypted === true
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : '重新加密失败，修改未保存')
+          return false
+        }
+      }
       const request = atUsers === undefined
-        ? { content }
-        : { content, at_users: atUsers || [] }
+        ? { content: payload, ...(encrypted ? { is_encrypted: true } : {}) }
+        : { content: payload, at_users: atUsers || [], ...(encrypted ? { is_encrypted: true } : {}) }
       const updated = await MessageService.editMessage(state.messageId, request)
       await historyStore.handleMessageEdited(updated)
       cancel()

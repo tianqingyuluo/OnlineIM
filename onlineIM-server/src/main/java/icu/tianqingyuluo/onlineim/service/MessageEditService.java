@@ -12,6 +12,7 @@ import icu.tianqingyuluo.onlineim.pojo.dto.response.MessageResponse;
 import icu.tianqingyuluo.onlineim.pojo.dto.response.UserBriefResponse;
 import icu.tianqingyuluo.onlineim.repository.GroupMessageRepository;
 import icu.tianqingyuluo.onlineim.repository.PrivateMessageRepository;
+import icu.tianqingyuluo.onlineim.util.E2eeEnvelope;
 import icu.tianqingyuluo.onlineim.util.MentionUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -93,11 +94,15 @@ public class MessageEditService {
             throw MessageEditException.notFound();
         }
         String content = normalizeContent(request == null ? null : request.getContent());
+        boolean encrypted = E2eeEnvelope.isEncrypted(request == null ? null : request.getIsEncrypted(), content);
         List<String> requestedAtUsers = request == null ? null : request.getAtUsers();
 
         PrivateMessage privateMessage = privateMessageRepository.findById(messageId).orElse(null);
         if (privateMessage != null) {
-            return editPrivate(privateMessage, content, userId);
+            return editPrivate(privateMessage, content, encrypted, userId);
+        }
+        if (encrypted) {
+            throw MessageEditException.invalidContent("群聊暂不支持端到端加密");
         }
         GroupMessage groupMessage = groupMessageRepository.findById(messageId).orElse(null);
         if (groupMessage != null) {
@@ -119,13 +124,14 @@ public class MessageEditService {
         return message == null ? null : messageService.convertPrivateMessageToResponse(message);
     }
 
-    private MessageResponse editPrivate(PrivateMessage message, String content, String userId) {
+    private MessageResponse editPrivate(PrivateMessage message, String content, boolean encrypted, String userId) {
         assertEditable(message.getSenderId(), message.getMessageType(), message.getStatus(),
                 message.getTimestamp() != null ? message.getTimestamp() : message.getCreatedAt(), userId);
         if (!friendService.areFriends(userId, message.getReceiverId())) {
             throw MessageEditException.notMember("你们已不是好友，无法编辑这条消息");
         }
-        if (content.equals(message.getContent())) {
+        boolean wasEncrypted = Boolean.TRUE.equals(message.getIsEncrypted());
+        if (content.equals(message.getContent()) && encrypted == wasEncrypted) {
             return messageService.convertPrivateMessageToResponse(message);
         }
         Date now = new Date();
@@ -134,6 +140,7 @@ public class MessageEditService {
                 message.getContent(), null, now);
         Update update = new Update()
                 .set("content", content)
+                .set("isEncrypted", encrypted)
                 .set("contentRevision", revision + 1)
                 .set("editedAt", now)
                 .set("updatedAt", now)
@@ -143,6 +150,7 @@ public class MessageEditService {
             throw MessageEditException.conflict();
         }
         message.setContent(content);
+        message.setIsEncrypted(encrypted);
         message.setContentRevision(revision + 1);
         message.setEditedAt(now);
         message.setUpdatedAt(now);
@@ -237,8 +245,10 @@ public class MessageEditService {
         if (trimmed.isEmpty()) {
             throw MessageEditException.invalidContent("编辑后的内容不能为空");
         }
-        if (maxLength > 0 && trimmed.codePointCount(0, trimmed.length()) > maxLength) {
-            throw MessageEditException.invalidContent("编辑后的内容不能超过" + maxLength + "个字符");
+        // 密文信封比明文长。文本上限按明文计，信封放宽到足够装下同一条明文的 AES-GCM 结果。
+        int limit = E2eeEnvelope.looksLikeEnvelope(trimmed) ? Math.max(maxLength * 8, 65536) : maxLength;
+        if (limit > 0 && trimmed.codePointCount(0, trimmed.length()) > limit) {
+            throw MessageEditException.invalidContent("编辑后的内容不能超过" + limit + "个字符");
         }
         return trimmed;
     }

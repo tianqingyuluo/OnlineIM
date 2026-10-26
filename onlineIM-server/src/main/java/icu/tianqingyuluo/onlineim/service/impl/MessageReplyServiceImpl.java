@@ -13,6 +13,7 @@ import icu.tianqingyuluo.onlineim.service.GroupMemberService;
 import icu.tianqingyuluo.onlineim.service.MessageReplyService;
 import icu.tianqingyuluo.onlineim.service.UserService;
 import icu.tianqingyuluo.onlineim.service.call.CallMessageTexts;
+import icu.tianqingyuluo.onlineim.util.E2eeEnvelope;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -79,12 +80,15 @@ public class MessageReplyServiceImpl implements MessageReplyService {
         if (target == null || isRecalled(target.getStatus())) {
             throw new ReplyTargetUnavailableException();
         }
+        String quoted = E2eeEnvelope.isEncrypted(target.getIsEncrypted(), target.getContent())
+                ? E2eeEnvelope.PREVIEW
+                : target.getContent();
         return buildSnapshot(
                 target.getId(),
                 target.getSeqId(),
                 target.getSenderId(),
                 target.getMessageType(),
-                target.getContent(),
+                quoted,
                 target.getExt(),
                 revision(target.getContentRevision()));
     }
@@ -214,6 +218,9 @@ public class MessageReplyServiceImpl implements MessageReplyService {
     }
 
     private String preview(String messageType, String content, Map<String, Object> ext) {
+        if (E2eeEnvelope.looksLikeEnvelope(content) || E2eeEnvelope.PREVIEW.equals(content)) {
+            return E2eeEnvelope.PREVIEW;
+        }
         String normalizedType = messageType == null ? "" : messageType.toLowerCase(Locale.ROOT);
         return switch (normalizedType) {
             case "text" -> truncate(normalizeText(content));
