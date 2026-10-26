@@ -1,4 +1,5 @@
 import type { MessageResponse, ReplyReference } from '@/type/message'
+import { callPreviewText } from '@/utils/call-message'
 import { formatVoiceClock, parseMediaContent } from '@/utils/media-message'
 
 const MAX_PREVIEW_CODE_POINTS = 80
@@ -26,6 +27,8 @@ export function getReplyPreviewText(
       return fileName?.trim() ? `[文件] ${truncatePreview(fileName.trim())}` : '[文件]'
     case 'chat_record':
       return '[聊天记录]'
+    case 'call':
+      return callPreviewText(content)
     default:
       return '[消息]'
   }

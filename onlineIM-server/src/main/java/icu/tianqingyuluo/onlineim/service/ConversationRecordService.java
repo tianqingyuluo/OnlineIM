@@ -3,6 +3,7 @@ package icu.tianqingyuluo.onlineim.service;
 import icu.tianqingyuluo.onlineim.pojo.document.Conversation;
 import icu.tianqingyuluo.onlineim.pojo.document.ConversationReadState;
 import icu.tianqingyuluo.onlineim.pojo.document.GroupMessage;
+import icu.tianqingyuluo.onlineim.service.call.CallMessageTexts;
 import icu.tianqingyuluo.onlineim.util.MentionUtil;
 import icu.tianqingyuluo.onlineim.pojo.document.PrivateMessage;
 import lombok.extern.slf4j.Slf4j;
@@ -453,6 +454,7 @@ public class ConversationRecordService {
             case "video" -> "[视频]";
             case "emoji", "sticker" -> "[表情]";
             case "chat_record" -> "[聊天记录]";
+            case "call" -> CallMessageTexts.preview(content);
             default -> "[消息]";
         };
     }

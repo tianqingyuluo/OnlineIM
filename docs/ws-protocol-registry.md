@@ -36,6 +36,17 @@
 | `DRAFT_UPDATED` | S→C | 业务·草稿 | v1 | draft-sync |
 | `GROUP_ANNOUNCEMENT` | S→C | 业务·群公告 | v1 | group-at-all-announce-read |
 | `GROUP_ANNOUNCEMENT_READ` | S→C | 业务·群公告已读 | v1 | group-at-all-announce-read |
+| `CALL_INVITE` | C→S→C | 业务·1v1 通话 | v1 | webrtc-video-call |
+| `CALL_OFFER` | C→S→C | 业务·1v1 通话 | v1 | webrtc-video-call |
+| `CALL_RINGING` | C→S→C | 业务·1v1 通话 | v1 | webrtc-video-call |
+| `CALL_ANSWER` | C→S→C | 业务·1v1 通话 | v1 | webrtc-video-call |
+| `CALL_CANDIDATE` | C→S→C | 业务·1v1 通话 | v1 | webrtc-video-call |
+| `CALL_REJECT` | C→S→C | 业务·1v1 通话 | v1 | webrtc-video-call |
+| `CALL_CANCEL` | C→S→C | 业务·1v1 通话 | v1 | webrtc-video-call |
+| `CALL_BUSY` | S→C | 业务·1v1 通话 | v1 | webrtc-video-call |
+| `CALL_END` | C→S→C | 业务·1v1 通话 | v1 | webrtc-video-call |
+| `CALL_HANGUP` | C→S→C | 业务·1v1 通话 | v1 | webrtc-video-call |
+| `CALL_HANDLED_ELSEWHERE` | S→C | 业务·1v1 通话 | v1 | webrtc-video-call |
 
 ## 引用回复协议
 
@@ -1009,6 +1020,101 @@ POST /api/v1/devices/{deviceId}/logout
 
 成功 `204`。设备不存在 `404`，标识不合法 `400`。被登出的那一台收到 `SESSION_KICKED`（`reason=REMOTE_LOGOUT`）。
 
+## 1v1 音视频通话（WebRTC）
+
+仅私聊。群通话不在 v1。媒体走浏览器 `RTCPeerConnection`（SRTP），服务端只转发信令、不下发媒体。Web、Tauri、Flutter 使用同一组帧和字段。身份以已认证 WebSocket 会话为准，客户端自报的发起人无效。
+
+### ICE 配置
+
+需要登录。
+
+```http
+GET /api/v1/calls/ice-servers
+```
+
+```json
+{
+  "ice_servers": [
+    { "urls": ["stun:stun.l.google.com:19302"] },
+    { "urls": ["turn:turn.example.com:3478"], "username": "1700000000:usr_a", "credential": "base64-hmac" }
+  ],
+  "call_timeout_seconds": 45
+}
+```
+
+- `urls` 为字符串数组，可直接交给 `RTCPeerConnection`。
+- 未配置 TURN 时只有 STUN，且不返回 `username` / `credential`。
+- `im.webrtc.turn-secret` 非空时按 coturn `use-auth-secret` 发放限时凭证：`username` 为 `{过期 unix 秒}:{用户ID}`，`credential` 为 HMAC-SHA1(secret, username) 的 Base64。否则使用 `im.webrtc.turn-username` / `im.webrtc.turn-credential`。
+- 未登录 `401`。
+
+### 信令帧
+
+方向都是「发起方 → 服务端 → 对方全部在线设备」，除非另有说明。载荷放在 `message` 里。
+
+| 类型 | 谁发送 | 必填字段 | 说明 |
+|------|--------|----------|------|
+| `CALL_INVITE` / `CALL_OFFER` | 主叫 | `target_id`, `conversation_id`, `call_type`, `sdp`；`call_id` 可空 | 发起通话。`call_type` 为 `video` 或 `audio`。服务端补上 `caller_id` 后投给被叫的每台在线设备 |
+| `CALL_RINGING` | 被叫 | `call_id` | 本机已开始响铃，转给主叫 |
+| `CALL_ANSWER` | 被叫 | `call_id`, `sdp` | 接听。SDP 转给主叫；被叫的其他在线设备收到 `CALL_HANDLED_ELSEWHERE` |
+| `CALL_CANDIDATE` | 双方 | `call_id`, `candidate`；可选 `sdp_mid`, `sdp_m_line_index` | ICE candidate。远端 SDP 未设置前由客户端排队 |
+| `CALL_REJECT` | 被叫 | `call_id` | 拒接。主叫收到本帧，被叫其他设备收到 `CALL_HANDLED_ELSEWHERE` |
+| `CALL_CANCEL` | 主叫，或服务端 | `call_id`；服务端会带 `reason` | 主叫在接听前取消（`reason=user`）。响铃超时 `reason=timeout`，被叫离线 `reason=offline` |
+| `CALL_BUSY` | 服务端 → 主叫 | `call_id`, `call_status=busy` | 被叫已在通话中，不再向被叫振铃 |
+| `CALL_END` / `CALL_HANGUP` | 任一方 | `call_id` | 结束已接通的通话。服务端计算 `duration_seconds` 后通知对方，以及挂断方的其他设备 |
+| `CALL_HANDLED_ELSEWHERE` | 服务端 → 同一用户的其他设备 | `call_id`, `call_status` | `call_status` 为 `answered` 或 `rejected`。收到的设备停止响铃。处理该通话的那条连接不会收到 |
+
+非好友发起通话时服务端不转发，回 `ERROR`（`code=403`，文案「你们还不是好友，无法发起通话」）。主叫自己已在通话中回 `ERROR`（`code=400`）。`call_id` 只允许字母、数字、下划线和连字符，长度 8–64；缺省时服务端生成。
+
+同一用户同时只能有一路通话。多实例通过 Redis 占用；被叫的每台在线设备都会收到来电。一台设备 `CALL_ANSWER` 或 `CALL_REJECT` 后，其他设备收到 `CALL_HANDLED_ELSEWHERE`。
+
+响铃超时默认 45 秒（`im.webrtc.call-timeout-seconds`）。超时记为未接来电，双方收到 `CALL_CANCEL`（`reason=timeout`）。
+
+邀请示例：
+
+```json
+{
+  "type": "CALL_INVITE",
+  "message": {
+    "call_id": "call_0123456789abcdef",
+    "target_id": "usr_b",
+    "conversation_id": "conv_usr_ausr_b",
+    "call_type": "video",
+    "sdp": "v=0..."
+  }
+}
+```
+
+服务端转发给被叫时增加 `caller_id`（取自会话，不信任客户端）。
+
+### 通话记录 `message_type = "call"`
+
+通话结束、拒接、取消、超时、被叫离线或占线时，服务端写入一条私聊消息并按普通私聊推送 `PRIVATE_MESSAGE_RESPONSE`，因此历史、离线同步和会话列表都能看到。
+
+`content` 为 JSON 字符串（`ext` 存同一组字段）：
+
+```json
+{
+  "call_id": "call_0123456789abcdef",
+  "call_type": "video",
+  "call_status": "completed",
+  "duration_seconds": 83
+}
+```
+
+`call_status`：`completed`（已接通后挂断）、`rejected`（拒接）、`cancelled`（主叫取消）、`missed`（超时或被叫离线）、`busy`（被叫占线）。
+
+双方会话 `last_message` 预览：
+
+| 状态 | 视频 | 语音 |
+|------|------|------|
+| `completed` | `[视频通话] 01:23` | `[语音通话] 00:45` |
+| `missed` | `[未接视频通话]` | `[未接语音通话]` |
+| `rejected` | `[已拒接]` | `[已拒接]` |
+| `cancelled` | `[已取消]` | `[已取消]` |
+| `busy` | `[对方忙线]` | `[对方忙线]` |
+
+时长格式为 `mm:ss`。`client_message_id` 等于 `call_id`，重复终态不会再落一条。点击会话里的通话气泡按原来的 `call_type` 重拨。
+
 ## 控制帧详情
 
 ### HEARTBEAT（v1 必需帧）
@@ -1040,3 +1146,11 @@ POST /api/v1/devices/{deviceId}/logout
 | `im.message.edit-window-seconds` | 同撤回时间窗（`120`） | 编辑时间窗（秒），≤0 不限制 |
 | `im.message.edit-max-length` | `5000` | 编辑后内容的长度上限（字符） |
 | `im.draft.max-length` | `5000` | 草稿正文长度上限（UTF-16 字符） |
+| `im.webrtc.stun-urls` | `stun:stun.l.google.com:19302` | STUN 地址，英文逗号分隔 |
+| `im.webrtc.turn-urls` | 空 | TURN 地址，英文逗号分隔；空则不下发 TURN |
+| `im.webrtc.turn-username` | 空 | TURN 静态用户名 |
+| `im.webrtc.turn-credential` | 空 | TURN 静态密码 |
+| `im.webrtc.turn-secret` | 空 | coturn `use-auth-secret`。非空时发放限时 HMAC-SHA1 凭证，优先于静态用户名密码 |
+| `im.webrtc.turn-ttl-seconds` | `86400` | HMAC 凭证有效期（秒） |
+| `im.webrtc.call-timeout-seconds` | `45` | 响铃超时（秒），并随 ICE 接口返回 |
+| `im.webrtc.call-sweep-interval-ms` | `1000` | 扫描超时响铃的间隔（毫秒） |

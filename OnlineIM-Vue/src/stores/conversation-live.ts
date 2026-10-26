@@ -6,6 +6,7 @@ import { conversationService } from '@/services/conversation.service'
 import { parseTimestamp, toServerTimestamp } from '@/utils/conversation-time'
 import { compareSeqId, maxSeqId } from '@/utils/seq-id'
 import { isRecalledMessage } from '@/utils/message-recall'
+import { callPreviewText } from '@/utils/call-message'
 
 /**
  * 会话列表实时更新：收发消息、ACK、撤回、已读时立即修改侧栏（预览、时间、未读角标），
@@ -41,6 +42,7 @@ export function previewOfMessage(message: MessageResponse): string {
     case 'emoji':
     case 'sticker': return '[表情]'
     case 'chat_record': return '[聊天记录]'
+    case 'call': return callPreviewText(typeof message.content === 'string' ? message.content : '')
     default: return '[消息]'
   }
 }

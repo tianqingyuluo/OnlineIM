@@ -1,4 +1,5 @@
 import type { MessageResponse } from '@/type/message'
+import { callPreviewText } from '@/utils/call-message'
 
 /** 合并转发生成的 chat_record 消息内容（服务端生成的 JSON 字符串） */
 export interface ChatRecordItem {
@@ -69,6 +70,7 @@ export function previewOfRecordItem(item: Pick<ChatRecordItem, 'message_type' | 
     case 'emoji':
     case 'sticker': return '[表情]'
     case CHAT_RECORD_TYPE: return '[聊天记录]'
+    case 'call': return callPreviewText(item.content)
     default: return '[消息]'
   }
 }

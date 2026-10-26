@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Ellipsis, CircleEllipsis, AlertCircle, Check, CheckCheck, Search } from 'lucide-vue-next'
+import { Ellipsis, CircleEllipsis, AlertCircle, Check, CheckCheck, Search, Phone, Video } from 'lucide-vue-next'
 import { computed, nextTick, onBeforeUnmount, onMounted, onUpdated, provide, reactive, ref, watch } from 'vue'
 import { useLoadedConversation } from '@/composables/useLoadedConversation'
 import { useRoute, useRouter } from 'vue-router'
@@ -40,12 +40,15 @@ import { useMessageRecall } from '@/composables/useMessageRecall'
 import { isRecalledMessage } from '@/utils/message-recall'
 import PresenceLabel from '@/components/common/PresenceLabel.vue'
 import { usePresenceStore } from '@/stores/presence'
+import { useCallStore } from '@/stores/call.store'
+import type { CallType } from '@/type/call'
 
 const route = useRoute()
 const userStore = useUserStore()
 const listStore = useListStore()
 const historyStore = useHistoryStore()
 const presenceStore = usePresenceStore()
+const callStore = useCallStore()
 const emojiStore = useEmojiStore()
 const currentUser = ref<User | null>(null)
 const conversation = ref<Conversation | null>(null)
@@ -296,6 +299,17 @@ async function handleReplyNavigate(reference: ReplyReference) {
   await navigateToMessage(reference.message_id, '原消息不可用')
 }
 
+function startCall(callType: CallType) {
+  if (!targetUserId.value || !conversationId.value || !currentUser.value) return
+  void callStore.startCall({
+    peerId: targetUserId.value,
+    peerName: currentUser.value.nickname || currentUser.value.username || '好友',
+    peerAvatar: currentUser.value.avatar_url || '',
+    conversationId: conversationId.value,
+    callType,
+  })
+}
+
 function toggleSearch() {
   searchOpen.value = !searchOpen.value
   if (searchOpen.value) showMenu.value = false
@@ -402,6 +416,26 @@ onBeforeUnmount(() => {
       <div class="flex items-center gap-2">
         <button
           type="button"
+          data-testid="start-audio-call"
+          class="flex h-8 w-8 items-center justify-center rounded-full text-gray-600 hover:bg-gray-100"
+          title="语音通话"
+          aria-label="语音通话"
+          @click="startCall('audio')"
+        >
+          <Phone class="h-5 w-5" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          data-testid="start-video-call"
+          class="flex h-8 w-8 items-center justify-center rounded-full text-gray-600 hover:bg-gray-100"
+          title="视频通话"
+          aria-label="视频通话"
+          @click="startCall('video')"
+        >
+          <Video class="h-5 w-5" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
           data-testid="open-conversation-search"
           aria-label="搜索聊天记录"
           :aria-pressed="searchOpen"
@@ -480,6 +514,7 @@ onBeforeUnmount(() => {
                 @reply="handleReply(message)"
                 @navigate="handleReplyNavigate"
                 @save-emoji="handleSaveEmoji(message)"
+                @redial="startCall"
               />
             </div>
             <div v-else class="flex items-end max-w-[80%]">
@@ -515,6 +550,7 @@ onBeforeUnmount(() => {
                 @reply="handleReply(message)"
                 @navigate="handleReplyNavigate"
                 @save-emoji="handleSaveEmoji(message)"
+                @redial="startCall"
               />
               <img :src="userStore.loggedInUser.avatar_url" :alt="userStore.loggedInUser.username" class="w-10 h-10 rounded-full ml-2 object-cover" />
             </div>

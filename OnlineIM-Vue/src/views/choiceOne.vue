@@ -1,11 +1,13 @@
 <template>
   <component :is="currentLayout" />
+  <CallOverlay />
 </template>
 
 <script setup lang="ts">
 import { markRaw, shallowRef, onMounted, onBeforeUnmount } from 'vue'
 import Main from '@/views/Main.vue'
 import phoneMain from '@/components/phone/phoneMain.vue'
+import CallOverlay from '@/components/call/CallOverlay.vue'
 
 const desktopLayout = markRaw(Main)
 const mobileLayout = markRaw(phoneMain)

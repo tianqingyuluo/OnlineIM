@@ -12,6 +12,7 @@ import icu.tianqingyuluo.onlineim.repository.PrivateMessageRepository;
 import icu.tianqingyuluo.onlineim.service.GroupMemberService;
 import icu.tianqingyuluo.onlineim.service.MessageReplyService;
 import icu.tianqingyuluo.onlineim.service.UserService;
+import icu.tianqingyuluo.onlineim.service.call.CallMessageTexts;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -221,6 +222,7 @@ public class MessageReplyServiceImpl implements MessageReplyService {
             case "video" -> "[视频]";
             case "emoji", "sticker" -> "[表情]";
             case "chat_record" -> "[聊天记录]";
+            case "call" -> CallMessageTexts.preview(content);
             case "file" -> filePreview(ext);
             default -> "[消息]";
         };

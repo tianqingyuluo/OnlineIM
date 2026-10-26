@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CallBubble from '@/components/call/CallBubble.vue'
 import MessageActions from '@/components/MainPart/MessageActions.vue'
 import MessageReplyPreview from '@/components/MainPart/MessageReplyPreview.vue'
 import MediaMessage from '@/components/MainPart/MediaMessage.vue'
@@ -53,6 +54,7 @@ const props = withDefaults(defineProps<{
 })
 
 const isMedia = computed(() => isMediaMessageType(props.messageType))
+const isCall = computed(() => props.messageType === 'call' && !props.recalled)
 /** 表情消息不套气泡，直接显示较大的图片（GIF 原样播放） */
 const isSticker = computed(() => isStickerMessageType(props.messageType) && !props.recalled)
 /** 合并转发的聊天记录：卡片，点开查看 */
@@ -83,6 +85,7 @@ const emit = defineEmits<{
   select: []
   edit: []
   recall: []
+  redial: [callType: 'video' | 'audio']
 }>()
 
 async function copyMessage() {
@@ -98,14 +101,14 @@ async function copyMessage() {
 
 <template>
   <MessageActions
-    :can-reply="canReply && !recalled"
+    :can-reply="canReply && !recalled && !isCall"
     :align="isSelf ? 'end' : 'start'"
-    :can-copy="!isMedia && !isStickerMessageType(messageType) && !isChatRecordType(messageType) && !recalled"
+    :can-copy="!isMedia && !isCall && !isStickerMessageType(messageType) && !isChatRecordType(messageType) && !recalled"
     :can-save-emoji="canSaveEmoji"
-    :can-forward="canForward && !recalled"
+    :can-forward="canForward && !recalled && !isCall"
     :can-select="canSelect"
-    :edit-until="recalled ? 0 : editUntil"
-    :recall-until="recalled ? 0 : recallUntil"
+    :edit-until="recalled || isCall ? 0 : editUntil"
+    :recall-until="recalled || isCall ? 0 : recallUntil"
     @edit="emit('edit')"
     @recall="emit('recall')"
     @reply="emit('reply')"
@@ -148,6 +151,11 @@ async function copyMessage() {
       >
         消息已撤回
       </div>
+      <CallBubble
+        v-else-if="isCall"
+        :content="message"
+        @redial="emit('redial', $event)"
+      />
       <MediaMessage
         v-else-if="isMedia"
         :message-type="messageType"

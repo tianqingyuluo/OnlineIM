@@ -10,6 +10,7 @@
     "proxy": "node proxy-server.js",
     "dev-all": "concurrently \"npm run dev\" \"npm run proxy\"",
     "test": "vitest run",
+    "test:unit": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test"
   },
