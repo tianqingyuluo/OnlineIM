@@ -1,6 +1,6 @@
 # v1 - Flutter 安卓客户端 技术设计
 
-> 本设计只覆盖**不依赖协议冻结**的部分；WS 重连策略、多端登录口径、WebRTC 信令、E2EE 密钥存储、推送通道等依赖协议任务的细节标注为开放项，待对应任务冻结后回填。
+> 协议已按 `docs/ws-protocol-registry.md` 与 `OnlineIM-Vue/src/crypto/e2ee.ts` 冻结。本地缓存使用 sqflite（文件 `data/local_cache_database.dart`），模型手写 `snake_case` JSON，避免在安卓 CI 中跑 build_runner。
 
 ## 架构与边界
 
@@ -125,16 +125,18 @@ OnlineIM-Flutter/
 | 自分发 APK "未知来源"提示 | 首次启动文档引导 |
 | minSdk 24 边缘设备 | 覆盖 95%+，低版本不支持 |
 
-## 协议对接（开放项，待冻结）
+## 协议对接（已冻结）
 
-以下设计待对应协议任务冻结后回填，当前不臆造：
-- WS 心跳/重连：移动端切后台/网络切换/省电态重连策略（[[v1-ws-heartbeat-reconnect]]）
-- 多端登录：被挤下线处理、设备管理、多端消息投递（[[v1-multi-device-login]]）
-- 离线推送：上线未读补齐客户端处理（[[v1-offline-push]]）
-- presence：在线态订阅与展示（[[v1-user-presence]]）
-- WebRTC：信令处理、通话 UI、权限、多端响铃（[[v1-webrtc-video-call]]）
-- E2EE：密钥分发、Keystore 存储、加解密流程（[[v1-e2ee]]）
-- ACK/已读：协议字段与客户端上报（[[v1-message-ack-read]]）
+细节与执行清单 S9–S17 相同，摘要如下：
+
+- 心跳：出站 `HEARTBEAT`，入站 `HEARTBEAT_ACK`（兼容 `PONG`）。间隔 25 秒，两周期无回执则重连。指数退避上限 30 秒。`SESSION_KICKED` / 关闭码 4001 停止重连。
+- 多端：`device_type=phone`。设备列表 `GET /devices`，远程登出 `POST /devices/{id}/logout`。
+- 离线补齐：`SYNC_REQUEST` / `OFFLINE_SYNC`，缺口 `GET /messages/sync/{conversationId}?seq_id=`。未读以快照为准。
+- presence：`GET /presence` + `PRESENCE_UPDATE`。
+- WebRTC：登记表中的 `CALL_*` 帧，`GET /calls/ice-servers`，`CALL_HANDLED_ELSEWHERE` 停铃，`message_type=call` 可重拨。
+- E2EE：与 Web Crypto 同一信封。HKDF info 为 `OnlineIM-E2EE-v1|{counter}|` + 临时公钥 SPKI。私钥放 Keystore。解不开显示固定占位文案。
+- ACK/已读：`MESSAGE_ACK` 不降级；`RECEIPT`；`READ_RECEIPT` 只报会话游标。
+- 消息操作与富媒体：撤回 120 秒、群管理可撤回他人、编辑标记「已编辑」、引用撤回级联、转发、@、搜索、图片/文件/语音上传、表情上限 100、草稿与群公告已读。
 
 ## 迁移 / 回滚
 

@@ -1,0 +1,48 @@
+name: Flutter Android
+
+on:
+  push:
+    paths:
+      - "OnlineIM-Flutter/**"
+      - ".github/workflows/flutter-android.yml"
+  pull_request:
+    paths:
+      - "OnlineIM-Flutter/**"
+      - ".github/workflows/flutter-android.yml"
+
+jobs:
+  analyze-test-apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: OnlineIM-Flutter
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build release APK
+        run: flutter build apk --release

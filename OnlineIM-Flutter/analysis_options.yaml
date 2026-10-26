@@ -1,0 +1,13 @@
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    avoid_print: true
+
+analyzer:
+  exclude:
+    - build/**
+    - android/**
+  language:
+    strict-casts: false
+    strict-raw-types: false
