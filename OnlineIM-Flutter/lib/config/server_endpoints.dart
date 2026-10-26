@@ -21,15 +21,11 @@ class ServerEndpoints {
   /// `token` 使用 `%20`，并带上 `device_id` 与 `device_type=phone`。
   Uri socketUri({required String token, required String deviceId}) {
     final base = Uri.parse(wsUrl.trim());
-    final query = 'token=${Uri.encodeComponent('Bearer $token')}&device_id=${Uri.encodeQueryComponent(deviceId)}&device_type=phone';
+    final scheme = base.scheme.isEmpty ? 'ws' : base.scheme;
+    final port = base.hasPort ? ':${base.port}' : '';
     final path = base.path.isEmpty ? '/api/v1/chat' : base.path;
-    return Uri(
-      scheme: base.scheme.isEmpty ? 'ws' : base.scheme,
-      host: base.host,
-      port: base.hasPort ? base.port : null,
-      path: path,
-      query: query,
-    );
+    final query = 'token=${Uri.encodeComponent('Bearer $token')}&device_id=${Uri.encodeComponent(deviceId)}&device_type=phone';
+    return Uri.parse('$scheme://${base.host}$port$path?$query');
   }
 
   ServerEndpoints copyWith({String? httpBase, String? wsUrl}) {

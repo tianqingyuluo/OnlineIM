@@ -141,8 +141,12 @@ class _ContactsPageState extends ConsumerState<ContactsPage> {
       ),
     );
     if (created == true && name.text.trim().isNotEmpty) {
-      await ref.read(imSessionProvider).api.createGroup(name: name.text.trim());
-      await ref.read(imSessionProvider).loadContacts();
+      final session = ref.read(imSessionProvider);
+      await session.api.createGroup(
+        name: name.text.trim(),
+        memberIds: [if (session.selfId.isNotEmpty) session.selfId],
+      );
+      await session.loadContacts();
     }
     name.dispose();
   }

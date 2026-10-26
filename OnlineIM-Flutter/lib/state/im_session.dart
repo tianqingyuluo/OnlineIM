@@ -52,6 +52,7 @@ class ImSession extends ChangeNotifier {
         keepalive = keepalive ?? ForegroundKeepaliveService(bridge: RecordingKeepalive()),
         media = media ?? MemoryCallMedia(),
         now = now ?? DateTime.now {
+    api.tokenProvider ??= () => token;
     calls = CallController();
     engine = ProtocolEngine(selfUserId: '');
   }
@@ -212,6 +213,7 @@ class ImSession extends ChangeNotifier {
       final cached = await cache!.loadMessages(selfId, conversationId);
       for (final message in cached) {
         engine.messages[message.messageId] = message;
+        await _decryptRecord(message);
       }
       final draft = await cache!.loadDraft(selfId, conversationId);
       if (draft != null) engine.drafts[conversationId] = draft;
@@ -219,9 +221,32 @@ class ImSession extends ChangeNotifier {
     notifyListeners();
     if (!loggedIn) return;
     try {
+      final group = conversationId.startsWith('grp_') || conversation?.type == 'group';
+      final targetId = group
+          ? conversationId
+          : (conversation?.peerId ?? otherParticipant(conversationId, selfId));
+      if (targetId != null && targetId.isNotEmpty) {
+        final created = await api.createConversation(
+          targetId: targetId,
+          type: group ? 'group' : 'private',
+        );
+        if (created.isNotEmpty) {
+          engine.applyConversationList([created]);
+          final conv = engine.conversations[conversationId];
+          if (cache != null && selfId.isNotEmpty && conv != null) {
+            await cache!.saveConversation(selfId, conv);
+          }
+        }
+      }
+    } catch (_) {}
+    try {
       final history = await api.history(conversationId);
       for (final item in history) {
         engine.applyFrame({'type': framePrivateResponse, 'message': item});
+        final msgId = item['message_id']?.toString();
+        if (msgId != null && engine.messages[msgId] != null) {
+          await _decryptRecord(engine.messages[msgId]!);
+        }
       }
       final latest = engine.conversations[conversationId]?.latestSeq ?? '0';
       if (latest != '0') {
@@ -384,7 +409,19 @@ class ImSession extends ChangeNotifier {
     try {
       final result = await api.searchMessages(query: keyword, conversationId: conversationId);
       final results = result['results'];
-      searchHits = results is List ? results.whereType<Map>().map((item) => item.map((key, value) => MapEntry(key.toString(), value))).toList() : [];
+      searchHits = results is List
+          ? results.whereType<Map>().map((item) {
+              final map = item.map((key, value) => MapEntry(key.toString(), value));
+              final nested = map['message'];
+              if (nested is Map) {
+                return {
+                  ...nested.map((key, value) => MapEntry(key.toString(), value)),
+                  ...map,
+                };
+              }
+              return map;
+            }).toList()
+          : [];
     } catch (_) {
       searchHits = [];
     }
@@ -473,6 +510,7 @@ class ImSession extends ChangeNotifier {
       identity = await importKeyBackup(payload, passphrase);
       await secure.writeIdentity(identity);
       await _publishKeys();
+      await _decryptAllLoadedMessages();
       notifyListeners();
       return null;
     } on StateError catch (caught) {
@@ -618,7 +656,8 @@ class ImSession extends ChangeNotifier {
   }
 
   void _onFrame(Map<String, dynamic> frame) {
-    final type = frame['type']?.toString() ?? '';
+    final rawType = frame['type']?.toString() ?? '';
+    final type = canonicalFrameType(rawType);
     if (type == frameSessionKicked) return;
     engine.applyFrame(frame);
     if (type.startsWith('CALL_')) {
@@ -631,6 +670,17 @@ class ImSession extends ChangeNotifier {
           body: calls.state.callType == 'audio' ? '语音通话' : '视频通话',
         ));
       }
+    }
+    if (type == framePrivateResponse || type == frameGroupResponse || type == frameMessageEdited) {
+      final message = frame['message'];
+      if (message is Map) {
+        final msgId = message['message_id']?.toString();
+        if (msgId != null && engine.messages[msgId] != null) {
+          unawaited(_decryptRecord(engine.messages[msgId]!).then((_) => notifyListeners()));
+        }
+      }
+    } else if (type == frameOfflineSync) {
+      unawaited(_decryptAllLoadedMessages().then((_) => notifyListeners()));
     }
     if (type == framePrivateResponse || type == frameGroupResponse) {
       final message = frame['message'];
@@ -689,15 +739,48 @@ class ImSession extends ChangeNotifier {
     return envelope.encode();
   }
 
+  Future<void> _decryptRecord(MessageRecord record) async {
+    if (!record.isEncrypted || record.isRecalled) return;
+    if (record.localPlaintext != null && record.localPlaintext!.isNotEmpty) return;
+    final envelope = parseEnvelope(record.content);
+    if (envelope == null) return;
+    identity ??= await secure.readIdentity();
+    if (identity == null) return;
+    final peer = engine.conversations[record.conversationId]?.peerId ?? otherParticipant(record.conversationId, selfId);
+    if (peer == null || peer.isEmpty) return;
+    try {
+      peerKeys[peer] ??= await api.peerKeys(peer);
+      final peerSpki = peerKeys[peer]?['identity_public_key']?.toString();
+      if (peerSpki == null || peerSpki.isEmpty) return;
+      final clear = await decryptText(
+        envelope: envelope,
+        myPrivateJwk: identity!.identityPrivateJwk,
+        peerPublicSpki: peerSpki,
+      );
+      record.localPlaintext = clear;
+      if (selfId.isNotEmpty && cache != null) {
+        await cache!.saveMessage(selfId, record);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _decryptAllLoadedMessages() async {
+    for (final record in engine.messages.values.toList()) {
+      await _decryptRecord(record);
+    }
+  }
+
   Future<void> _publishKeys() async {
     final current = identity;
     if (current == null || !loggedIn) return;
+    final signature = await signFingerprint(current);
     await api.uploadE2eeKeys({
       'key_id': current.keyId,
       'identity_public_key': current.identityPublicSpki,
       'signing_public_key': current.signingPublicSpki,
       'algorithm': current.algorithm,
       'fingerprint': current.fingerprint,
+      'signature': signature,
     });
   }
 

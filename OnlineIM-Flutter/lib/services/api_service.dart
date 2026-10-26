@@ -96,6 +96,13 @@ class ApiService {
     return const [];
   }
 
+  Future<Map<String, dynamic>> createConversation({required String targetId, required String type}) {
+    return _data('POST', '/conversations/create', body: {
+      'target_id': targetId,
+      'type': type,
+    });
+  }
+
   Future<void> pin(String id, {required bool pinned}) =>
       _send(pinned ? 'POST' : 'DELETE', '/conversations/$id/top');
 
@@ -167,8 +174,25 @@ class ApiService {
     return _data('POST', '/messages/upload', body: form);
   }
 
-  Future<List<Map<String, dynamic>>> friends() async => _list('/friends');
-  Future<List<Map<String, dynamic>>> friendRequests() async => _list('/friends/requests/received');
+  Future<List<Map<String, dynamic>>> friends() async {
+    try {
+      final items = await _list('/friends');
+      return items.map(_normalizeFriend).toList();
+    } on ApiException catch (error) {
+      if (error.status == 404) return const [];
+      rethrow;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> friendRequests() async {
+    try {
+      return await _list('/friends/requests/received');
+    } on ApiException catch (error) {
+      if (error.status == 404) return const [];
+      rethrow;
+    }
+  }
+
   Future<void> sendFriendRequest(String userId, {String? message}) =>
       _send('POST', '/friends/request/send', body: {'receiver_id': userId, if (message != null) 'message': message});
   Future<void> handleFriendRequest(String requestId, String action) =>
@@ -178,9 +202,22 @@ class ApiService {
   Future<void> moveFriendGroup(String friendId, String groupId) =>
       _send('PUT', '/friends/$friendId/group', body: {'friend_group_id': groupId});
 
-  Future<List<Map<String, dynamic>>> groups() async => _list('/groups');
-  Future<Map<String, dynamic>> createGroup({required String name, List<String> memberIds = const []}) {
-    return _data('POST', '/groups', body: {'name': name, 'member_ids': memberIds});
+  Future<List<Map<String, dynamic>>> groups() async {
+    try {
+      return await _list('/groups/joined');
+    } on ApiException catch (error) {
+      if (error.status == 404) return _list('/groups');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> createGroup({required String name, List<String> memberIds = const [], int maxMembers = 200}) {
+    return _data('POST', '/groups', body: {
+      'name': name,
+      'initial_members': memberIds,
+      'member_ids': memberIds,
+      'max_members': maxMembers,
+    });
   }
 
   Future<List<Map<String, dynamic>>> searchUsers(String keyword) async {
@@ -292,4 +329,16 @@ class ApiService {
 Map<String, dynamic> _map(Object? value) {
   if (value is Map) return value.map((key, item) => MapEntry(key.toString(), item));
   return {};
+}
+
+Map<String, dynamic> _normalizeFriend(Map<String, dynamic> raw) {
+  final info = raw['friend_info'] is Map ? _map(raw['friend_info']) : const <String, dynamic>{};
+  final userId = raw['user_id']?.toString() ?? info['user_id']?.toString();
+  final friendId = raw['friend_id']?.toString() ?? userId;
+  return {
+    ...info,
+    ...raw,
+    if (userId != null) 'user_id': userId,
+    if (friendId != null) 'friend_id': friendId,
+  };
 }

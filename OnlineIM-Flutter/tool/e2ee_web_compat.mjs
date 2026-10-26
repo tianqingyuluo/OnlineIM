@@ -3,9 +3,13 @@
  * 用法：
  *   node tool/e2ee_web_compat.mjs generate <out.json>
  *   node tool/e2ee_web_compat.mjs decrypt   # stdin: {envelope, privateJwk, peerSpki}
+ *   node tool/e2ee_web_compat.mjs encrypt   # stdin: {plaintext, senderPrivateJwk, senderKeyId, recipientPublicSpki, recipientKeyId, counter}
+ *   node tool/e2ee_web_compat.mjs identity  # stdout: JSON identity
  *   node tool/e2ee_web_compat.mjs safety    # stdin: {fingerprintA, fingerprintB}
  */
 import { writeFileSync } from 'node:fs'
+import { webcrypto } from 'node:crypto'
+const crypto = globalThis.crypto ?? webcrypto
 
 const E2EE_ALGORITHM = 'ECDH-P256+ECDSA-P256'
 const E2EE_VERSION = 1
@@ -205,10 +209,18 @@ if (command === 'generate') {
     peerPublicSpki: input.peerSpki,
   })
   process.stdout.write(text)
+} else if (command === 'encrypt') {
+  const input = await readStdin()
+  const envelope = await encryptText(input)
+  process.stdout.write(JSON.stringify(envelope))
+} else if (command === 'identity') {
+  const identity = await generateIdentity()
+  const signature = await signFingerprint(identity)
+  process.stdout.write(JSON.stringify({ ...identity, signature }))
 } else if (command === 'safety') {
   const input = await readStdin()
   process.stdout.write(await safetyNumber(input.fingerprintA, input.fingerprintB))
 } else {
-  console.error('usage: generate <out.json> | decrypt | safety')
+  console.error('usage: generate <out.json> | decrypt | encrypt | identity | safety')
   process.exit(1)
 }
