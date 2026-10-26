@@ -16,7 +16,7 @@ if (hasReleaseKeystore) {
 
 android {
     namespace = "icu.tianqingyuluo.onlineim.onlineim_flutter"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = maxOf(flutter.compileSdkVersion, 36)
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
